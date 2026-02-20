@@ -20,86 +20,86 @@ html,body { height:100%; overflow:hidden; background:var(--ink); color:var(--pap
   background:var(--ink); z-index:100; overflow-y:auto;
 }
 .eyebrow { font-size:11px; letter-spacing:.45em; text-transform:uppercase; color:var(--accent); margin-bottom:14px; }
-h1 { font-family:'Georgia',serif; font-style:italic; font-size:clamp(26px,7vw,52px); line-height:.92; text-align:center; margin-bottom:16px; }
+h1 { font-family:'Georgia',serif; font-style:italic; font-size:clamp(28px,7.5vw,54px); line-height:.92; text-align:center; margin-bottom:18px; }
 h1 em { color:var(--accent); font-style:normal; }
 .drop-zone {
-  width:100%; max-width:440px; border:1.5px dashed rgba(240,237,228,.25);
-  border-radius:3px; padding:24px 20px; text-align:center; cursor:pointer;
+  width:100%; max-width:460px; border:1.5px dashed rgba(240,237,228,.25);
+  border-radius:3px; padding:26px 20px; text-align:center; cursor:pointer;
   transition:border-color .2s, background .2s;
 }
 .drop-zone:hover,.drop-zone.over { border-color:var(--accent); background:rgba(232,79,43,.05); }
-.drop-icon { font-size:32px; display:block; margin-bottom:7px; }
-.drop-label { font-size:13px; letter-spacing:.15em; text-transform:uppercase; margin-bottom:4px; }
-.drop-sub { font-size:11px; color:rgba(240,237,228,.38); letter-spacing:.1em; }
+.drop-icon { font-size:34px; display:block; margin-bottom:7px; }
+.drop-label { font-size:13px; letter-spacing:.15em; text-transform:uppercase; margin-bottom:5px; }
+.drop-sub { font-size:11px; color:rgba(240,237,228,.4); letter-spacing:.1em; }
 #fileInput { display:none; }
-#pdfThumb { display:none; margin-top:10px; max-width:100%; max-height:110px; border:1px solid rgba(255,255,255,.12); }
+#pdfThumb { display:none; margin-top:12px; max-width:100%; max-height:120px; border:1px solid rgba(255,255,255,.12); }
 #pageNav { display:none; align-items:center; gap:12px; margin-top:8px; font-size:12px; }
 .pg-btn { background:none; border:1px solid rgba(255,255,255,.25); color:var(--paper); width:28px; height:28px; cursor:pointer; font-size:14px; font-family:var(--mono); }
-.pg-btn:hover { border-color:var(--accent); }
+.pg-btn:hover { border-color:var(--accent); color:var(--accent); }
 #launchBtn {
   display:none; margin-top:16px; background:var(--accent); color:var(--paper);
-  border:none; padding:13px 36px; font-family:var(--mono); font-size:12px;
-  letter-spacing:.3em; text-transform:uppercase; cursor:pointer;
+  border:none; padding:13px 38px; font-family:var(--mono); font-size:12px;
+  letter-spacing:.3em; text-transform:uppercase; cursor:pointer; transition:background .2s;
 }
 #launchBtn.show { display:block; }
 #launchBtn:hover { background:#c83d1e; }
-.note { margin-top:10px; font-size:11px; color:rgba(240,237,228,.24); letter-spacing:.07em; text-align:center; max-width:360px; line-height:1.8; }
-#errMsg { display:none; margin-top:8px; font-size:12px; color:var(--accent); }
+.note { margin-top:10px; font-size:11px; color:rgba(240,237,228,.26); letter-spacing:.07em; text-align:center; max-width:380px; line-height:1.8; }
+#errMsg { display:none; margin-top:10px; font-size:12px; color:var(--accent); }
 
 /* ── AR SCREEN ── */
 #arScreen { display:none; position:fixed; inset:0; z-index:200; background:#000; }
 #arCanvas { width:100%; height:100%; display:block; }
 
-/* ── XR OVERLAY (dom-overlay root — ALL interactive AR elements live here) ── */
-#xrOverlay { position:fixed; inset:0; z-index:300; pointer-events:none; }
+/* ── DOM OVERLAY ROOT — covers full screen, is the XR dom-overlay root ── */
+/* Everything the user needs to interact with in AR lives inside #xrOverlay */
+#xrOverlay {
+  position:fixed; inset:0; z-index:300;
+  pointer-events:none;   /* children opt-in with pointer-events:all */
+}
 
 /* ── HUD ── */
 #hud {
-  position:absolute; bottom:0; left:0; right:0; padding:10px 12px 32px;
-  display:flex; flex-direction:column; align-items:center; gap:7px;
+  position:absolute; bottom:0; left:0; right:0; padding:10px 12px 34px;
+  display:flex; flex-direction:column; align-items:center; gap:8px;
   pointer-events:none;
 }
 #hudHint {
-  font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  font-size:11px; letter-spacing:.15em; text-transform:uppercase;
   color:rgba(255,255,255,.9); background:rgba(0,0,0,.72);
   backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
   padding:8px 16px; border-radius:100px; border:1px solid rgba(255,255,255,.12);
   max-width:93vw; text-align:center; line-height:1.6;
 }
 #statusBar {
-  display:none; font-size:10px; letter-spacing:.12em;
-  color:rgba(255,255,255,.5); background:rgba(0,0,0,.48);
+  display:none; font-size:10px; letter-spacing:.13em;
+  color:rgba(255,255,255,.55); background:rgba(0,0,0,.5);
   backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-  padding:4px 12px; border-radius:100px; border:1px solid rgba(255,255,255,.05);
+  padding:4px 14px; border-radius:100px; border:1px solid rgba(255,255,255,.06);
 }
 .slider-row { display:flex; align-items:center; gap:7px; pointer-events:all; }
-.sl-lbl { font-size:10px; letter-spacing:.12em; color:rgba(255,255,255,.4); min-width:42px; }
-input[type=range] { -webkit-appearance:none; width:92px; height:2px; background:rgba(255,255,255,.18); border-radius:1px; outline:none; }
+.sl-lbl { font-size:10px; letter-spacing:.13em; color:rgba(255,255,255,.42); min-width:44px; }
+input[type=range] { -webkit-appearance:none; width:96px; height:2px; background:rgba(255,255,255,.18); border-radius:1px; outline:none; }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer; }
 .btn-row { display:flex; gap:6px; pointer-events:all; flex-wrap:wrap; justify-content:center; }
 .hud-btn {
   background:rgba(8,8,16,.82); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
   border:1px solid rgba(255,255,255,.14); color:#fff;
-  padding:9px 12px; font-family:var(--mono); font-size:10px;
-  letter-spacing:.1em; text-transform:uppercase; cursor:pointer;
+  padding:9px 13px; font-family:var(--mono); font-size:10px;
+  letter-spacing:.11em; text-transform:uppercase; cursor:pointer;
   border-radius:2px; transition:background .15s, border-color .15s, color .15s;
 }
 .hud-btn:active { transform:scale(.95); }
 .hud-btn:hover  { background:rgba(232,79,43,.18); border-color:var(--accent); }
 .hud-btn.g  { background:rgba(43,232,122,.16); border-color:var(--green); color:var(--green); }
 .hud-btn.b  { background:rgba(77,166,255,.16); border-color:var(--blue); color:var(--blue); }
-.hud-btn.y  { background:rgba(240,208,96,.16); border-color:var(--yellow); color:var(--yellow); }
 .hud-btn.r  { border-color:rgba(232,79,43,.4); }
 
-/* Scan ring */
+/* Badges — inside xrOverlay */
 #scanRing { display:none; position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); pointer-events:none; }
 #scanRing svg { animation:pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:.3;transform:scale(.88)} 50%{opacity:1;transform:scale(1.05)} }
 
-/* Snap reticle (trace mode) */
 #snapReticle { display:none; position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); pointer-events:none; }
-
-/* Badges */
 #snapIndicator {
   display:none; position:absolute; top:18px; left:50%; transform:translateX(-50%);
   font-size:10px; letter-spacing:.22em; text-transform:uppercase; white-space:nowrap;
@@ -108,44 +108,47 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 }
 #cornerBadge {
   display:none; position:absolute; top:18px; left:50%; transform:translateX(-50%);
-  font-size:11px; letter-spacing:.18em; text-transform:uppercase; white-space:nowrap;
-  padding:5px 14px; border-radius:100px;
+  font-size:11px; letter-spacing:.2em; text-transform:uppercase; white-space:nowrap;
+  padding:6px 16px; border-radius:100px;
   background:rgba(77,166,255,.12); border:1px solid var(--blue); color:var(--blue);
 }
-#compassBadge {
+#planeBadge {
   display:none; position:absolute; top:18px; right:14px;
-  font-size:10px; letter-spacing:.15em; text-transform:uppercase; white-space:nowrap;
+  font-size:10px; letter-spacing:.18em; text-transform:uppercase; white-space:nowrap;
   padding:5px 12px; border-radius:100px;
-  background:rgba(240,208,96,.1); border:1px solid var(--yellow); color:var(--yellow);
+  background:rgba(43,232,122,.1); border:1px solid var(--green); color:var(--green);
 }
 #driftBadge {
   display:none; position:absolute; top:52px; right:14px;
-  font-size:10px; letter-spacing:.13em; text-transform:uppercase; white-space:nowrap;
+  font-size:10px; letter-spacing:.14em; text-transform:uppercase; white-space:nowrap;
   padding:4px 10px; border-radius:100px;
   background:rgba(240,208,96,.08); border:1px solid var(--yellow); color:var(--yellow);
 }
 #toast {
-  display:none; position:absolute; top:52px; left:50%; transform:translateX(-50%);
+  display:none; position:absolute; top:54px; left:50%; transform:translateX(-50%);
   background:rgba(0,0,0,.86); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
   border:1px solid rgba(255,255,255,.1); padding:9px 22px;
-  font-size:11px; letter-spacing:.1em; color:#fff; border-radius:100px; white-space:nowrap;
+  font-size:11px; letter-spacing:.11em; color:#fff; border-radius:100px; white-space:nowrap;
 }
 
-/* ── PDF PICK OVERLAY (inside #xrOverlay so it renders in WebXR dom-overlay) ── */
+/* ── PDF CORNER PICK OVERLAY ──
+   CRITICAL: This MUST be inside #xrOverlay (the dom-overlay root)
+   so it appears over the camera feed in WebXR mode.              */
 #pickOverlay {
   display:none; position:absolute; inset:0;
-  background:rgba(0,0,0,.94); flex-direction:column; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.94);
+  flex-direction:column; align-items:center; justify-content:center;
   pointer-events:all;
 }
 #pickOverlay.show { display:flex; }
 #pickTitle { font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--accent); margin-bottom:6px; text-align:center; padding:0 16px; }
-#pickSub   { font-size:11px; color:rgba(240,237,228,.4); letter-spacing:.09em; margin-bottom:10px; text-align:center; padding:0 20px; line-height:1.6; }
+#pickSub   { font-size:11px; color:rgba(240,237,228,.42); letter-spacing:.1em; margin-bottom:12px; text-align:center; padding:0 20px; line-height:1.6; }
 #pickCanvas { max-width:96vw; max-height:60vh; cursor:crosshair; touch-action:none; border:1px solid rgba(255,255,255,.1); display:block; }
-#pickInfo  { font-size:10px; letter-spacing:.15em; color:var(--blue); margin-top:8px; }
-.pick-btns { display:flex; gap:8px; margin-top:10px; }
+#pickInfo  { font-size:10px; letter-spacing:.16em; color:var(--blue); margin-top:9px; }
+.pick-btns { display:flex; gap:9px; margin-top:11px; }
 .pick-btn {
   background:rgba(8,8,16,.88); border:1px solid rgba(255,255,255,.2); color:var(--paper);
-  padding:10px 16px; font-family:var(--mono); font-size:11px; letter-spacing:.15em;
+  padding:10px 18px; font-family:var(--mono); font-size:11px; letter-spacing:.17em;
   text-transform:uppercase; cursor:pointer; border-radius:2px;
 }
 .pick-btn.confirm { background:var(--accent); border-color:var(--accent); }
@@ -154,14 +157,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 </head>
 <body>
 
-<!-- LANDING -->
+<!-- LANDING (not inside xrOverlay — only shown before AR starts) -->
 <div id="landing">
   <p class="eyebrow">AR Floorplan &middot; Anchored</p>
-  <h1>GPS-locked,<br><em>edge-aligned.</em></h1>
+  <h1>Structure-locked<br><em>floorplan AR.</em></h1>
   <div class="drop-zone" id="dropZone">
     <span class="drop-icon">&#x1F4D0;</span>
     <p class="drop-label">Drop PDF or tap to browse</p>
-    <p class="drop-sub">Sobel edges &middot; GPS/compass heading lock &middot; XR anchors</p>
+    <p class="drop-sub">Plane wireframes &middot; snap to edges &middot; drift-corrected</p>
     <input type="file" id="fileInput" accept=".pdf,application/pdf">
     <canvas id="pdfThumb"></canvas>
     <div id="pageNav">
@@ -173,9 +176,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   <div id="errMsg"></div>
   <button id="launchBtn">Launch AR &rarr;</button>
   <p class="note">
-    Sobel filter detects real edges in camera feed.<br>
-    GPS + compass locks plan to true-north heading.<br>
-    XR anchors drift-correct to ARCore map updates.
+    Scan floor/walls &rarr; coloured wireframes appear on detected surfaces.<br>
+    Tap Trace &rarr; walk corners (snaps to edges) &rarr; pick on PDF &rarr; plan binds live.
   </p>
 </div>
 
@@ -183,9 +185,13 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 <div id="arScreen">
   <canvas id="arCanvas"></canvas>
 
-  <!-- ALL AR UI must live inside #xrOverlay (dom-overlay root) -->
+  <!-- ═══════════════════════════════════════════════════════
+       #xrOverlay is the dom-overlay root for WebXR.
+       EVERYTHING the user sees/taps in AR must live here.
+       ═══════════════════════════════════════════════════════ -->
   <div id="xrOverlay">
 
+    <!-- Scan / snap reticles -->
     <div id="scanRing">
       <svg width="180" height="180" viewBox="0 0 180 180" fill="none">
         <ellipse cx="90" cy="90" rx="78" ry="34" stroke="#e84f2b" stroke-width="1.5" stroke-dasharray="6 4"/>
@@ -194,7 +200,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
         <line x1="90" y1="68" x2="90" y2="112" stroke="#e84f2b" stroke-width="1.2"/>
       </svg>
     </div>
-
     <div id="snapReticle">
       <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
         <circle cx="32" cy="32" r="26" stroke="#4da6ff" stroke-width="1.5" stroke-dasharray="5 3" id="snapCircle"/>
@@ -204,13 +209,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
       </svg>
     </div>
 
+    <!-- Status badges -->
     <div id="snapIndicator">&#x25C6; Snapped to edge</div>
     <div id="cornerBadge"></div>
-    <div id="compassBadge">&#x2B21; N 000&#xB0;</div>
+    <div id="planeBadge">&#x2713; Surface Detected</div>
     <div id="driftBadge">&#x21BA; Anchors updated</div>
     <div id="toast"></div>
 
-    <!-- PDF pick overlay — inside xrOverlay so it's visible in WebXR -->
+    <!-- ── PDF PICK OVERLAY (inside xrOverlay so it shows in WebXR) ── -->
     <div id="pickOverlay">
       <p id="pickTitle">PICK CORNERS ON THE PLAN</p>
       <p id="pickSub">Tap each corner in the same order you walked them</p>
@@ -225,6 +231,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
       </div>
     </div>
 
+    <!-- ── HUD (inside xrOverlay) ── -->
     <div id="hud">
       <div id="hudHint">Point camera at the floor</div>
       <div id="statusBar"></div>
@@ -233,15 +240,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
         <input type="range" id="opacitySlider" min="20" max="100" value="82">
         <span class="sl-lbl" id="opacityVal">82%</span>
       </div>
-      <!-- Normal mode -->
       <div class="btn-row" id="normalBtns">
+        <button class="hud-btn" id="rotCCW">&#8634; CCW</button>
+        <button class="hud-btn" id="rotCW">&#8635; CW</button>
         <button class="hud-btn" id="lockBtn">&#x1F513; Unlock</button>
         <button class="hud-btn b" id="traceBtn">&#x25CE; Trace</button>
-        <button class="hud-btn y" id="calibBtn" style="display:none">&#x2B21; Re-align</button>
         <button class="hud-btn" id="resetBtn">Reset</button>
         <button class="hud-btn r" id="exitBtn">&#x2715; Exit</button>
       </div>
-      <!-- Trace mode -->
       <div class="btn-row" id="traceBtns" style="display:none;">
         <button class="hud-btn" id="traceUndoBtn">&#x21B6; Undo</button>
         <button class="hud-btn g" id="traceDoneBtn">&#x2713; Done</button>
@@ -252,38 +258,40 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   </div><!-- end #xrOverlay -->
 </div><!-- end #arScreen -->
 
-<!-- Sobel edge worker runs in main thread via offscreen canvas — no worker needed -->
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-(function(){
+(function () {
 'use strict';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-/* ══════════════════════════════════════════
-   BOWYER-WATSON DELAUNAY (XZ plane)
-══════════════════════════════════════════ */
-function delaunay(pts){
-  if(pts.length<3)return[];
-  var minX=1e9,minZ=1e9,maxX=-1e9,maxZ=-1e9;
-  pts.forEach(function(p){minX=Math.min(minX,p.x);minZ=Math.min(minZ,p.z);maxX=Math.max(maxX,p.x);maxZ=Math.max(maxZ,p.z);});
-  var span=Math.max(maxX-minX,maxZ-minZ)*10+1, cx=(minX+maxX)/2, cz=(minZ+maxZ)/2;
+/* ═══════════════════════════════
+   BOWYER-WATSON DELAUNAY (XZ)
+═══════════════════════════════ */
+function delaunay(pts) {
+  if (pts.length < 3) return [];
+  var minX=Infinity, minZ=Infinity, maxX=-Infinity, maxZ=-Infinity;
+  pts.forEach(function(p){ minX=Math.min(minX,p.x); minZ=Math.min(minZ,p.z); maxX=Math.max(maxX,p.x); maxZ=Math.max(maxZ,p.z); });
+  var span = Math.max(maxX-minX, maxZ-minZ)*10+1;
+  var cx=(minX+maxX)/2, cz=(minZ+maxZ)/2;
   var all=pts.slice(), s0=all.length;
   all.push({x:cx-span*2,z:cz-span},{x:cx,z:cz+span*2},{x:cx+span*2,z:cz-span});
   var tris=[{a:s0,b:s0+1,c:s0+2}];
+
   function circ(t){
     var ax=all[t.a].x,az=all[t.a].z,bx=all[t.b].x,bz=all[t.b].z,cx2=all[t.c].x,cz2=all[t.c].z;
     var D=2*(ax*(bz-cz2)+bx*(cz2-az)+cx2*(az-bz));
-    if(Math.abs(D)<1e-10)return{x:0,z:0,r2:1e18};
+    if(Math.abs(D)<1e-10) return {x:0,z:0,r2:1e18};
     var ux=((ax*ax+az*az)*(bz-cz2)+(bx*bx+bz*bz)*(cz2-az)+(cx2*cx2+cz2*cz2)*(az-bz))/D;
     var uz=((ax*ax+az*az)*(cx2-bx)+(bx*bx+bz*bz)*(ax-cx2)+(cx2*cx2+cz2*cz2)*(bx-ax))/D;
-    var dx=ax-ux,dz=az-uz; return{x:ux,z:uz,r2:dx*dx+dz*dz};
+    var dx=ax-ux,dz=az-uz; return {x:ux,z:uz,r2:dx*dx+dz*dz};
   }
+
   for(var i=0;i<pts.length;i++){
-    var p=all[i],bad=[],j;
-    for(j=tris.length-1;j>=0;j--){var c2=circ(tris[j]),dx=p.x-c2.x,dz=p.z-c2.z;if(dx*dx+dz*dz<c2.r2){bad.push(tris[j]);tris.splice(j,1);}}
+    var p=all[i], bad=[], j;
+    for(j=tris.length-1;j>=0;j--){var c2=circ(tris[j]),dx=p.x-c2.x,dz=p.z-c2.z; if(dx*dx+dz*dz<c2.r2){bad.push(tris[j]);tris.splice(j,1);}}
     var edges=[];
     bad.forEach(function(t){[[t.a,t.b],[t.b,t.c],[t.c,t.a]].forEach(function(e){
       if(!bad.some(function(t2){return t2!==t&&(t2.a===e[0]||t2.b===e[0]||t2.c===e[0])&&(t2.a===e[1]||t2.b===e[1]||t2.c===e[1]);}))edges.push(e);
@@ -293,18 +301,18 @@ function delaunay(pts){
   return tris.filter(function(t){return t.a<s0&&t.b<s0&&t.c<s0;});
 }
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    STATE
-══════════════════════════════════════════ */
+═══════════════════════════════ */
 var pdfDoc=null, currentPage=1, pdfCanvas=null;
 var xfOpacity=0.82, xfRotY=0.0, xfScaleM=1.0, xfLocked=true;
 var traceMode=false, MAX_CORNERS=10;
-var corners=[]; // {worldPos:{x,y,z}, anchor:XRAnchor|null}
-var uvPicks=[];
+var corners=[];   // {worldPos:{x,y,z}, anchor:XRAnchor|null}
+var uvPicks=[];   // {u,v}
 var boundMesh=null, solveCount=0;
-var currentSnap=null;
+var currentSnap=null;  // THREE.Vector3 | null
 
-/* XR */
+/* Three.js / XR */
 var xrSession=null, xrRefSpace=null, xrHitTestSrc=null;
 var renderer=null, scene=null, camera=null, reticle=null;
 var planeGroup=null, planeMesh=null;
@@ -313,52 +321,32 @@ var surfaceQuat=new THREE.Quaternion();
 var floorPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
 var prevPinchDist=null, prevPinchAngle=null;
 
-/* Wires */
+/* Wire visuals */
 var wireLines=[], wireDots=[];
-var planeWires=new Map();
-var sobelLines=[];         // Three.js Lines from Sobel edge detection
-
-/* ── PAN BUG FIX: track grab offset ──
-   On touchstart we record where the plan's world position projected
-   to screen was, and the touch start NDC. On move we compute the
-   delta ray and move the plan by that delta on the floor plane.  */
-var panStartPos=null;     // THREE.Vector3 — plan position when grab started
-var panStartNDC=null;     // {x,y} NDC at touchstart
-
-/* ── ANCHOR SPAM FIX ──
-   XR select fires for EVERY button tap inside the dom-overlay.
-   We block select for one frame after any button-originated interaction. */
-var blockSelectUntil=0;   // performance.now() timestamp
-
-/* ── COMPASS / GPS ── */
-var compassHeading=null;       // live device compass heading (degrees, 0=north)
-var calibratedHeading=null;    // heading at the moment user tapped "Re-align"
-var calibratedRotY=null;       // xfRotY at calibration moment
-var compassActive=false;
-var gpsCoords=null;            // {lat,lon} — for display / future georef
+var planeWires=new Map();   // XRPlane -> THREE.Line (boundary loop)
+var planesEnabled=false;    // true once we confirm frame.detectedPlanes works
 
 var CORNER_COLORS=[0xe84f2b,0x2be87a,0x4da6ff,0xf0d060,0xe030f0,0x30e0f0,0xf09030,0xff88aa,0x88ffcc,0xccaaff];
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    DOM HELPERS
-══════════════════════════════════════════ */
-function el(id){return document.getElementById(id);}
-function show(id,d){el(id).style.display=d||'block';}
-function hide(id){el(id).style.display='none';}
+═══════════════════════════════ */
+function el(id){ return document.getElementById(id); }
+function show(id,d){ el(id).style.display=d||'block'; }
+function hide(id){ el(id).style.display='none'; }
 function showBtns(which){
-  el('normalBtns').style.display=which==='normal'?'flex':'none';
-  el('traceBtns').style.display=which==='trace'?'flex':'none';
+  el('normalBtns').style.display = which==='normal'?'flex':'none';
+  el('traceBtns').style.display  = which==='trace'?'flex':'none';
 }
 function showToast(msg,dur){
   el('toast').textContent=msg; show('toast');
   clearTimeout(showToast._t);
   showToast._t=setTimeout(function(){hide('toast');},dur||2600);
 }
-function blockSelect(ms){blockSelectUntil=performance.now()+(ms||300);}
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    PDF LOAD
-══════════════════════════════════════════ */
+═══════════════════════════════ */
 el('dropZone').addEventListener('click',function(){el('fileInput').click();});
 el('dropZone').addEventListener('dragover',function(e){e.preventDefault();el('dropZone').classList.add('over');});
 el('dropZone').addEventListener('dragleave',function(){el('dropZone').classList.remove('over');});
@@ -396,17 +384,15 @@ function renderPage(n){
     }).catch(function(e){showErr('Render error: '+e.message);});
   });
 }
-el('prevPg').addEventListener('click',function(){blockSelect();if(currentPage>1)renderPage(--currentPage);});
-el('nextPg').addEventListener('click',function(){blockSelect();if(pdfDoc&&currentPage<pdfDoc.numPages)renderPage(++currentPage);});
+el('prevPg').addEventListener('click',function(){if(currentPage>1)renderPage(--currentPage);});
+el('nextPg').addEventListener('click',function(){if(pdfDoc&&currentPage<pdfDoc.numPages)renderPage(++currentPage);});
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    LAUNCH
-══════════════════════════════════════════ */
+═══════════════════════════════ */
 el('launchBtn').addEventListener('click',function(){
   if(!pdfCanvas)return;
   hide('landing'); show('arScreen');
-  startCompass();
-  startGPS();
   if(navigator.xr){
     navigator.xr.isSessionSupported('immersive-ar')
       .then(function(ok){ok?startWebXR():noXR();}).catch(noXR);
@@ -414,111 +400,54 @@ el('launchBtn').addEventListener('click',function(){
 });
 function noXR(){el('hudHint').textContent='WebXR not supported \u2014 requires Android Chrome';}
 
-/* ══════════════════════════════════════════
-   COMPASS (GPS heading lock)
-   webkitCompassHeading = degrees clockwise from north (iOS)
-   On Android: alpha from deviceorientation, absolute=true gives true north
-══════════════════════════════════════════ */
-function startCompass(){
-  function attachOrientation(){
-    window.addEventListener('deviceorientationabsolute',onOrientation,true);
-    window.addEventListener('deviceorientation',onOrientation,true);
-  }
-  function onOrientation(e){
-    var h=null;
-    if(e.webkitCompassHeading!=null){ h=e.webkitCompassHeading; }
-    else if(e.absolute&&e.alpha!=null){ h=(360-e.alpha)%360; }
-    else if(e.alpha!=null){ h=(360-e.alpha)%360; } // relative — less accurate
-    if(h===null)return;
-    compassHeading=h;
-    compassActive=true;
-    el('compassBadge').textContent='\u2B21 N '+Math.round(h)+'\u00b0';
-    show('compassBadge');
-    // If calibrated, continuously keep plan aligned to locked heading
-    if(calibratedHeading!==null){
-      var delta=compassHeading-calibratedHeading;
-      while(delta>180)delta-=360; while(delta<-180)delta+=360;
-      xfRotY=calibratedRotY-(delta*Math.PI/180);
-      // boundMesh vertices are absolute world-space — cannot rotate via .rotation
-      // Only the free-placed planeGroup supports rotation this way
-      if(!boundMesh)applyFree();
-    }
-  }
-  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
-    DeviceOrientationEvent.requestPermission().then(function(s){if(s==='granted')attachOrientation();}).catch(function(){});
-  } else { attachOrientation(); }
-}
-
-function startGPS(){
-  if(!navigator.geolocation)return;
-  navigator.geolocation.watchPosition(function(p){
-    gpsCoords={lat:p.coords.latitude,lon:p.coords.longitude};
-  },{enableHighAccuracy:true,maximumAge:5000});
-}
-
-/* ── RE-ALIGN: capture current heading as calibration reference ── */
-el('calibBtn').addEventListener('click',function(){
-  blockSelect(300);
-  if(!compassActive){showToast('Compass not available');return;}
-  calibratedHeading=compassHeading;
-  calibratedRotY=xfRotY;
-  showToast('Heading calibrated to N '+Math.round(calibratedHeading)+'\u00b0 \u2713',3000);
-  el('calibBtn').className='hud-btn y';
-  el('calibBtn').textContent='\u2B21 Locked N '+Math.round(calibratedHeading)+'\u00b0';
-});
-
-/* ══════════════════════════════════════════
-   HUD
-══════════════════════════════════════════ */
+/* ═══════════════════════════════
+   HUD CONTROLS
+═══════════════════════════════ */
 el('opacitySlider').addEventListener('input',function(){
   xfOpacity=parseFloat(this.value)/100; el('opacityVal').textContent=this.value+'%';
   if(planeMesh)planeMesh.material.opacity=xfOpacity;
   if(boundMesh)boundMesh.material.opacity=xfOpacity;
 });
+el('rotCW').addEventListener('click',function(){xfRotY-=Math.PI/12;applyFree();});
+el('rotCCW').addEventListener('click',function(){xfRotY+=Math.PI/12;applyFree();});
 el('lockBtn').addEventListener('click',function(){
-  blockSelect(300);
   xfLocked=!xfLocked;
   this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Unlock';
   this.className=xfLocked?'hud-btn g':'hud-btn';
-  showToast(xfLocked?'Plan locked':'Drag to reposition');
+  showToast(xfLocked?'Locked':'Drag to reposition');
 });
 function applyFree(){if(planeGroup&&wxrPlaced)planeGroup.rotation.y=xfRotY;}
 
 el('traceBtn').addEventListener('click',function(){
-  blockSelect(600); // ← must outlast XR select event latency on slow devices
   if(!wxrFloorFound&&!wxrPlaced){showToast('Point at the floor first');return;}
   enterTraceMode();
 });
-el('traceUndoBtn').addEventListener('click',function(){
-  blockSelect(500); // ← stop undo tap from placing a corner
-  undoCorner();
-});
+el('traceUndoBtn').addEventListener('click',undoCorner);
 el('traceDoneBtn').addEventListener('click',function(){
-  blockSelect(300);
   if(corners.length<3){showToast('Need at least 3 corners');return;}
+  // Restore normal buttons BEFORE opening overlay
   showBtns('normal');
   hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
   traceMode=false;
   openPickOverlay();
 });
-el('traceCancelBtn').addEventListener('click',function(){blockSelect(300);cancelTrace();});
-el('resetBtn').addEventListener('click',function(){blockSelect(300);doReset();});
+el('traceCancelBtn').addEventListener('click',cancelTrace);
+el('resetBtn').addEventListener('click',doReset);
 el('exitBtn').addEventListener('click',function(){
-  blockSelect(300);
   if(xrSession){try{xrSession.end();}catch(e){}xrSession=null;}
   hide('arScreen'); show('landing','flex'); doReset();
 });
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    TRACE MODE
-══════════════════════════════════════════ */
+═══════════════════════════════ */
 function enterTraceMode(){
   traceMode=true; corners=[];
   showBtns('trace'); hide('scanRing'); show('snapReticle'); show('cornerBadge');
   el('traceDoneBtn').style.opacity='0.4';
   updateCornerBadge();
-  el('hudHint').textContent='Walk to each wall corner and tap the floor';
-  showToast('Corners snap to detected wall edges automatically');
+  el('hudHint').textContent='Walk to each wall corner or column and tap';
+  showToast('Tap the floor at each corner \u2014 snaps to detected edges');
 }
 function cancelTrace(){
   traceMode=false; corners=[]; clearWireVisuals();
@@ -529,10 +458,8 @@ function undoCorner(){
   if(corners.length===0)return;
   var c=corners.pop();
   if(c.anchor){try{c.anchor.delete();}catch(e){}}
-  // Remove visual dot + line — wireDots and wireLines are pushed in parallel
-  // Each corner adds 1 dot; each corner after the first also adds 1 line
-  if(wireDots.length>0){scene.remove(wireDots.pop());}
-  if(corners.length>0&&wireLines.length>0){scene.remove(wireLines.pop());}
+  if(wireDots.length>0)scene.remove(wireDots.pop());
+  if(wireLines.length>0)scene.remove(wireLines.pop());
   updateCornerBadge();
 }
 function updateCornerBadge(){
@@ -545,9 +472,8 @@ function addCornerVisual(pos,idx){
   var col=CORNER_COLORS[idx%CORNER_COLORS.length];
   var dot=new THREE.Mesh(new THREE.SphereGeometry(0.055,10,10),new THREE.MeshBasicMaterial({color:col}));
   dot.position.set(pos.x,pos.y+0.055,pos.z); scene.add(dot); wireDots.push(dot);
-  // Line from previous corner (only if there is one)
-  if(idx>0){
-    var prev=corners[idx-1].worldPos;
+  if(corners.length>1){
+    var prev=corners[corners.length-2].worldPos;
     var geo=new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(prev.x,prev.y+0.012,prev.z),
       new THREE.Vector3(pos.x,pos.y+0.012,pos.z)
@@ -564,201 +490,131 @@ function clearWireVisuals(){
 function doReset(){
   traceMode=false; corners=[]; uvPicks=[];
   wxrPlaced=false; xfLocked=true; xfRotY=0; xfScaleM=1;
-  currentSnap=null; solveCount=0; panStartPos=null; panStartNDC=null;
-  calibratedHeading=null; calibratedRotY=null;
+  currentSnap=null; solveCount=0;
   if(planeGroup)planeGroup.visible=false;
   if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
-  clearWireVisuals(); clearPlaneWires(); clearSobelLines();
+  clearWireVisuals(); clearPlaneWires();
   showBtns('normal');
   show('scanRing'); hide('snapReticle'); hide('cornerBadge');
-  hide('snapIndicator'); hide('driftBadge'); hide('pickOverlay');
-  hide('statusBar'); hide('calibBtn');
+  hide('snapIndicator'); hide('driftBadge'); hide('planeBadge');
+  hide('statusBar'); hide('pickOverlay');
   el('hudHint').textContent='Point camera at the floor';
   el('lockBtn').textContent='\uD83D\uDD13 Unlock'; el('lockBtn').className='hud-btn';
-  el('calibBtn').textContent='\u2B21 Re-align'; el('calibBtn').className='hud-btn y';
 }
 
-/* ══════════════════════════════════════════
-   SOBEL EDGE DETECTION
-   Runs on the WebXR camera image via
-   XRFrame.getViewerPose + renderer's XR camera.
-   We sample the current Three.js render to an
-   offscreen canvas, run Sobel, find high-gradient
-   pixel clusters, back-project via hit-test depth
-   to place edge line segments in 3D world space.
-
-   Since we can't directly access the camera texture
-   from JS without XRMediaBinding (limited support),
-   we read the rendered RGB from the WebGL canvas,
-   apply Sobel in 2D, find edge segments, and project
-   them to world space using the current view+proj matrix.
-══════════════════════════════════════════ */
-var sobelCanvas=null, sobelCtx=null;
-var SOBEL_INTERVAL=1200; // ms between Sobel passes (expensive, ~40ms)
-var lastSobelTime=0;
-var SOBEL_THRESH=60;     // gradient magnitude threshold (0-255)
-var SOBEL_SCALE=0.3;     // downsample factor for speed
-var SOBEL_DEPTH=1.5;     // assumed depth in metres for edge projection
-
-function initSobelCanvas(){
-  sobelCanvas=document.createElement('canvas');
-  sobelCtx=sobelCanvas.getContext('2d',{willReadFrequently:true});
-}
-
-function runSobel(frame){
-  if(!renderer||!camera||!scene)return;
-  var now=performance.now();
-  if(now-lastSobelTime<SOBEL_INTERVAL)return;
-  var elapsed=now-lastSobelTime;
-  lastSobelTime=now;
-
-  var W=Math.round(window.innerWidth*SOBEL_SCALE);
-  var H=Math.round(window.innerHeight*SOBEL_SCALE);
-  sobelCanvas.width=W; sobelCanvas.height=H;
-
-  // Read current WebGL render into the 2D canvas
-  // renderer.domElement is the arCanvas which contains the last rendered frame
-  try{
-    sobelCtx.drawImage(renderer.domElement,0,0,W,H);
-  }catch(e){return;}
-
-  var imgData=sobelCtx.getImageData(0,0,W,H);
-  var data=imgData.data;
-
-  // Convert to greyscale, run Sobel
-  var grey=new Uint8Array(W*H);
-  for(var i=0;i<W*H;i++){grey[i]=0.299*data[i*4]+0.587*data[i*4+1]+0.114*data[i*4+2];}
-
-  var edges=[]; // [{x,y,strength}] in normalised screen coords
-  for(var y=1;y<H-1;y++){
-    for(var x=1;x<W-1;x++){
-      var gx=(-grey[(y-1)*W+(x-1)]-2*grey[y*W+(x-1)]-grey[(y+1)*W+(x-1)])
-            +(grey[(y-1)*W+(x+1)]+2*grey[y*W+(x+1)]+grey[(y+1)*W+(x+1)]);
-      var gy=(-grey[(y-1)*W+(x-1)]-2*grey[(y-1)*W+x]-grey[(y-1)*W+(x+1)])
-            +(grey[(y+1)*W+(x-1)]+2*grey[(y+1)*W+x]+grey[(y+1)*W+(x+1)]);
-      var mag=Math.sqrt(gx*gx+gy*gy);
-      if(mag>SOBEL_THRESH){
-        edges.push({x:(x/W)*2-1, y:-((y/H)*2-1), mag:mag, gx:gx, gy:gy});
-      }
-    }
-  }
-  if(edges.length<4)return;
-
-  // Group nearby edges into line segments via simple scanline grouping
-  // Back-project each edge point to world space at SOBEL_DEPTH metres from camera
-  // In WebXR the scene camera is overridden by the XR camera each frame.
-  // renderer.xr.getCamera(camera) returns the active ArrayCamera whose
-  // matrixWorld and projectionMatrix are correct for the current frame.
-  var xrCam=renderer.xr.getCamera(camera);
-  var activeCam=xrCam.cameras&&xrCam.cameras.length>0?xrCam.cameras[0]:xrCam;
-  var invVP=new THREE.Matrix4();
-  invVP.copy(activeCam.projectionMatrix).multiply(activeCam.matrixWorldInverse).invert();
-
-  var newPts=[];
-  // Subsample to avoid thousands of lines
-  var step=Math.max(1,Math.floor(edges.length/120));
-  for(var i=0;i<edges.length;i+=step){
-    var e=edges[i];
-    // Unproject NDC at assumed depth
-    var near=new THREE.Vector3(e.x,e.y,-1).applyMatrix4(invVP);
-    var far=new THREE.Vector3(e.x,e.y,1).applyMatrix4(invVP);
-    var dir=far.sub(near).normalize();
-    var worldPt=near.clone().addScaledVector(dir,SOBEL_DEPTH);
-    newPts.push(worldPt);
-  }
-
-  // Build short line segments from consecutive edge points
-  clearSobelLines();
-  var segMat=new THREE.LineBasicMaterial({color:0xff6600,transparent:true,opacity:0.55});
-  for(var i=0;i+1<newPts.length;i+=2){
-    var geo=new THREE.BufferGeometry().setFromPoints([newPts[i],newPts[i+1]]);
-    var seg=new THREE.Line(geo,segMat);
-    scene.add(seg); sobelLines.push(seg);
-  }
-
-  var sobelMs=(performance.now()-now).toFixed(1);
-  if(!boundMesh){
-    show('statusBar');
-    el('statusBar').textContent='Edges: '+edges.length+' px \u2022 '+sobelLines.length+' segs \u2022 '+sobelMs+'ms';
-  }
-}
-
-function clearSobelLines(){
-  if(!scene)return;
-  sobelLines.forEach(function(l){scene.remove(l);}); sobelLines=[];
-}
-
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    DETECTED PLANE WIREFRAMES
-══════════════════════════════════════════ */
-function updatePlaneWireframes(frame,refSpace){
-  if(!frame.detectedPlanes)return;
+   Draws a green loop on floor planes,
+   blue loop on wall planes.
+   Works when plane-detection is enabled
+   (Chrome flag or supported device).
+   Falls back gracefully when unavailable.
+═══════════════════════════════ */
+function updatePlaneWireframes(frame, refSpace){
+  if(!frame.detectedPlanes) return;
+  planesEnabled=true;
   var seen=new Set();
+
   frame.detectedPlanes.forEach(function(plane){
-    if(!plane.planeSpace||!plane.polygon||plane.polygon.length<3)return;
+    if(!plane.planeSpace||!plane.polygon||plane.polygon.length<3) return;
     try{
       var pp=frame.getPose(plane.planeSpace,refSpace);
-      if(!pp)return;
+      if(!pp) return;
       var pm=new THREE.Matrix4().fromArray(pp.transform.matrix);
       var isWall=plane.orientation==='vertical';
       var col=isWall?0x4da6ff:0x2be87a;
-      var yOff=isWall?0:0.008;
-      var wpts=plane.polygon.map(function(v){return new THREE.Vector3(v.x,v.y,v.z).applyMatrix4(pm);});
+      var yOff=isWall?0:0.008;  // lift floor loops slightly off surface
+
+      /* Build world-space points for boundary loop */
+      var wpts=plane.polygon.map(function(v){
+        return new THREE.Vector3(v.x,v.y,v.z).applyMatrix4(pm);
+      });
+      /* Close the loop */
       wpts.push(wpts[0].clone());
       var lifted=wpts.map(function(p){return new THREE.Vector3(p.x,p.y+yOff,p.z);});
+
       var existing=planeWires.get(plane);
       if(existing){
+        /* Update positions in-place */
         var arr=new Float32Array(lifted.length*3);
         lifted.forEach(function(p,i){arr[i*3]=p.x;arr[i*3+1]=p.y;arr[i*3+2]=p.z;});
         existing.geometry.setAttribute('position',new THREE.BufferAttribute(arr,3));
         existing.geometry.attributes.position.needsUpdate=true;
         existing.geometry.computeBoundingSphere();
-      }else{
+      } else {
         var geo=new THREE.BufferGeometry().setFromPoints(lifted);
-        var mat=new THREE.LineBasicMaterial({color:col,transparent:true,opacity:isWall?0.75:0.5});
+        var mat=new THREE.LineBasicMaterial({color:col,transparent:true,opacity:isWall?0.75:0.55});
         var loop=new THREE.Line(geo,mat);
-        scene.add(loop); planeWires.set(plane,loop);
-        if(!isWall)drawFloorGrid(pm,plane.polygon,col);
+        scene.add(loop);
+        planeWires.set(plane,loop);
+
+        /* For floor planes also draw a grid inside the boundary so the
+           surface area is visible when looking straight down           */
+        if(!isWall){
+          drawFloorGrid(pm, plane.polygon, col);
+        }
       }
       seen.add(plane);
     }catch(e){}
   });
+
+  /* Remove stale plane wires */
   planeWires.forEach(function(wire,key){
-    if(typeof key!=='string'&&!seen.has(key)){scene.remove(wire);planeWires.delete(key);}
+    if(typeof key!=='string' && !seen.has(key)){
+      scene.remove(wire); planeWires.delete(key);
+    }
   });
 }
-function drawFloorGrid(pm,polygon,col){
-  var xs=polygon.map(function(v){return v.x;}),zs=polygon.map(function(v){return v.z;});
+
+function drawFloorGrid(pm, polygon, col){
+  var xs=polygon.map(function(v){return v.x;});
+  var zs=polygon.map(function(v){return v.z;});
   var minX=Math.min.apply(null,xs),maxX=Math.max.apply(null,xs);
   var minZ=Math.min.apply(null,zs),maxZ=Math.max.apply(null,zs);
-  var sX=Math.max(0.25,(maxX-minX)/6),sZ=Math.max(0.25,(maxZ-minZ)/6),pts=[];
-  for(var x=minX;x<=maxX+0.01;x+=sX){pts.push(new THREE.Vector3(x,0.007,minZ).applyMatrix4(pm),new THREE.Vector3(x,0.007,maxZ).applyMatrix4(pm));}
-  for(var z=minZ;z<=maxZ+0.01;z+=sZ){pts.push(new THREE.Vector3(minX,0.007,z).applyMatrix4(pm),new THREE.Vector3(maxX,0.007,z).applyMatrix4(pm));}
+  var stepX=Math.max(0.25,(maxX-minX)/6);
+  var stepZ=Math.max(0.25,(maxZ-minZ)/6);
+  var pts=[];
+  for(var x=minX;x<=maxX+0.01;x+=stepX){
+    var p1=new THREE.Vector3(x,0.007,minZ).applyMatrix4(pm);
+    var p2=new THREE.Vector3(x,0.007,maxZ).applyMatrix4(pm);
+    pts.push(p1,p2);
+  }
+  for(var z=minZ;z<=maxZ+0.01;z+=stepZ){
+    var p3=new THREE.Vector3(minX,0.007,z).applyMatrix4(pm);
+    var p4=new THREE.Vector3(maxX,0.007,z).applyMatrix4(pm);
+    pts.push(p3,p4);
+  }
   if(pts.length<2)return;
-  var seg=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0.18}));
-  scene.add(seg); planeWires.set('g_'+Math.random().toString(36).slice(2),seg);
-}
-function clearPlaneWires(){
-  if(!scene)return;
-  planeWires.forEach(function(w){scene.remove(w);}); planeWires.clear();
+  var geo=new THREE.BufferGeometry().setFromPoints(pts);
+  var mat=new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0.18});
+  var segs=new THREE.LineSegments(geo,mat);
+  scene.add(segs);
+  /* Store with string key so it doesn't get reaped by the plane cleanup loop */
+  planeWires.set('grid_'+Math.random().toString(36).slice(2),segs);
 }
 
-/* ══════════════════════════════════════════
+function clearPlaneWires(){
+  if(!scene)return;
+  planeWires.forEach(function(w){scene.remove(w);});
+  planeWires.clear(); planesEnabled=false;
+}
+
+/* ═══════════════════════════════
    SNAP TO NEAREST PLANE VERTEX
-══════════════════════════════════════════ */
+═══════════════════════════════ */
 var SNAP_DIST=0.35;
 function snapToNearestPlaneVertex(pos,frame,refSpace){
-  if(!frame.detectedPlanes)return null;
-  var best=null,bestD2=SNAP_DIST*SNAP_DIST;
+  if(!frame.detectedPlanes) return null;
+  var best=null, bestD2=SNAP_DIST*SNAP_DIST;
   frame.detectedPlanes.forEach(function(plane){
-    if(!plane.planeSpace)return;
+    if(!plane.planeSpace) return;
     try{
       var pp=frame.getPose(plane.planeSpace,refSpace);
-      if(!pp)return;
+      if(!pp) return;
       var pm=new THREE.Matrix4().fromArray(pp.transform.matrix);
       plane.polygon.forEach(function(v){
         var wp=new THREE.Vector3(v.x,v.y,v.z).applyMatrix4(pm);
-        var dx=wp.x-pos.x,dz=wp.z-pos.z,d2=dx*dx+dz*dz;
+        var dx=wp.x-pos.x, dz=wp.z-pos.z, d2=dx*dx+dz*dz;
         if(d2<bestD2){bestD2=d2;best=wp.clone();}
       });
     }catch(e){}
@@ -766,9 +622,9 @@ function snapToNearestPlaneVertex(pos,frame,refSpace){
   return best;
 }
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    PDF CORNER PICK OVERLAY
-══════════════════════════════════════════ */
+═══════════════════════════════ */
 function openPickOverlay(){
   uvPicks=[];
   var N=corners.length;
@@ -777,24 +633,31 @@ function openPickOverlay(){
   el('pickInfo').textContent='0 / '+N+' picked';
   el('pickConfirmBtn').disabled=true;
 
-  var maxW=window.innerWidth*0.94,maxH=window.innerHeight*0.58;
+  var maxW=window.innerWidth*0.94, maxH=window.innerHeight*0.58;
   var asp=pdfCanvas.width/pdfCanvas.height;
-  var cw=asp>=maxW/maxH?maxW:maxH*asp,ch=asp>=maxW/maxH?maxW/asp:maxH;
-  var pc=el('pickCanvas'); pc.width=Math.round(cw); pc.height=Math.round(ch);
+  var cw=asp>=maxW/maxH?maxW:maxH*asp;
+  var ch=asp>=maxW/maxH?maxW/asp:maxH;
+  var pc=el('pickCanvas');
+  pc.width=Math.round(cw); pc.height=Math.round(ch);
   pc.getContext('2d').drawImage(pdfCanvas,0,0,cw,ch);
   el('pickWrapper').querySelectorAll('.pdot').forEach(function(d){d.parentNode.removeChild(d);});
   el('pickOverlay').classList.add('show');
 
   function handleXY(px,py){
     if(uvPicks.length>=corners.length)return;
-    var u=Math.max(0,Math.min(1,px/pc.width)), v=Math.max(0,Math.min(1,py/pc.height));
+    var u=Math.max(0,Math.min(1,px/pc.width));
+    var v=Math.max(0,Math.min(1,py/pc.height));
     uvPicks.push({u:u,v:v});
     var rawCol=CORNER_COLORS[(uvPicks.length-1)%CORNER_COLORS.length];
-    var dot=document.createElement('div'); dot.className='pdot';
-    dot.style.cssText='position:absolute;width:22px;height:22px;border-radius:50%;background:#'+rawCol.toString(16).padStart(6,'0')+
-      ';color:#000;font-family:Courier New;font-size:10px;font-weight:bold;display:flex;align-items:center;justify-content:center;'+
-      'pointer-events:none;transform:translate(-50%,-50%);left:'+(px+pc.offsetLeft)+'px;top:'+(py+pc.offsetTop)+'px;z-index:10;';
-    dot.textContent=uvPicks.length; el('pickWrapper').appendChild(dot);
+    var hexCol='#'+rawCol.toString(16).padStart(6,'0');
+    var dot=document.createElement('div');
+    dot.className='pdot';
+    dot.style.cssText='position:absolute;width:22px;height:22px;border-radius:50%;background:'+hexCol+
+      ';color:#000;font-family:Courier New;font-size:10px;font-weight:bold;display:flex;'+
+      'align-items:center;justify-content:center;pointer-events:none;transform:translate(-50%,-50%);'+
+      'left:'+(px+pc.offsetLeft)+'px;top:'+(py+pc.offsetTop)+'px;z-index:10;';
+    dot.textContent=uvPicks.length;
+    el('pickWrapper').appendChild(dot);
     var rem=corners.length-uvPicks.length;
     el('pickInfo').textContent=uvPicks.length+' / '+corners.length+' picked';
     el('pickSub').textContent=rem>0?'Corner '+(uvPicks.length+1)+' of '+corners.length:'All picked \u2014 tap Bind';
@@ -803,6 +666,7 @@ function openPickOverlay(){
   pc.ontouchstart=function(e){e.preventDefault();var t=e.changedTouches[0],r=pc.getBoundingClientRect();handleXY(t.clientX-r.left,t.clientY-r.top);};
   pc.onclick=function(e){var r=pc.getBoundingClientRect();handleXY(e.clientX-r.left,e.clientY-r.top);};
 }
+
 el('pickUndoBtn').addEventListener('click',function(){
   if(uvPicks.length===0)return;
   uvPicks.pop();
@@ -813,23 +677,27 @@ el('pickUndoBtn').addEventListener('click',function(){
   el('pickConfirmBtn').disabled=true;
 });
 el('pickCancelBtn').addEventListener('click',function(){
-  closePickOverlay(); showBtns('normal');
+  closePickOverlay();
+  showBtns('normal');
   el('hudHint').textContent='Tap Trace to retry';
 });
 el('pickConfirmBtn').addEventListener('click',function(){
   if(uvPicks.length!==corners.length)return;
-  closePickOverlay(); buildBoundMesh();
+  closePickOverlay();
+  buildBoundMesh();
 });
 function closePickOverlay(){
   var pc=el('pickCanvas'); pc.onclick=null; pc.ontouchstart=null;
   el('pickOverlay').classList.remove('show');
 }
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    BUILD + REBUILD BOUND MESH
-══════════════════════════════════════════ */
+═══════════════════════════════ */
 function buildBoundMesh(){
-  if(corners.length<3||uvPicks.length!==corners.length){showToast('Mismatch \u2014 retry');showBtns('normal');return;}
+  if(corners.length<3||uvPicks.length!==corners.length){
+    showToast('Mismatch \u2014 please retry'); showBtns('normal'); return;
+  }
   if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   if(renderer){
     var maxTex=renderer.capabilities.maxTextureSize;
@@ -849,26 +717,22 @@ function buildBoundMesh(){
   if(planeGroup)planeGroup.visible=false;
   rebuildBoundGeometry();
   show('statusBar'); show('driftBadge'); show('cornerBadge');
-  show('calibBtn'); // show compass re-align button now that plan is bound
   el('cornerBadge').textContent='\u2714 Bound \u2022 '+corners.length+' anchors';
   showBtns('normal');
-  el('hudHint').textContent='Plan anchored \u2714 \u2022 Tap Re-align to lock heading';
-  showToast('Plan bound \u2714 Tap Re-align to lock to compass north',4000);
-  // Auto-calibrate heading if compass is active
-  if(compassActive&&calibratedHeading===null){
-    calibratedHeading=compassHeading; calibratedRotY=xfRotY;
-    el('calibBtn').textContent='\u2B21 N '+Math.round(calibratedHeading)+'\u00b0';
-  }
+  el('hudHint').textContent='Plan anchored \u2714 \u2022 Adjust opacity to verify';
+  showToast('Plan bound to '+corners.length+' real corners \u2714',4000);
 }
+
 function rebuildBoundGeometry(){
   if(!boundMesh||corners.length<3)return;
   var t0=performance.now();
   var pts2d=corners.map(function(c){return{x:c.worldPos.x,z:c.worldPos.z};});
-  var tris=delaunay(pts2d); if(tris.length===0)return;
+  var tris=delaunay(pts2d);
+  if(tris.length===0)return;
   var pos=[],uvs=[],nrm=[];
   tris.forEach(function(tri){
     [tri.a,tri.b,tri.c].forEach(function(idx){
-      var wp=corners[idx].worldPos,uv=uvPicks[idx];
+      var wp=corners[idx].worldPos, uv=uvPicks[idx];
       pos.push(wp.x,wp.y,wp.z); uvs.push(uv.u,1.0-uv.v); nrm.push(0,1,0);
     });
   });
@@ -877,33 +741,38 @@ function rebuildBoundGeometry(){
   geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));
   geo.setAttribute('normal',new THREE.Float32BufferAttribute(nrm,3));
   geo.computeVertexNormals();
-  geo.attributes.position.needsUpdate=true; geo.attributes.uv.needsUpdate=true;
-  geo.computeBoundingSphere(); solveCount++;
+  geo.attributes.position.needsUpdate=true;
+  geo.attributes.uv.needsUpdate=true;
+  geo.computeBoundingSphere();
+  solveCount++;
   el('statusBar').textContent=corners.length+' pts \u2022 '+tris.length+' tris \u2022 solve #'+solveCount+' ('+( performance.now()-t0).toFixed(1)+'ms)';
 }
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    ANCHOR UPDATE
-══════════════════════════════════════════ */
+═══════════════════════════════ */
 function updateAnchors(frame,refSpace){
   var moved=false;
   corners.forEach(function(c){
     if(!c.anchor)return;
     try{
-      var ap=frame.getPose(c.anchor.anchorSpace,refSpace); if(!ap)return;
+      var ap=frame.getPose(c.anchor.anchorSpace,refSpace);
+      if(!ap)return;
       var nx=ap.transform.position.x,ny=ap.transform.position.y,nz=ap.transform.position.z;
-      if(Math.abs(nx-c.worldPos.x)+Math.abs(ny-c.worldPos.y)+Math.abs(nz-c.worldPos.z)>0.0005){c.worldPos={x:nx,y:ny,z:nz};moved=true;}
+      if(Math.abs(nx-c.worldPos.x)+Math.abs(ny-c.worldPos.y)+Math.abs(nz-c.worldPos.z)>0.0005){
+        c.worldPos={x:nx,y:ny,z:nz}; moved=true;
+      }
     }catch(e){}
   });
   return moved;
 }
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    WEBXR
-══════════════════════════════════════════ */
+═══════════════════════════════ */
 function startWebXR(){
   var canvas=el('arCanvas');
-  renderer=new THREE.WebGLRenderer({canvas:canvas,alpha:true,antialias:true,preserveDrawingBuffer:true});
+  renderer=new THREE.WebGLRenderer({canvas:canvas,alpha:true,antialias:true});
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth,window.innerHeight);
   renderer.xr.enabled=true;
@@ -911,7 +780,6 @@ function startWebXR(){
   scene=new THREE.Scene();
   camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.01,200);
   scene.add(new THREE.AmbientLight(0xffffff,1));
-  initSobelCanvas();
 
   var maxTex=renderer.capabilities.maxTextureSize;
   if(pdfCanvas.width>maxTex||pdfCanvas.height>maxTex){
@@ -947,10 +815,11 @@ function startWebXR(){
   planeMesh=new THREE.Mesh(freeGeo,new THREE.MeshBasicMaterial({map:freeTex,transparent:true,opacity:xfOpacity,side:THREE.DoubleSide,depthWrite:false}));
   planeMesh.scale.set(xfScaleM,1,xfScaleM); planeGroup.add(planeMesh);
 
+  /* Session */
   navigator.xr.requestSession('immersive-ar',{
     requiredFeatures:['hit-test'],
     optionalFeatures:['plane-detection','anchors','dom-overlay'],
-    domOverlay:{root:el('xrOverlay')}
+    domOverlay:{root:el('xrOverlay')}   // ← the FULL overlay div, not just #hud
   }).then(function(session){
     xrSession=session;
     renderer.xr.setReferenceSpaceType('local');
@@ -963,26 +832,24 @@ function startWebXR(){
       renderer.setAnimationLoop(function(t,frame){xrFrame(frame);});
     });
 
-    /* ── SELECT ──
-       Button taps inside dom-overlay ALSO fire select on the XR session.
-       We use blockSelectUntil to suppress select for 300-400ms after any
-       button interaction, preventing phantom corner placement.            */
+    /* SELECT */
     session.addEventListener('select',function(){
-      if(performance.now()<blockSelectUntil)return;   // ← SPAM GUARD
       if(!reticle.visible)return;
       var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
 
-      /* TRACE: place corner */
+      /* TRACE: add corner */
       if(traceMode){
         if(corners.length>=MAX_CORNERS){showToast('Max '+MAX_CORNERS+' corners');return;}
         var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
-        var cidx=corners.length;
-        corners.push({worldPos:fp,anchor:null});
-        addCornerVisual(fp,cidx);
+        var corner={worldPos:fp,anchor:null};
+        corners.push(corner);
+        addCornerVisual(fp,corners.length-1);
         updateCornerBadge();
-        showToast(currentSnap?'Corner '+(cidx+1)+' \u2014 snapped \u2713':'Corner '+(cidx+1)+' placed');
+        showToast(currentSnap?'Corner '+corners.length+' \u2014 snapped \u2713':'Corner '+corners.length+' placed');
+        /* XRAnchor */
         if(typeof session.createAnchor==='function'){
           try{
+            var cidx=corners.length-1;
             session.createAnchor(new XRRigidTransform(new DOMPointReadOnly(fp.x,fp.y,fp.z,1),new DOMPointReadOnly(0,0,0,1)),xrRefSpace)
               .then(function(a){corners[cidx].anchor=a;}).catch(function(){});
           }catch(e){}
@@ -990,7 +857,7 @@ function startWebXR(){
         return;
       }
 
-      /* PLACEMENT */
+      /* INITIAL PLACEMENT */
       if(wxrPlaced)return;
       var q=new THREE.Quaternion();
       new THREE.Matrix4().fromArray(reticle.matrix.elements).decompose(new THREE.Vector3(),q,new THREE.Vector3());
@@ -999,65 +866,21 @@ function startWebXR(){
       floorPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0).applyQuaternion(q).normalize(),new THREE.Vector3(rx,ry,rz));
       applyFree(); hide('scanRing');
       el('hudHint').textContent='Plan placed \u2022 Tap Trace to anchor to structure';
-      showToast('Placed \u2014 pinch to scale, then tap Trace');
+      showToast('Placed \u2014 tap Trace, walk to each real corner and tap');
       xfLocked=true; el('lockBtn').textContent='\uD83D\uDD12 Locked'; el('lockBtn').className='hud-btn g';
     });
 
-    /* ── TOUCH: pan (delta-based) + pinch ──
-       PAN BUG FIX:
-       Instead of ray-casting from the *current* touch position to the floor
-       plane (which jumps because the intersection point is absolute, not relative),
-       we store the plan's world position and the touch NDC at the moment of grab.
-       Each move we compute the NEW floor intersection and offset by how much the
-       ray intersection moved, not where it lands absolutely.                      */
-    var tMap={};
-    var panRC=new THREE.Raycaster();
-    var panFloorHit=null;                  // THREE.Vector3 floor intersection at grab start, null = no grab
-    var panPlanOrigin=new THREE.Vector3(); // plan position at grab start
-
-    window.addEventListener('touchstart',function(e){
-      for(var i=0;i<e.changedTouches.length;i++){
-        var t=e.changedTouches[i];
-        tMap[t.identifier]={x:t.clientX,y:t.clientY};
-      }
-      // Record plan position and floor intersection at grab start (1-finger only)
-      var ids=Object.keys(tMap);
-      if(ids.length===1&&!xfLocked&&wxrPlaced&&!traceMode&&!boundMesh){
-        var pt=tMap[ids[0]];
-        var ndcX=(pt.x/window.innerWidth)*2-1;
-        var ndcY=-((pt.y/window.innerHeight)*2-1);
-        panRC.setFromCamera({x:ndcX,y:ndcY},camera);
-        var hitTest=new THREE.Vector3();
-        if(panRC.ray.intersectPlane(floorPlane,hitTest)){
-          panFloorHit=hitTest.clone();  // own copy — never overwritten by subsequent raycasts
-          panPlanOrigin.copy(planeGroup.position);
-        }else{
-          panFloorHit=null;
-        }
-      }else{
-        panFloorHit=null;
-      }
-    },{passive:true});
-
+    /* Touch pan / pinch */
+    var tMap={},panRC=new THREE.Raycaster(),panTgt=new THREE.Vector3();
+    window.addEventListener('touchstart',function(e){for(var i=0;i<e.changedTouches.length;i++){var t=e.changedTouches[i];tMap[t.identifier]={x:t.clientX,y:t.clientY};}},{passive:true});
     window.addEventListener('touchmove',function(e){
       if(!wxrPlaced||traceMode||boundMesh)return;
-      for(var i=0;i<e.changedTouches.length;i++){
-        var t=e.changedTouches[i]; tMap[t.identifier]={x:t.clientX,y:t.clientY};
-      }
+      for(var i=0;i<e.changedTouches.length;i++){var t=e.changedTouches[i];tMap[t.identifier]={x:t.clientX,y:t.clientY};}
       var pts=Object.values(tMap);
-      if(pts.length===1&&!xfLocked&&panFloorHit){
+      if(pts.length===1&&!xfLocked){
         var pt=pts[0];
-        var ndcX=(pt.x/window.innerWidth)*2-1, ndcY=-((pt.y/window.innerHeight)*2-1);
-        panRC.setFromCamera({x:ndcX,y:ndcY},camera);
-        var curHit=new THREE.Vector3();
-        if(panRC.ray.intersectPlane(floorPlane,curHit)){
-          // Move plan by the delta between current hit and grab-start hit
-          planeGroup.position.set(
-            panPlanOrigin.x+(curHit.x-panFloorHit.x),
-            panPlanOrigin.y,
-            panPlanOrigin.z+(curHit.z-panFloorHit.z)
-          );
-        }
+        panRC.setFromCamera({x:(pt.x/window.innerWidth)*2-1,y:-((pt.y/window.innerHeight)*2-1)},camera);
+        if(panRC.ray.intersectPlane(floorPlane,panTgt)){planeGroup.position.copy(panTgt);floorPlane.setFromNormalAndCoplanarPoint(floorPlane.normal,panTgt);}
         return;
       }
       if(pts.length>=2){
@@ -1072,12 +895,7 @@ function startWebXR(){
         prevPinchDist=dist; prevPinchAngle=ang;
       }
     },{passive:true});
-
-    window.addEventListener('touchend',function(e){
-      for(var i=0;i<e.changedTouches.length;i++)delete tMap[e.changedTouches[i].identifier];
-      if(Object.keys(tMap).length<2){prevPinchDist=null;prevPinchAngle=null;}
-      if(Object.keys(tMap).length===0){panFloorHit=null;}
-    },{passive:true});
+    window.addEventListener('touchend',function(e){for(var i=0;i<e.changedTouches.length;i++)delete tMap[e.changedTouches[i].identifier];if(Object.keys(tMap).length<2){prevPinchDist=null;prevPinchAngle=null;}},{passive:true});
 
     session.addEventListener('end',function(){renderer.setAnimationLoop(null);});
     show('scanRing');
@@ -1086,17 +904,16 @@ function startWebXR(){
   }).catch(function(err){el('hudHint').textContent='AR error: '+err.message;console.error(err);});
 }
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════
    XR FRAME LOOP
-══════════════════════════════════════════ */
+═══════════════════════════════ */
 function xrFrame(frame){
   if(!frame)return;
   renderer.render(scene,camera);
 
+  /* Update plane wireframes */
   if(xrRefSpace){
     try{updatePlaneWireframes(frame,xrRefSpace);}catch(e){}
-    // Sobel edge detection — runs periodically, not every frame
-    try{runSobel(frame);}catch(e){}
   }
 
   if(!xrHitTestSrc||!xrRefSpace)return;
@@ -1105,8 +922,10 @@ function xrFrame(frame){
     var pose=hits[0].getPose(xrRefSpace);
     reticle.visible=true;
     reticle.matrix.fromArray(pose.transform.matrix);
+
     var hitPos=new THREE.Vector3(pose.transform.position.x,pose.transform.position.y,pose.transform.position.z);
 
+    /* Plane snap during tracing */
     if(traceMode){
       var snapped=snapToNearestPlaneVertex(hitPos,frame,xrRefSpace);
       if(snapped){
@@ -1123,9 +942,11 @@ function xrFrame(frame){
         el('snapH').setAttribute('stroke','#4da6ff'); el('snapDot').setAttribute('fill','#4da6ff');
       }
     }
+
     if(!wxrFloorFound){
-      wxrFloorFound=true;
+      wxrFloorFound=true; show('planeBadge');
       el('hudHint').textContent=traceMode?'Walk to corner and tap':'Tap to place floorplan';
+      setTimeout(function(){hide('planeBadge');},4000);
     }
   }else{
     reticle.visible=false; currentSnap=null;
@@ -1133,6 +954,7 @@ function xrFrame(frame){
     if(!wxrPlaced){wxrFloorFound=false; el('hudHint').textContent='Slowly scan the floor\u2026';}
   }
 
+  /* Anchor drift correction */
   if(boundMesh&&corners.length>0){
     if(updateAnchors(frame,xrRefSpace)){
       rebuildBoundGeometry();
