@@ -403,8 +403,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
     <div id="errMsg"></div>
     <button id="launchBtn">Launch AR &rarr;</button>
     <p class="note">
-      Scan floor &rarr; wireframes on detected surfaces &middot; Tap Trace &rarr; walk corners<br>
-      (snaps to edges) &rarr; set scale &rarr; pick PDF corners &rarr; plan binds live
+      Scan ground &rarr; wireframes on detected surfaces &middot; Tap Anchor &rarr; walk to each column<br>
+      (snaps to column edges) &rarr; set scale &rarr; pick columns on PDF &rarr; plan binds live
     </p>
   </div>
 </div>
@@ -484,7 +484,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
     <!-- ── PDF PICK OVERLAY (inside xrOverlay so it shows in WebXR) ── -->
     <div id="pickOverlay">
       <p id="pickTitle">PICK CORNERS ON THE PLAN</p>
-      <p id="pickSub">Tap each corner in the same order you walked them</p>
+      <p id="pickSub">Tap each column on the plan in the same order you anchored them</p>
       <div style="position:relative;display:inline-block;" id="pickWrapper">
         <canvas id="pickCanvas"></canvas>
       </div>
@@ -509,7 +509,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 
     <!-- ── HUD (inside xrOverlay) ── -->
     <div id="hud">
-      <div id="hudHint">Point camera at the floor</div>
+      <div id="hudHint">Point camera at the ground</div>
       <div id="statusBar"></div>
       <div class="slider-row">
         <span class="sl-lbl">Opacity</span>
@@ -517,10 +517,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
         <span class="sl-lbl" id="opacityVal">82%</span>
       </div>
       <div class="btn-row" id="normalBtns">
-        <button class="hud-btn" id="rotCCW">&#8634; CCW</button>
-        <button class="hud-btn" id="rotCW">&#8635; CW</button>
+        <button class="hud-btn" id="alignBtn">&#x1F9ED; Align N</button>
         <button class="hud-btn" id="lockBtn">&#x1F513; Unlock</button>
-        <button class="hud-btn b" id="traceBtn">&#x25CE; Trace</button>
+        <button class="hud-btn b" id="traceBtn">&#x25CE; Anchor</button>
         <button class="hud-btn y" id="measureBtn">&#x1F4CF; Measure</button>
         <button class="hud-btn b" id="dropPinBtn" style="display:none;">&#x1F4CD; Pin</button>
         <button class="hud-btn" id="gpsToggleBtn">&#x1F6F0; GPS</button>
@@ -694,7 +693,7 @@ el('launchBtn').addEventListener('click',function(){
       .then(function(ok){ok?startWebXR():noXR();}).catch(noXR);
   }else{noXR();}
 });
-function noXR(){el('hudHint').textContent='WebXR not supported \u2014 requires Android Chrome';}
+function noXR(){el('hudHint').textContent='WebXR not supported \u2014 requires Android Chrome or compatible AR browser';}
 
 /* ═══════════════════════════════
    HUD CONTROLS
@@ -704,8 +703,17 @@ el('opacitySlider').addEventListener('input',function(){
   if(planeMesh)planeMesh.material.opacity=xfOpacity;
   if(boundMesh)boundMesh.material.opacity=xfOpacity;
 });
-el('rotCW').addEventListener('click',function(){xfRotY-=Math.PI/12;applyFree();});
-el('rotCCW').addEventListener('click',function(){xfRotY+=Math.PI/12;applyFree();});
+el('rotCW') && el('rotCW').addEventListener && void 0; // removed
+el('alignBtn').addEventListener('click',function(){
+  if(!wxrPlaced){showToast('Place the plan first');return;}
+  if(compassHeading==null){showToast('No compass heading \u2014 enable GPS first');return;}
+  /* Rotate plan so that plan-up (PDF top) faces compass North.
+     XR +Z = away from viewer = South in a North-up convention,
+     so to make plan-top = North we set rotY = heading (radians) */
+  xfRotY = compassHeading * Math.PI / 180;
+  applyFree();
+  showToast('Plan aligned to ' + Math.round(compassHeading) + '\u00b0 heading \u2714');
+});
 el('lockBtn').addEventListener('click',function(){
   xfLocked=!xfLocked;
   this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Unlock';
@@ -715,13 +723,12 @@ el('lockBtn').addEventListener('click',function(){
 function applyFree(){if(planeGroup&&wxrPlaced)planeGroup.rotation.y=xfRotY;}
 
 el('traceBtn').addEventListener('click',function(){
-  if(!wxrFloorFound&&!wxrPlaced){showToast('Point at the floor first');return;}
+  if(!wxrFloorFound&&!wxrPlaced){showToast('Point at the ground first');return;}
   enterTraceMode();
 });
 el('traceUndoBtn').addEventListener('click',undoCorner);
 el('traceDoneBtn').addEventListener('click',function(){
-  if(corners.length<3){showToast('Need at least 3 corners');return;}
-  // Restore normal buttons BEFORE opening overlay
+  if(corners.length<3){showToast('Need at least 3 column anchors');return;}
   showBtns('normal');
   hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
   traceMode=false;
@@ -736,20 +743,20 @@ el('exitBtn').addEventListener('click',function(){
 });
 
 /* ═══════════════════════════════
-   TRACE MODE
+   ANCHOR MODE (column anchoring)
 ═══════════════════════════════ */
 function enterTraceMode(){
   traceMode=true; corners=[];
   showBtns('trace'); hide('scanRing'); show('snapReticle'); show('cornerBadge');
   el('traceDoneBtn').style.opacity='0.4';
   updateCornerBadge();
-  el('hudHint').textContent='Walk to each wall corner or column and tap';
-  showToast('Tap the floor at each corner \u2014 snaps to detected edges');
+  el('hudHint').textContent='Walk to each column base and tap to anchor';
+  showToast('Stand at each column \u2014 snaps to detected structure edges');
 }
 function cancelTrace(){
   traceMode=false; corners=[]; clearWireVisuals();
   showBtns('normal'); hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
-  el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap Trace to bind':'Point camera at the floor';
+  el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap Anchor to bind to columns':'Point camera at the ground';
 }
 function undoCorner(){
   if(corners.length===0)return;
@@ -761,7 +768,7 @@ function undoCorner(){
 }
 function updateCornerBadge(){
   var n=corners.length;
-  el('cornerBadge').textContent=n+' corner'+(n!==1?'s':'')+
+  el('cornerBadge').textContent=n+' column'+(n!==1?'s':'')+' anchored'+
     (n<3?' \u2014 need '+(3-n)+' more':' \u2014 tap Done when ready');
   el('traceDoneBtn').style.opacity=n>=3?'1':'0.4';
 }
@@ -799,7 +806,7 @@ function doReset(){
   show('scanRing'); hide('snapReticle'); hide('cornerBadge');
   hide('snapIndicator'); hide('driftBadge'); hide('planeBadge');
   hide('statusBar'); hide('pickOverlay');
-  el('hudHint').textContent='Point camera at the floor';
+  el('hudHint').textContent='Point camera at the ground';
   el('lockBtn').textContent='\uD83D\uDD13 Unlock'; el('lockBtn').className='hud-btn';
 }
 
@@ -1038,7 +1045,7 @@ function exitMeasureMode(){
   el('normalBtns').style.display='flex';
   el('measureBtns').style.display='none';
   hide('measureLabel');
-  el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap to measure':'Point camera at the floor';
+  el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap to measure':'Point camera at the ground';
 }
 function clearMeasureVisuals(){
   if(!scene)return;
@@ -1456,8 +1463,8 @@ function clearWaypoints(){
 function openPickOverlay(){
   uvPicks=[];
   var N=corners.length;
-  el('pickTitle').textContent='PICK '+N+' CORNERS ON THE PLAN';
-  el('pickSub').textContent='Tap corners in the SAME ORDER \u2022 Corner 1 of '+N;
+  el('pickTitle').textContent='PICK '+N+' COLUMNS ON THE PLAN';
+  el('pickSub').textContent='Tap each column in the SAME ORDER you anchored them \u2022 Column 1 of '+N;
   el('pickInfo').textContent='0 / '+N+' picked';
   el('pickConfirmBtn').disabled=true;
 
@@ -1490,7 +1497,7 @@ function openPickOverlay(){
     el('pickWrapper').appendChild(dot);
     var rem=corners.length-uvPicks.length;
     el('pickInfo').textContent=uvPicks.length+' / '+corners.length+' picked';
-    el('pickSub').textContent=rem>0?'Corner '+(uvPicks.length+1)+' of '+corners.length:'All picked \u2014 tap Bind';
+    el('pickSub').textContent=rem>0?'Column '+(uvPicks.length+1)+' of '+corners.length:'All columns picked \u2014 tap Bind';
     el('pickConfirmBtn').disabled=rem>0;
   }
   pc.ontouchstart=function(e){e.preventDefault();var t=e.changedTouches[0],r=pc.getBoundingClientRect();handleXY(t.clientX-r.left,t.clientY-r.top);};
@@ -1503,13 +1510,13 @@ el('pickUndoBtn').addEventListener('click',function(){
   var dots=el('pickWrapper').querySelectorAll('.pdot');
   if(dots.length>0)dots[dots.length-1].parentNode.removeChild(dots[dots.length-1]);
   el('pickInfo').textContent=uvPicks.length+' / '+corners.length+' picked';
-  el('pickSub').textContent='Corner '+(uvPicks.length+1)+' of '+corners.length;
+  el('pickSub').textContent='Column '+(uvPicks.length+1)+' of '+corners.length;
   el('pickConfirmBtn').disabled=true;
 });
 el('pickCancelBtn').addEventListener('click',function(){
   closePickOverlay();
   showBtns('normal');
-  el('hudHint').textContent='Tap Trace to retry';
+  el('hudHint').textContent='Tap Anchor to retry';
 });
 el('pickConfirmBtn').addEventListener('click',function(){
   if(uvPicks.length!==corners.length)return;
@@ -1547,10 +1554,10 @@ function buildBoundMesh(){
   if(planeGroup)planeGroup.visible=false;
   rebuildBoundGeometry();
   show('statusBar'); show('driftBadge'); show('cornerBadge');
-  el('cornerBadge').textContent='\u2714 Bound \u2022 '+corners.length+' anchors';
+  el('cornerBadge').textContent='\u2714 Bound \u2022 '+corners.length+' column anchors';
   showBtns('normal');
-  el('hudHint').textContent='Plan anchored \u2714 \u2022 Adjust opacity to verify';
-  showToast('Plan bound to '+corners.length+' real corners \u2714',4000);
+  el('hudHint').textContent='Plan structure-locked \u2714 \u2022 Adjust opacity to verify';
+  showToast('Plan bound to '+corners.length+' columns \u2714',4000);
 }
 
 function rebuildBoundGeometry(){
@@ -1685,15 +1692,15 @@ function startWebXR(){
         return;
       }
 
-      /* TRACE: add corner */
+      /* ANCHOR MODE: place column anchor */
       if(traceMode){
-        if(corners.length>=MAX_CORNERS){showToast('Max '+MAX_CORNERS+' corners');return;}
+        if(corners.length>=MAX_CORNERS){showToast('Max '+MAX_CORNERS+' column anchors');return;}
         var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
         var corner={worldPos:fp,anchor:null};
         corners.push(corner);
         addCornerVisual(fp,corners.length-1);
         updateCornerBadge();
-        showToast(currentSnap?'Corner '+corners.length+' \u2014 snapped \u2713':'Corner '+corners.length+' placed');
+        showToast(currentSnap?'Column '+corners.length+' \u2014 snapped to structure \u2713':'Column '+corners.length+' anchored');
         /* XRAnchor */
         if(typeof session.createAnchor==='function'){
           try{
@@ -1713,8 +1720,8 @@ function startWebXR(){
       surfaceQuat.copy(q); wxrPlaced=true;
       floorPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0).applyQuaternion(q).normalize(),new THREE.Vector3(rx,ry,rz));
       applyFree(); hide('scanRing');
-      el('hudHint').textContent='Plan placed \u2022 Tap Trace to anchor to structure';
-      showToast('Placed \u2014 tap Trace, walk to each real corner and tap');
+      el('hudHint').textContent='Plan placed \u2022 Tap Anchor to bind to columns';
+      showToast('Placed \u2014 tap Anchor, walk to each column base and tap');
       xfLocked=true; el('lockBtn').textContent='\uD83D\uDD12 Locked'; el('lockBtn').className='hud-btn g';
     });
 
@@ -1747,7 +1754,9 @@ function startWebXR(){
 
     session.addEventListener('end',function(){renderer.setAnimationLoop(null);});
     show('scanRing');
-    el('hudHint').textContent='Slowly scan the floor\u2026';
+    el('hudHint').textContent='Slowly scan the ground\u2026';
+    /* Auto-align to compass heading on first surface detection if available */
+    if(compassHeading!=null){ xfRotY=compassHeading*Math.PI/180; }
 
   }).catch(function(err){el('hudHint').textContent='AR error: '+err.message;console.error(err);});
 }
@@ -1806,13 +1815,13 @@ function xrFrame(frame){
 
     if(!wxrFloorFound){
       wxrFloorFound=true; show('planeBadge');
-      el('hudHint').textContent=traceMode?'Walk to corner and tap':'Tap to place floorplan';
+      el('hudHint').textContent=traceMode?'Walk to column base and tap':'Tap to place plan';
       setTimeout(function(){hide('planeBadge');},4000);
     }
   }else{
     reticle.visible=false; currentSnap=null;
     if(traceMode)hide('snapIndicator');
-    if(!wxrPlaced){wxrFloorFound=false; el('hudHint').textContent='Slowly scan the floor\u2026';}
+    if(!wxrPlaced){wxrFloorFound=false; el('hudHint').textContent='Slowly scan the ground\u2026';}}
   }
 
   /* Anchor drift correction */
