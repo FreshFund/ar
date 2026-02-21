@@ -181,10 +181,12 @@ html,body { height:100%; overflow:hidden; background:var(--ink); color:var(--pap
   max-width:93vw; text-align:center; line-height:1.6;
 }
 #statusBar {
-  display:none; font-size:10px; letter-spacing:.13em;
-  color:rgba(255,255,255,.55); background:rgba(0,0,0,.5);
+  display:none; font-size:9px; letter-spacing:.1em; font-family:var(--mono);
+  color:rgba(255,255,255,.7); background:rgba(0,0,0,.65);
   backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-  padding:4px 14px; border-radius:100px; border:1px solid rgba(255,255,255,.06);
+  padding:6px 14px; border-radius:8px; border:1px solid rgba(255,255,255,.08);
+  white-space:pre; line-height:1.7; text-align:left; max-width:96vw;
+  pointer-events:none;
 }
 .slider-row { display:flex; align-items:center; gap:7px; pointer-events:all; }
 .sl-lbl { font-size:10px; letter-spacing:.13em; color:rgba(255,255,255,.42); min-width:44px; }
@@ -590,9 +592,48 @@ var pdfDoc=null, currentPage=1, pdfCanvas=null;
 var xfOpacity=0.82, xfRotY=0.0, xfScaleM=1.0, xfLocked=true;
 var traceMode=false, MAX_CORNERS=10;
 var corners=[];   // {worldPos:{x,y,z}, anchor:XRAnchor|null}
-var uvPicks=[];   // {u,v}
+var uvPicks=[];   // {u,v}  — plan UV coords for each column
 var boundMesh=null, solveCount=0;
-var currentSnap=null;  // THREE.Vector3 | null
+var currentSnap=null;
+
+/* ── Rigid plan transform (Kabsch solver output) ──
+   The plan is a single rigid body.  We never warp it.
+   planOrigin: THREE.Vector3  — world position of plan centre
+   planYaw:    number (rad)   — plan rotation around world-up
+   planScale:  number (m/UV)  — uniform scale
+   These are the ONLY things that change when we re-solve.         */
+var planOrigin=new THREE.Vector3();
+var planYaw=0;
+var planScale=1;
+var planBound=false;  // true once first Kabsch solve succeeds
+
+/* ── Heading fusion state ──
+   We run a complementary filter:
+     fusedHeading = α·compassRaw + (1-α)·(fusedHeading + gyroRate·dt)
+   α=0.02 → gyro dominates short-term, compass corrects long-term drift */
+var fusedHeading=null;    // degrees, 0=North
+var lastGyroTime=null;
+var gyroRate=0;           // deg/s from deviceorientation alpha delta
+var lastAlpha=null;       // previous deviceorientation alpha
+var COMPASS_ALPHA=0.02;   // complementary filter weight for compass
+var headingLocked=false;  // true once we have a stable fused heading
+
+/* GPS bearing calibration — two fixes = one bearing vector */
+var gpsBearingFixes=[];   // [{lat,lng,ts}] — rolling buffer, last 6
+var gpsBearingRef=null;   // {heading:deg, confidence:0-1} from GPS pairs
+
+/* Plane re-snap throttle */
+var reSnapFrameCounter=0;
+var RESNAP_INTERVAL=45;   // frames between re-snap attempts
+var RESNAP_THRESHOLD=0.15; // metres — max allowed silent correction
+
+/* Per-constraint quality — fed to status panel */
+var constraintQuality={
+  xrAnchor:  0,   // 0-1
+  compass:   0,
+  gpsBearing:0,
+  planeSnap: 0
+};
 
 /* Scale ruler */
 var metersPerUV=null;    // set by ruler: metres / UV unit distance
@@ -706,13 +747,12 @@ el('opacitySlider').addEventListener('input',function(){
 el('rotCW') && el('rotCW').addEventListener && void 0; // removed
 el('alignBtn').addEventListener('click',function(){
   if(!wxrPlaced){showToast('Place the plan first');return;}
-  if(compassHeading==null){showToast('No compass heading \u2014 enable GPS first');return;}
-  /* Rotate plan so that plan-up (PDF top) faces compass North.
-     XR +Z = away from viewer = South in a North-up convention,
-     so to make plan-top = North we set rotY = heading (radians) */
-  xfRotY = compassHeading * Math.PI / 180;
+  var h=fusedHeading!=null?fusedHeading:compassHeading;
+  if(h==null){showToast('No compass heading \u2014 enable GPS first');return;}
+  xfRotY=h*Math.PI/180; planYaw=xfRotY;
   applyFree();
-  showToast('Plan aligned to ' + Math.round(compassHeading) + '\u00b0 heading \u2714');
+  if(planRigidGroup)planRigidGroup.rotation.y=planYaw;
+  showToast('Plan aligned to '+Math.round(h)+'\u00b0 (fused) \u2714');
 });
 el('lockBtn').addEventListener('click',function(){
   xfLocked=!xfLocked;
@@ -797,10 +837,15 @@ function doReset(){
   currentSnap=null; solveCount=0;
   measureMode=false; measurePt1=null; measurePt2=null;
   metersPerUV=null; rulerP1=null; rulerP2=null;
+  planBound=false; planYaw=0; planScale=1; planOrigin.set(0,0,0);
+  fusedHeading=null; headingLocked=false; lastAlpha=null; lastGyroTime=null;
+  gpsBearingFixes=[]; gpsBearingRef=null; reSnapFrameCounter=0;
+  constraintQuality={xrAnchor:0,compass:0,gpsBearing:0,planeSnap:0};
   clearMeasureVisuals(); hide('measureLabel');
   clearWaypoints();
+  if(planRigidGroup&&scene){scene.remove(planRigidGroup);planRigidGroup=null;boundMesh=null;}
+  else if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   if(planeGroup)planeGroup.visible=false;
-  if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   clearWireVisuals(); clearPlaneWires();
   showBtns('normal');
   show('scanRing'); hide('snapReticle'); hide('cornerBadge');
@@ -1166,7 +1211,8 @@ function onGpsFix(pos){
   gpsLat=pos.coords.latitude; gpsLng=pos.coords.longitude;
   gpsAcc=pos.coords.accuracy; gpsAlt=pos.coords.altitude;
   updateGPSBadge();
-  /* If we have 2+ paired waypoints, run drift analysis */
+  ingestGPSForBearing(gpsLat,gpsLng,gpsAcc);
+  /* Run GPS drift analysis against column waypoints */
   var paired=waypoints.filter(function(w){return w.gps&&w.world;});
   if(paired.length>=2) runDriftAnalysis(paired);
 }
@@ -1185,18 +1231,21 @@ function updateGPSBadge(){
 function startCompass(){
   if(compassListening)return;
   function handler(e){
-    /* iOS: webkitCompassHeading. Android: 360 - alpha for true heading */
+    var ts=performance.now();
+    /* Absolute heading */
     var h=null;
     if(e.webkitCompassHeading!=null){ h=e.webkitCompassHeading; }
     else if(e.absolute&&e.alpha!=null){ h=(360-e.alpha)%360; }
-    else if(e.alpha!=null){ h=(360-e.alpha)%360; }   // non-absolute fallback
+    else if(e.alpha!=null){ h=(360-e.alpha)%360; }
     if(h==null)return;
     compassHeading=h;
     updateCompassBadge(h);
+    /* Feed complementary filter — passes raw alpha for gyro delta */
+    var alphaRaw=e.alpha||0;
+    updateFusedHeading(h, alphaRaw, ts);
   }
   if(typeof DeviceOrientationEvent!=='undefined'&&
      typeof DeviceOrientationEvent.requestPermission==='function'){
-    /* iOS 13+ requires permission */
     DeviceOrientationEvent.requestPermission().then(function(s){
       if(s==='granted'){ window.addEventListener('deviceorientation',handler,true); compassListening=true; }
     }).catch(function(){});
@@ -1528,14 +1577,110 @@ function closePickOverlay(){
   el('pickOverlay').classList.remove('show');
 }
 
-/* ═══════════════════════════════
-   BUILD + REBUILD BOUND MESH
-═══════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   KABSCH RIGID-BODY SOLVER
+   Finds the best-fit translation + yaw rotation + uniform scale
+   that maps plan UV points → world XZ points.
+   Returns {origin, yaw, scale, residualM} or null.
+
+   Algorithm:
+     1. Centre both point sets on their centroids
+     2. Build 2×2 cross-covariance matrix H = Σ uvᵢᵀ · wᵢ
+     3. SVD of H → U, S, Vᵀ  (2D: analytical formula)
+     4. R = V · Uᵀ  (optimal rotation)
+     5. Scale = Σ|wᵢ|² / Σ(uᵢ·Rᵀ·wᵢ)  (TLS scale)
+     6. Translation from centroids
+   ══════════════════════════════════════════════════════════════ */
+function kabschSolve(corners, uvPicks){
+  var N=corners.length;
+  if(N<2) return null;
+
+  /* Collect 2D points — world XZ and plan UV (centred on 0.5,0.5) */
+  var wx=[],wz=[],pu=[],pv=[];
+  for(var i=0;i<N;i++){
+    wx.push(corners[i].worldPos.x); wz.push(corners[i].worldPos.z);
+    pu.push(uvPicks[i].u-0.5);      pv.push(uvPicks[i].v-0.5);
+  }
+
+  /* Centroids */
+  var cwx=wx.reduce(function(a,b){return a+b;},0)/N;
+  var cwz=wz.reduce(function(a,b){return a+b;},0)/N;
+  var cpu=pu.reduce(function(a,b){return a+b;},0)/N;
+  var cpv=pv.reduce(function(a,b){return a+b;},0)/N;
+
+  /* Centred coords */
+  var Wx=wx.map(function(v){return v-cwx;});
+  var Wz=wz.map(function(v){return v-cwz;});
+  var Pu=pu.map(function(v){return v-cpu;});
+  var Pv=pv.map(function(v){return v-cpv;});
+
+  /* 2D cross-covariance H = Pᵀ W  (2×2) */
+  var h00=0,h01=0,h10=0,h11=0;
+  for(var i=0;i<N;i++){
+    h00+=Pu[i]*Wx[i]; h01+=Pu[i]*Wz[i];
+    h10+=Pv[i]*Wx[i]; h11+=Pv[i]*Wz[i];
+  }
+
+  /* Analytical SVD of 2×2 matrix H:
+     θ = 0.5·atan2(2·(h00·h10+h01·h11), h00²+h01²-h10²-h11²) */
+  var theta=0.5*Math.atan2(2*(h00*h10+h01*h11),
+                           h00*h00+h01*h01-h10*h10-h11*h11);
+  var cosT=Math.cos(theta), sinT=Math.sin(theta);
+  /* U = rotation matrix from theta */
+  /* V from: H = U·S·Vᵀ  → Vᵀ = S⁻¹·Uᵀ·H (approximate — use atan2 of H·U) */
+  var phi=Math.atan2(h10*cosT+h11*sinT, h00*cosT+h01*sinT);
+  var cosP=Math.cos(phi), sinP=Math.sin(phi);
+
+  /* Optimal rotation: R = V·Uᵀ → yaw angle = phi - theta */
+  var yaw=phi-theta;
+
+  /* Ensure det(R)>0 (no reflection) */
+  var detR=Math.cos(yaw);  /* det of 2D rotation = 1, always positive */
+
+  /* Optimal scale: s = Σ(W·R·P) / Σ|P|² */
+  var num=0, den=0;
+  var cosY=Math.cos(yaw), sinY=Math.sin(yaw);
+  for(var i=0;i<N;i++){
+    var Ru=cosY*Pu[i]-sinY*Pv[i];
+    var Rv=sinY*Pu[i]+cosY*Pv[i];
+    num+=Wx[i]*Ru+Wz[i]*Rv;
+    den+=Pu[i]*Pu[i]+Pv[i]*Pv[i];
+  }
+  var scale=(den>1e-10)?num/den:1;
+  if(scale<0.01||scale>500) return null;  /* degenerate */
+
+  /* Translation: t = Wcent - s·R·Pcent */
+  var Rpu=cosY*cpu-sinY*cpv;
+  var Rpv=sinY*cpu+cosY*cpv;
+  var tx=cwx-scale*Rpu;
+  var tz=cwz-scale*Rpv;
+
+  /* Residual: mean reprojection error in metres */
+  var resSum=0;
+  for(var i=0;i<N;i++){
+    var rpx=scale*(cosY*pu[i]-sinY*pv[i])+tx;
+    var rpz=scale*(sinY*pu[i]+cosY*pv[i])+tz;
+    var dx=wx[i]-rpx, dz=wz[i]-rpz;
+    resSum+=Math.sqrt(dx*dx+dz*dz);
+  }
+  var residualM=resSum/N;
+
+  return {tx:tx, tz:tz, yaw:yaw, scale:scale, residualM:residualM};
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PLAN MESH GEOMETRY  (flat rectangle, UV 0-1 covering whole PDF)
+   The mesh itself never deforms — we just move/rotate/scale the
+   THREE.Group that holds it.
+   ══════════════════════════════════════════════════════════════ */
+var planRigidGroup=null;   /* THREE.Group positioned by Kabsch each frame */
+
 function buildBoundMesh(){
-  if(corners.length<3||uvPicks.length!==corners.length){
-    showToast('Mismatch \u2014 please retry'); showBtns('normal'); return;
+  if(corners.length<2||uvPicks.length!==corners.length){
+    showToast('Need at least 2 column anchors'); showBtns('normal'); return;
   }
   if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
+  if(planRigidGroup&&scene){scene.remove(planRigidGroup);planRigidGroup=null;}
   if(renderer){
     var maxTex=renderer.capabilities.maxTextureSize;
     if(pdfCanvas.width>maxTex||pdfCanvas.height>maxTex){
@@ -1548,48 +1693,82 @@ function buildBoundMesh(){
   var tex=new THREE.Texture(pdfCanvas);
   tex.needsUpdate=true; tex.anisotropy=renderer?renderer.capabilities.getMaxAnisotropy():1;
   tex.minFilter=THREE.LinearMipmapLinearFilter; tex.magFilter=THREE.LinearFilter; tex.generateMipmaps=true;
-  var mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:xfOpacity,side:THREE.DoubleSide,depthWrite:false});
-  boundMesh=new THREE.Mesh(new THREE.BufferGeometry(),mat);
-  scene.add(boundMesh);
+
+  /* A flat plane: 1 UV unit = 1 metre initially; Kabsch scale corrects this.
+     Plane is in XZ, centred at origin, UV 0,0 = bottom-left of PDF.         */
+  var asp=pdfCanvas.width/pdfCanvas.height;
+  var geo=new THREE.PlaneGeometry(asp,1,1,1);
+  geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  /* Flip UV V so PDF top = world north when yaw=0 */
+  var uvAttr=geo.attributes.uv;
+  for(var i=0;i<uvAttr.count;i++) uvAttr.setY(i,1-uvAttr.getY(i));
+  uvAttr.needsUpdate=true;
+
+  var mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:xfOpacity,
+                                        side:THREE.DoubleSide,depthWrite:false});
+  boundMesh=new THREE.Mesh(geo,mat);
+
+  planRigidGroup=new THREE.Group();
+  planRigidGroup.add(boundMesh);
+  scene.add(planRigidGroup);
   if(planeGroup)planeGroup.visible=false;
-  rebuildBoundGeometry();
-  show('statusBar'); show('driftBadge'); show('cornerBadge');
-  el('cornerBadge').textContent='\u2714 Bound \u2022 '+corners.length+' column anchors';
+
+  /* Initial Kabsch solve */
+  if(!reSolvePlan()){
+    /* Fallback if only 2 points — place centred between them */
+    planBound=true;
+    applyRigidTransform(planOrigin.x,planOrigin.z,planYaw,planScale);
+  }
+
+  show('statusBar'); show('cornerBadge');
+  el('cornerBadge').textContent='\u2714 Locked \u2022 '+corners.length+' column anchors';
   showBtns('normal');
-  el('hudHint').textContent='Plan structure-locked \u2714 \u2022 Adjust opacity to verify';
-  showToast('Plan bound to '+corners.length+' columns \u2714',4000);
+  el('hudHint').textContent='Plan structure-locked \u2714 \u2022 All sensors active';
+  showToast('Plan rigid-locked to '+corners.length+' columns \u2714',4000);
 }
 
-function rebuildBoundGeometry(){
-  if(!boundMesh||corners.length<3)return;
+/* Apply the Kabsch transform to the planRigidGroup */
+function applyRigidTransform(tx,tz,yaw,scale){
+  if(!planRigidGroup)return;
+  /* Y position: mean column Y */
+  var meanY=corners.reduce(function(s,c){return s+c.worldPos.y;},0)/Math.max(corners.length,1);
+  planRigidGroup.position.set(tx,meanY,tz);
+  planRigidGroup.rotation.set(0,yaw,0);
+  planRigidGroup.scale.set(scale,1,scale);
+}
+
+/* Run Kabsch → update plan transform → update status panel */
+function reSolvePlan(){
   var t0=performance.now();
-  var pts2d=corners.map(function(c){return{x:c.worldPos.x,z:c.worldPos.z};});
-  var tris=delaunay(pts2d);
-  if(tris.length===0)return;
-  var pos=[],uvs=[],nrm=[];
-  tris.forEach(function(tri){
-    [tri.a,tri.b,tri.c].forEach(function(idx){
-      var wp=corners[idx].worldPos, uv=uvPicks[idx];
-      pos.push(wp.x,wp.y,wp.z); uvs.push(uv.u,1.0-uv.v); nrm.push(0,1,0);
-    });
-  });
-  var geo=boundMesh.geometry;
-  geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
-  geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));
-  geo.setAttribute('normal',new THREE.Float32BufferAttribute(nrm,3));
-  geo.computeVertexNormals();
-  geo.attributes.position.needsUpdate=true;
-  geo.attributes.uv.needsUpdate=true;
-  geo.computeBoundingSphere();
+  var sol=kabschSolve(corners,uvPicks);
+  if(!sol) return false;
+  planOrigin.set(sol.tx,0,sol.tz);
+  planYaw=sol.yaw;
+  planScale=sol.scale;
+  planBound=true;
+  applyRigidTransform(sol.tx,sol.tz,sol.yaw,sol.scale);
   solveCount++;
-  el('statusBar').textContent=corners.length+' pts \u2022 '+tris.length+' tris \u2022 solve #'+solveCount+' ('+( performance.now()-t0).toFixed(1)+'ms)';
+  var ms=(performance.now()-t0).toFixed(1);
+  var resStr=sol.residualM<0.005?'\u2714':sol.residualM<0.05?'\u26A0':'!';
+  el('statusBar').textContent=
+    corners.length+' col \u2022 res '+( sol.residualM*100).toFixed(1)+'cm '+resStr+
+    ' \u2022 scale '+(sol.scale).toFixed(3)+'m/UV'+
+    ' \u2022 #'+solveCount+' ('+ms+'ms)';
+  constraintQuality.xrAnchor=Math.max(0,1-sol.residualM/0.1);
+  updateConstraintPanel();
+  return true;
 }
 
-/* ═══════════════════════════════
-   ANCHOR UPDATE
-═══════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   XR ANCHOR UPDATE  (called every frame when plan is bound)
+   1. Pull updated anchor positions
+   2. Re-snap columns to plane vertices every RESNAP_INTERVAL frames
+   3. Re-run Kabsch if anything moved
+   ══════════════════════════════════════════════════════════════ */
 function updateAnchors(frame,refSpace){
   var moved=false;
+
+  /* 1. XRAnchors drift correction */
   corners.forEach(function(c){
     if(!c.anchor)return;
     try{
@@ -1601,7 +1780,159 @@ function updateAnchors(frame,refSpace){
       }
     }catch(e){}
   });
+
+  /* 2. Periodic plane-vertex re-snap */
+  reSnapFrameCounter++;
+  if(reSnapFrameCounter>=RESNAP_INTERVAL){
+    reSnapFrameCounter=0;
+    var snapMoved=false;
+    corners.forEach(function(c){
+      var pos=new THREE.Vector3(c.worldPos.x,c.worldPos.y,c.worldPos.z);
+      var snapped=snapToNearestPlaneVertex(pos,frame,refSpace);
+      if(!snapped)return;
+      var dx=snapped.x-c.worldPos.x, dz=snapped.z-c.worldPos.z;
+      var dist=Math.sqrt(dx*dx+dz*dz);
+      if(dist>0.005&&dist<RESNAP_THRESHOLD){
+        /* Silent correction — within tolerance */
+        c.worldPos.x=snapped.x; c.worldPos.z=snapped.z;
+        snapMoved=true; moved=true;
+        constraintQuality.planeSnap=1.0;
+      } else if(dist>=RESNAP_THRESHOLD){
+        /* Too large — flag but don't apply */
+        constraintQuality.planeSnap=Math.max(0,1-dist/0.5);
+      } else {
+        constraintQuality.planeSnap=1.0;
+      }
+    });
+  }
+
+  /* 3. Apply heading constraint from fused compass */
+  if(planBound&&headingLocked&&fusedHeading!=null){
+    /* fusedHeading is the plan's North-up bearing.
+       We only correct yaw by a small lerp each frame to avoid jumps.
+       Target yaw = fusedHeading in radians                           */
+    var targetYaw=fusedHeading*Math.PI/180;
+    var diff=targetYaw-planYaw;
+    while(diff>Math.PI)diff-=2*Math.PI; while(diff<-Math.PI)diff+=2*Math.PI;
+    /* Lerp weight: 0.008 per frame = ~0.5% correction → smooth but firm */
+    planYaw+=diff*0.008;
+    if(planRigidGroup) planRigidGroup.rotation.y=planYaw;
+    moved=true;
+  }
+
   return moved;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   COMPLEMENTARY FILTER — HEADING FUSION
+   Called from deviceorientation events (set up in startCompass).
+   Fuses gyroscope delta (smooth) with compass absolute (stable).
+   ══════════════════════════════════════════════════════════════ */
+function updateFusedHeading(compassAbs, alphaRaw, ts){
+  if(fusedHeading===null){
+    /* Cold start — trust compass outright */
+    fusedHeading=compassAbs;
+    lastAlpha=alphaRaw; lastGyroTime=ts;
+    headingLocked=true;
+    constraintQuality.compass=0.6;
+    return;
+  }
+  /* Gyro delta: alpha changes at device rotation rate.
+     On Android alpha is NOT absolute — use delta only.
+     Handle wrap-around.                                  */
+  var dt=Math.min((ts-lastGyroTime)/1000, 0.1);  /* cap at 100ms */
+  var dAlpha=alphaRaw-(lastAlpha||alphaRaw);
+  while(dAlpha>180)dAlpha-=360; while(dAlpha<-180)dAlpha+=360;
+  lastAlpha=alphaRaw; lastGyroTime=ts;
+  gyroRate=dAlpha/Math.max(dt,0.001);
+
+  /* Gyro prediction */
+  var gyroPredict=fusedHeading-dAlpha;  /* alpha increases CCW → negate */
+  while(gyroPredict<0)gyroPredict+=360; while(gyroPredict>=360)gyroPredict-=360;
+
+  /* Compass wrap-aware blend */
+  var compassDiff=compassAbs-gyroPredict;
+  while(compassDiff>180)compassDiff-=360; while(compassDiff<-180)compassDiff+=360;
+  fusedHeading=gyroPredict+COMPASS_ALPHA*compassDiff;
+  while(fusedHeading<0)fusedHeading+=360; while(fusedHeading>=360)fusedHeading-=360;
+
+  headingLocked=true;
+  /* Quality: higher if compass and gyro agree */
+  var agree=1-Math.abs(compassDiff)/180;
+  constraintQuality.compass=0.7*constraintQuality.compass+0.3*agree;
+
+  /* Update GPS bearing reference if we have it */
+  if(gpsBearingRef!=null){
+    /* Cross-check: if fused heading disagrees with GPS bearing by >15°, warn */
+    var gpsDiff=Math.abs(fusedHeading-gpsBearingRef.heading);
+    while(gpsDiff>180)gpsDiff=360-gpsDiff;
+    constraintQuality.gpsBearing=gpsDiff<15?1:Math.max(0,1-gpsDiff/45);
+  }
+
+  if(planBound) updateConstraintPanel();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GPS BEARING REFINEMENT
+   Every time a new GPS fix arrives, push to rolling buffer.
+   If two fixes are >2m apart, compute the bearing and store it
+   as a reference heading constraint.
+   ══════════════════════════════════════════════════════════════ */
+function ingestGPSForBearing(lat,lng,acc){
+  if(acc>20) return;  /* only use accurate fixes */
+  gpsBearingFixes.push({lat:lat,lng:lng,ts:Date.now()});
+  if(gpsBearingFixes.length>8) gpsBearingFixes.shift();
+  /* Find pair with largest separation */
+  var bestDist=2.0, bestBearing=null;  /* require at least 2m */
+  for(var i=0;i<gpsBearingFixes.length-1;i++){
+    for(var j=i+1;j<gpsBearingFixes.length;j++){
+      var a=gpsBearingFixes[i], b=gpsBearingFixes[j];
+      var d=haversineM(a.lat,a.lng,b.lat,b.lng);
+      if(d>bestDist){
+        bestDist=d;
+        bestBearing=bearingDeg(a.lat,a.lng,b.lat,b.lng);
+      }
+    }
+  }
+  if(bestBearing!==null){
+    /* confidence scales with distance: 2m=0.4, 10m=1.0 */
+    var conf=Math.min(1,(bestDist-2)/8*0.6+0.4);
+    gpsBearingRef={heading:bestBearing,distance:bestDist,confidence:conf};
+    constraintQuality.gpsBearing=conf;
+    /* Nudge fused heading toward GPS bearing if confidence is high */
+    if(fusedHeading!==null&&conf>0.6){
+      var gd=bestBearing-fusedHeading;
+      while(gd>180)gd-=360; while(gd<-180)gd+=360;
+      fusedHeading+=gd*conf*0.1;
+    }
+    updateConstraintPanel();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CONSTRAINT QUALITY PANEL  (updates the statusBar)
+   ══════════════════════════════════════════════════════════════ */
+function qualBar(q){
+  var n=Math.round(q*5);
+  var filled='\u2588'.repeat(n), empty='\u2591'.repeat(5-n);
+  return filled+empty;
+}
+function updateConstraintPanel(){
+  if(!planBound)return;
+  var lines=[
+    'XR  anchors  '+qualBar(constraintQuality.xrAnchor),
+    'Compass      '+qualBar(constraintQuality.compass)+(fusedHeading!=null?' '+Math.round(fusedHeading)+'\u00b0':''),
+    'GPS bearing  '+qualBar(constraintQuality.gpsBearing)+(gpsBearingRef?' '+Math.round(gpsBearingRef.distance)+'m':''),
+    'Plane snap   '+qualBar(constraintQuality.planeSnap),
+  ];
+  /* Overall lock quality — weighted average */
+  var overall=(constraintQuality.xrAnchor*0.35+constraintQuality.compass*0.30+
+               constraintQuality.gpsBearing*0.15+constraintQuality.planeSnap*0.20);
+  var overallStr=overall>0.75?'\u2714 Stable':overall>0.45?'\u26A0 Partial':'\u26D4 Weak';
+  el('statusBar').textContent=overallStr+'  \u2022  solve #'+solveCount+'\n'+lines.join('  |  ');
+  el('statusBar').style.whiteSpace='pre';
+  el('driftBadge').textContent=(overall>0.75?'\u2714':'\u26A0')+' Lock '+Math.round(overall*100)+'%';
+  show('driftBadge');
 }
 
 /* ═══════════════════════════════
@@ -1824,11 +2155,10 @@ function xrFrame(frame){
     if(!wxrPlaced){wxrFloorFound=false; el('hudHint').textContent='Slowly scan the ground\u2026';}
   }
 
-  /* Anchor drift correction */
-  if(boundMesh&&corners.length>0){
+  /* Anchor drift correction + full constraint fusion */
+  if(planBound&&corners.length>0){
     if(updateAnchors(frame,xrRefSpace)){
-      rebuildBoundGeometry();
-      el('driftBadge').textContent='\u21BA Solve #'+solveCount; show('driftBadge');
+      reSolvePlan();
     }
   }
 }
