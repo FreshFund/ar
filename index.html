@@ -257,44 +257,115 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 /* ── PICK OVERLAY ── */
 #pickOverlay {
   display:none; position:absolute; inset:0;
-  background:rgba(0,0,0,.94);
-  flex-direction:column; align-items:center; justify-content:center;
-  pointer-events:all;
+  background:rgba(4,5,15,.97);
+  flex-direction:column; pointer-events:all; overflow:hidden;
 }
 #pickOverlay.show { display:flex; }
-#pickTitle { font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--accent); margin-bottom:6px; text-align:center; padding:0 16px; }
-#pickSub   { font-size:11px; color:rgba(240,237,228,.42); letter-spacing:.1em; margin-bottom:8px; text-align:center; padding:0 20px; line-height:1.6; }
-#pickCanvas { max-width:96vw; max-height:52vh; cursor:crosshair; touch-action:none; border:1px solid rgba(255,255,255,.1); display:block; }
-#pickInfo  { font-size:10px; letter-spacing:.16em; color:var(--blue); margin-top:7px; }
-.pick-btns { display:flex; gap:9px; margin-top:10px; flex-wrap:wrap; justify-content:center; }
-.pick-btn {
-  background:rgba(8,8,16,.88); border:1px solid rgba(255,255,255,.2); color:var(--paper);
-  padding:10px 18px; font-family:var(--mono); font-size:11px; letter-spacing:.17em;
-  text-transform:uppercase; cursor:pointer; border-radius:2px;
-}
-.pick-btn.confirm { background:var(--accent); border-color:var(--accent); }
-.pick-btn.confirm:disabled { background:#444; border-color:#444; cursor:not-allowed; color:#777; }
-.pick-btn.ruler-active { background:rgba(240,208,96,.18); border-color:var(--yellow); color:var(--yellow); }
 
-/* Scale ruler overlay inside pickOverlay */
-#rulerPanel {
-  display:none; width:100%; max-width:96vw; align-items:center;
-  justify-content:center; gap:8px; margin-top:6px; flex-wrap:wrap;
+/* Header bar */
+#pickHeader {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 16px 10px; flex-shrink:0;
+  border-bottom:1px solid rgba(255,255,255,.07);
 }
-#rulerPanel.show { display:flex; }
+#pickTitle {
+  font-size:10px; letter-spacing:.3em; text-transform:uppercase;
+  color:var(--accent); margin:0;
+}
+#pickModeToggle {
+  display:flex; gap:0; border:1px solid rgba(255,255,255,.15); border-radius:3px; overflow:hidden;
+}
+.mode-tab {
+  background:none; border:none; color:rgba(255,255,255,.4);
+  font-family:var(--mono); font-size:9px; letter-spacing:.2em; text-transform:uppercase;
+  padding:6px 12px; cursor:pointer; transition:background .15s, color .15s;
+}
+.mode-tab.active { background:rgba(255,255,255,.1); color:var(--paper); }
+
+/* Zoom viewport — fills all available space */
+#pickViewport {
+  flex:1; overflow:hidden; position:relative; cursor:crosshair;
+  touch-action:none; background:#08080f;
+}
+#pickCanvas {
+  position:absolute; top:0; left:0;
+  transform-origin:0 0;
+  image-rendering:pixelated;
+}
+/* Zoom controls */
+#pickZoomCtrls {
+  position:absolute; bottom:10px; right:10px;
+  display:flex; flex-direction:column; gap:4px; z-index:20;
+}
+.zoom-btn {
+  width:32px; height:32px; border-radius:4px;
+  background:rgba(4,5,15,.88); border:1px solid rgba(255,255,255,.18);
+  color:var(--paper); font-size:18px; line-height:1; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.zoom-btn:active { background:rgba(255,255,255,.12); }
+#pickZoomLabel {
+  position:absolute; bottom:10px; left:10px; z-index:20;
+  font-size:9px; letter-spacing:.15em; color:rgba(255,255,255,.3);
+}
+
+/* Ruler mode canvas tint */
+#pickViewport.ruler-active { cursor:crosshair; }
+#pickViewport.ruler-active #pickCanvas { filter:brightness(.85) sepia(.15); }
+
+/* Footer */
+#pickFooter {
+  flex-shrink:0; padding:10px 14px 14px;
+  border-top:1px solid rgba(255,255,255,.07);
+  display:flex; flex-direction:column; gap:8px;
+}
+
+/* Anchor-pick mode status */
+#pickAnchorStatus {
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+}
+#pickInfo { font-size:10px; letter-spacing:.14em; color:var(--blue); }
+#pickSub  { font-size:10px; color:rgba(232,228,219,.4); letter-spacing:.08em; }
+
+/* Ruler mode controls */
+#rulerControls {
+  display:none; align-items:center; gap:8px; flex-wrap:wrap;
+}
+#rulerControls.show { display:flex; }
+#rulerStatus {
+  font-size:10px; letter-spacing:.1em; flex:1;
+  color:rgba(240,208,96,.75);
+}
 #rulerDistInput {
-  background:rgba(0,0,0,.6); border:1px solid rgba(240,208,96,.5); color:var(--yellow);
-  font-family:var(--mono); font-size:12px; padding:7px 10px; width:90px;
+  background:rgba(0,0,0,.6); border:1px solid rgba(240,208,96,.4); color:var(--yellow);
+  font-family:var(--mono); font-size:12px; padding:6px 10px; width:80px;
   border-radius:2px; outline:none; text-align:center;
 }
-#rulerDistInput::placeholder { color:rgba(240,208,96,.3); }
+#rulerDistInput::placeholder { color:rgba(240,208,96,.25); }
 #rulerConfirmBtn {
-  background:rgba(240,208,96,.15); border:1px solid var(--yellow); color:var(--yellow);
-  padding:8px 14px; font-family:var(--mono); font-size:10px; letter-spacing:.15em;
-  text-transform:uppercase; cursor:pointer; border-radius:2px;
+  background:rgba(240,208,96,.14); border:1px solid var(--yellow); color:var(--yellow);
+  padding:7px 13px; font-family:var(--mono); font-size:9px; letter-spacing:.18em;
+  text-transform:uppercase; cursor:pointer; border-radius:2px; white-space:nowrap;
 }
-#rulerConfirmBtn:disabled { opacity:.35; cursor:not-allowed; }
-#rulerStatus { font-size:10px; letter-spacing:.12em; color:rgba(240,208,96,.65); }
+#rulerConfirmBtn:disabled { opacity:.3; cursor:not-allowed; }
+
+/* Footer action row */
+.pick-btns {
+  display:flex; gap:7px; flex-wrap:wrap;
+}
+.pick-btn {
+  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.15); color:var(--paper);
+  padding:9px 14px; font-family:var(--mono); font-size:9px; letter-spacing:.18em;
+  text-transform:uppercase; cursor:pointer; border-radius:3px;
+  transition:background .15s, border-color .15s;
+}
+.pick-btn:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.3); }
+.pick-btn.confirm {
+  background:var(--accent); border-color:var(--accent); color:#fff; margin-left:auto;
+}
+.pick-btn.confirm:disabled { background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.1); color:rgba(255,255,255,.3); cursor:not-allowed; }
+.pick-btn.ruler-active { background:rgba(240,208,96,.14); border-color:var(--yellow); color:var(--yellow); }
+
 
 /* ── GPS / COMPASS HUD PANEL ── */
 #gpsPanel {
@@ -483,29 +554,52 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
     <div id="toast"></div>
     <div id="measureLabel"></div>
 
-    <!-- ── PDF PICK OVERLAY (inside xrOverlay so it shows in WebXR) ── -->
+    <!-- ── PDF PICK OVERLAY ── -->
     <div id="pickOverlay">
-      <p id="pickTitle">PICK CORNERS ON THE PLAN</p>
-      <p id="pickSub">Tap each column on the plan in the same order you anchored them</p>
-      <div style="position:relative;display:inline-block;" id="pickWrapper">
+
+      <!-- Header -->
+      <div id="pickHeader">
+        <p id="pickTitle">PICK COLUMNS ON THE PLAN</p>
+        <div id="pickModeToggle">
+          <button class="mode-tab active" id="tabAnchor">Anchor</button>
+          <button class="mode-tab" id="tabRuler">Scale</button>
+        </div>
+      </div>
+
+      <!-- Zoomable canvas viewport -->
+      <div id="pickViewport">
         <canvas id="pickCanvas"></canvas>
+        <div id="pickZoomCtrls">
+          <button class="zoom-btn" id="zoomIn">+</button>
+          <button class="zoom-btn" id="zoomOut">−</button>
+          <button class="zoom-btn" id="zoomReset" style="font-size:11px;letter-spacing:0;">⊡</button>
+        </div>
+        <div id="pickZoomLabel">100%</div>
       </div>
-      <!-- Scale ruler panel -->
-      <div id="rulerPanel">
-        <span id="rulerUnit">&#x1F4CF; Drag a line on the plan, enter real length:</span>
-      </div>
-      <div id="rulerPanel2" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px;">
-        <input type="number" id="rulerDistInput" placeholder="e.g. 4.5" min="0.01" step="0.01">
-        <span id="rulerUnit2" style="font-size:10px;letter-spacing:.18em;color:rgba(240,208,96,.7);">metres</span>
-        <button id="rulerConfirmBtn" disabled>Set Scale</button>
-        <span id="rulerStatus"></span>
-      </div>
-      <p id="pickInfo">0 corners picked</p>
-      <div class="pick-btns">
-        <button class="pick-btn" id="rulerModeBtn">&#x1F4CF; Set Scale</button>
-        <button class="pick-btn" id="pickUndoBtn">&#x21B6; Undo</button>
-        <button class="pick-btn" id="pickCancelBtn">Cancel</button>
-        <button class="pick-btn confirm" id="pickConfirmBtn" disabled>Bind Plan &rarr;</button>
+
+      <!-- Footer -->
+      <div id="pickFooter">
+
+        <!-- Anchor-pick status (shown in Anchor tab) -->
+        <div id="pickAnchorStatus">
+          <span id="pickInfo">0 picked</span>
+          <span id="pickSub">Tap each column in order</span>
+        </div>
+
+        <!-- Ruler controls (shown in Scale tab) -->
+        <div id="rulerControls">
+          <span id="rulerStatus">Drag a line across a known dimension</span>
+          <input type="number" id="rulerDistInput" placeholder="metres" min="0.01" step="0.01">
+          <button id="rulerConfirmBtn" disabled>Set</button>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="pick-btns">
+          <button class="pick-btn" id="pickUndoBtn">↶ Undo</button>
+          <button class="pick-btn" id="pickCancelBtn">Cancel</button>
+          <button class="pick-btn confirm" id="pickConfirmBtn" disabled>Bind Plan →</button>
+        </div>
+
       </div>
     </div>
 
@@ -617,6 +711,12 @@ var gyroRate=0;           // deg/s from deviceorientation alpha delta
 var lastAlpha=null;       // previous deviceorientation alpha
 var COMPASS_ALPHA=0.02;   // complementary filter weight for compass
 var headingLocked=false;  // true once we have a stable fused heading
+
+/* XR→North offset: captured at placement time.
+   xrNorthOffset = fusedHeading at moment of placement.
+   Plan yaw in XR = (desiredCompassHeading - xrNorthOffset) * π/180
+   So plan-top pointing North = yaw of -xrNorthOffset in XR space.  */
+var xrNorthOffset=null;
 
 /* GPS bearing calibration — two fixes = one bearing vector */
 var gpsBearingFixes=[];   // [{lat,lng,ts}] — rolling buffer, last 6
@@ -746,29 +846,35 @@ el('opacitySlider').addEventListener('input',function(){
 });
 el('rotCW') && el('rotCW').addEventListener && void 0; // removed
 el('alignBtn').addEventListener('click',function(){
-  if(!wxrPlaced){showToast('Place the plan first');return;}
+  if(!wxrPlaced){ el('hudHint').textContent='Place the plan first'; return; }
   var h=fusedHeading!=null?fusedHeading:compassHeading;
-  if(h==null){showToast('No compass heading \u2014 enable GPS first');return;}
-  xfRotY=h*Math.PI/180; planYaw=xfRotY;
-  applyFree();
-  if(planRigidGroup)planRigidGroup.rotation.y=planYaw;
-  showToast('Plan aligned to '+Math.round(h)+'\u00b0 (fused) \u2714');
+  if(h==null){ el('hudHint').textContent='Enable GPS for compass heading'; return; }
+  /* Re-capture the offset so plan-top NOW aligns to North */
+  xrNorthOffset=h;
+  /* planYaw stays as-is; the heading constraint loop will now hold it
+     at the current orientation as the "North" reference.
+     For immediate snap: apply the inverse of heading delta from reference. */
+  if(xrNorthOffset!=null){
+    planYaw=xfRotY;
+    if(planRigidGroup) planRigidGroup.rotation.y=planYaw;
+  }
+  el('hudHint').textContent='True North locked \u2014 '+Math.round(h)+'\u00b0 \u2714';
 });
 el('lockBtn').addEventListener('click',function(){
   xfLocked=!xfLocked;
   this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Unlock';
   this.className=xfLocked?'hud-btn g':'hud-btn';
-  showToast(xfLocked?'Locked':'Drag to reposition');
+  el('hudHint').textContent=xfLocked?'Plan locked ✔':'Drag to reposition';
 });
 function applyFree(){if(planeGroup&&wxrPlaced)planeGroup.rotation.y=xfRotY;}
 
 el('traceBtn').addEventListener('click',function(){
-  if(!wxrFloorFound&&!wxrPlaced){showToast('Point at the ground first');return;}
+  if(!wxrFloorFound&&!wxrPlaced){el('hudHint').textContent='Point camera at the ground first';return;}
   enterTraceMode();
 });
 el('traceUndoBtn').addEventListener('click',undoCorner);
 el('traceDoneBtn').addEventListener('click',function(){
-  if(corners.length<3){showToast('Need at least 3 column anchors');return;}
+  if(corners.length<3){el('hudHint').textContent='Need at least 3 column anchors';return;}
   showBtns('normal');
   hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
   traceMode=false;
@@ -791,7 +897,7 @@ function enterTraceMode(){
   el('traceDoneBtn').style.opacity='0.4';
   updateCornerBadge();
   el('hudHint').textContent='Walk to each column base and tap to anchor';
-  showToast('Stand at each column \u2014 snaps to detected structure edges');
+  el('hudHint').textContent='Walk to column base • reticle snaps to structure';
 }
 function cancelTrace(){
   traceMode=false; corners=[]; clearWireVisuals();
@@ -838,7 +944,7 @@ function doReset(){
   measureMode=false; measurePt1=null; measurePt2=null;
   metersPerUV=null; rulerP1=null; rulerP2=null;
   planBound=false; planYaw=0; planScale=1; planOrigin.set(0,0,0);
-  fusedHeading=null; headingLocked=false; lastAlpha=null; lastGyroTime=null;
+  fusedHeading=null; headingLocked=false; lastAlpha=null; lastGyroTime=null; xrNorthOffset=null;
   gpsBearingFixes=[]; gpsBearingRef=null; reSnapFrameCounter=0;
   constraintQuality={xrAnchor:0,compass:0,gpsBearing:0,planeSnap:0};
   clearMeasureVisuals(); hide('measureLabel');
@@ -975,102 +1081,262 @@ function snapToNearestPlaneVertex(pos,frame,refSpace){
   return best;
 }
 
-/* ═══════════════════════════════
-   SCALE RULER (in pick overlay)
-═══════════════════════════════ */
-function initRulerOnCanvas(pc){
-  // Remove old SVG ruler overlay if any
-  var old=el('pickWrapper').querySelector('#rulerSvg');
-  if(old)old.parentNode.removeChild(old);
-  rulerP1=null; rulerP2=null; rulerMode=false;
+/* ═══════════════════════════════════════════════════
+   PICK OVERLAY — zoom/pan viewport + tab switching
+   ═══════════════════════════════════════════════════ */
 
-  // Create SVG overlay
+/* Viewport pan/zoom state */
+var vpScale=1, vpOx=0, vpOy=0;
+var vpDragStart=null, vpDragOrigin=null;
+var vpPinchDist0=null, vpPinchScale0=null, vpPinchMid=null;
+var pickMode='anchor'; /* 'anchor' | 'ruler' */
+
+/* Ruler state (shared with ruler drawing on the canvas) */
+var rulerP1=null, rulerP2=null;
+var rulerMode=false;
+var rulerLine=null;   // SVG line element inside viewport
+
+function setPickTab(tab){
+  pickMode=tab;
+  el('tabAnchor').className='mode-tab'+(tab==='anchor'?' active':'');
+  el('tabRuler').className='mode-tab'+(tab==='ruler'?' active':'');
+  el('pickAnchorStatus').style.display=tab==='anchor'?'flex':'none';
+  el('rulerControls').className=tab==='ruler'?'show':'';
+  el('pickViewport').className=tab==='ruler'?'ruler-active':'';
+  rulerMode=(tab==='ruler');
+  el('pickCanvas').style.pointerEvents=tab==='ruler'?'none':'all';
+  /* Show/hide ruler SVG overlay */
+  var svg=el('pickViewport').querySelector('#rulerSvg');
+  if(svg) svg.style.display=tab==='ruler'?'block':'none';
+}
+
+el('tabAnchor').addEventListener('click',function(){ setPickTab('anchor'); });
+el('tabRuler').addEventListener('click',function(){ setPickTab('ruler'); });
+
+/* Apply viewport transform */
+function applyVP(){
+  el('pickCanvas').style.transform='translate('+vpOx+'px,'+vpOy+'px) scale('+vpScale+')';
+  el('pickZoomLabel').textContent=Math.round(vpScale*100)+'%';
+  /* Reposition SVG overlay to match */
+  var svg=el('pickViewport').querySelector('#rulerSvg');
+  if(svg) svg.style.transform='translate('+vpOx+'px,'+vpOy+'px) scale('+vpScale+')';
+  /* Reposition pdots */
+  el('pickViewport').querySelectorAll('.pdot').forEach(function(d){
+    var cu=parseFloat(d.dataset.u), cv=parseFloat(d.dataset.v);
+    var pc=el('pickCanvas');
+    var sx=cu*pc.width*vpScale+vpOx;
+    var sy=cv*pc.height*vpScale+vpOy;
+    d.style.left=sx+'px'; d.style.top=sy+'px';
+  });
+}
+
+function clampVP(){
+  var pc=el('pickCanvas'), vp=el('pickViewport');
+  var vw=vp.clientWidth, vh=vp.clientHeight;
+  var iw=pc.width*vpScale, ih=pc.height*vpScale;
+  /* Allow up to 80% of image to go off-screen for edge detail */
+  var margin=0.8;
+  vpOx=Math.min(vw*margin, Math.max(-(iw*margin), vpOx));
+  vpOy=Math.min(vh*margin, Math.max(-(ih*margin), vpOy));
+}
+
+function zoomAround(newScale, cx, cy){
+  /* cx,cy in viewport coords — keep that point fixed */
+  newScale=Math.max(0.3, Math.min(8, newScale));
+  var ratio=newScale/vpScale;
+  vpOx=cx-(cx-vpOx)*ratio;
+  vpOy=cy-(cy-vpOy)*ratio;
+  vpScale=newScale;
+  clampVP(); applyVP();
+}
+
+function resetVP(){
+  var pc=el('pickCanvas'), vp=el('pickViewport');
+  var vw=vp.clientWidth, vh=vp.clientHeight;
+  var fitW=vw/pc.width, fitH=vh/pc.height;
+  vpScale=Math.min(fitW, fitH, 1);
+  vpOx=(vw-pc.width*vpScale)/2;
+  vpOy=(vh-pc.height*vpScale)/2;
+  applyVP();
+}
+
+el('zoomIn').addEventListener('click',function(){
+  var vp=el('pickViewport');
+  zoomAround(vpScale*1.5, vp.clientWidth/2, vp.clientHeight/2);
+});
+el('zoomOut').addEventListener('click',function(){
+  var vp=el('pickViewport');
+  zoomAround(vpScale/1.5, vp.clientWidth/2, vp.clientHeight/2);
+});
+el('zoomReset').addEventListener('click',function(){ resetVP(); });
+
+/* Viewport touch/mouse pan + pinch-zoom */
+(function(){
+  var vp=el('pickViewport');
+  var touches={};
+
+  function ptDist(a,b){ var dx=b.x-a.x,dy=b.y-a.y; return Math.sqrt(dx*dx+dy*dy); }
+  function ptMid(a,b){ return{x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
+  function vpXY(e){ var r=vp.getBoundingClientRect(); return{x:e.clientX-r.left,y:e.clientY-r.top}; }
+
+  /* --- Touch --- */
+  vp.addEventListener('touchstart',function(e){
+    for(var i=0;i<e.changedTouches.length;i++){
+      var t=e.changedTouches[i];
+      touches[t.identifier]={x:t.clientX,y:t.clientY};
+    }
+    var ids=Object.keys(touches);
+    if(ids.length===1){
+      vpDragStart={x:touches[ids[0]].x,y:touches[ids[0]].y};
+      vpDragOrigin={x:vpOx,y:vpOy};
+    } else if(ids.length===2){
+      var a=touches[ids[0]],b=touches[ids[1]];
+      vpPinchDist0=ptDist(a,b); vpPinchScale0=vpScale; vpPinchMid=ptMid(a,b);
+      var r=vp.getBoundingClientRect();
+      vpPinchMid={x:vpPinchMid.x-r.left,y:vpPinchMid.y-r.top};
+    }
+  },{passive:true});
+
+  vp.addEventListener('touchmove',function(e){
+    e.preventDefault();
+    for(var i=0;i<e.changedTouches.length;i++){
+      var t=e.changedTouches[i];
+      touches[t.identifier]={x:t.clientX,y:t.clientY};
+    }
+    var ids=Object.keys(touches);
+    if(ids.length===1&&vpDragStart&&pickMode==='anchor'){
+      /* Single finger pan (only in anchor mode — ruler needs single touch for drawing) */
+      var dx=touches[ids[0]].x-vpDragStart.x, dy=touches[ids[0]].y-vpDragStart.y;
+      vpOx=vpDragOrigin.x+dx; vpOy=vpDragOrigin.y+dy;
+      clampVP(); applyVP();
+    } else if(ids.length===2&&vpPinchDist0){
+      var a=touches[ids[0]],b=touches[ids[1]];
+      var newDist=ptDist(a,b);
+      var newScale=vpPinchScale0*(newDist/vpPinchDist0);
+      zoomAround(newScale, vpPinchMid.x, vpPinchMid.y);
+    }
+  },{passive:false});
+
+  vp.addEventListener('touchend',function(e){
+    for(var i=0;i<e.changedTouches.length;i++) delete touches[e.changedTouches[i].identifier];
+    if(Object.keys(touches).length===0){ vpDragStart=null; vpPinchDist0=null; }
+  },{passive:true});
+
+  /* --- Mouse wheel zoom --- */
+  vp.addEventListener('wheel',function(e){
+    e.preventDefault();
+    var r=vp.getBoundingClientRect();
+    var cx=e.clientX-r.left, cy=e.clientY-r.top;
+    zoomAround(vpScale*(e.deltaY<0?1.15:0.87), cx, cy);
+  },{passive:false});
+
+  /* --- Mouse pan --- */
+  var mouseDragging=false;
+  vp.addEventListener('mousedown',function(e){
+    if(pickMode==='ruler') return;
+    mouseDragging=true;
+    vpDragStart={x:e.clientX,y:e.clientY};
+    vpDragOrigin={x:vpOx,y:vpOy};
+    vp.style.cursor='grabbing';
+  });
+  window.addEventListener('mousemove',function(e){
+    if(!mouseDragging) return;
+    vpOx=vpDragOrigin.x+(e.clientX-vpDragStart.x);
+    vpOy=vpDragOrigin.y+(e.clientY-vpDragStart.y);
+    clampVP(); applyVP();
+  });
+  window.addEventListener('mouseup',function(){
+    mouseDragging=false;
+    el('pickViewport').style.cursor=pickMode==='ruler'?'crosshair':'crosshair';
+  });
+})();
+
+/* ── Ruler SVG drawing in ruler tab ── */
+function initRulerOverlay(){
+  var vp=el('pickViewport');
+  var old=vp.querySelector('#rulerSvg'); if(old)old.remove();
+  var pc=el('pickCanvas');
+
+  /* SVG sits on top of canvas, same intrinsic size, transform-synced by applyVP */
   var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.id='rulerSvg';
   svg.setAttribute('width',pc.width); svg.setAttribute('height',pc.height);
-  svg.style.cssText='position:absolute;left:'+pc.offsetLeft+'px;top:'+pc.offsetTop+'px;pointer-events:all;z-index:5;';
+  svg.style.cssText='position:absolute;top:0;left:0;transform-origin:0 0;pointer-events:all;display:none;overflow:visible;';
   var line=document.createElementNS('http://www.w3.org/2000/svg','line');
-  line.setAttribute('stroke','#f0d060'); line.setAttribute('stroke-width','2.5');
-  line.setAttribute('stroke-dasharray','6 4'); line.setAttribute('display','none');
+  line.setAttribute('stroke','#f0d060'); line.setAttribute('stroke-width','2');
+  line.setAttribute('stroke-dasharray','6 3'); line.setAttribute('display','none');
   var c1=document.createElementNS('http://www.w3.org/2000/svg','circle');
-  c1.setAttribute('r','5'); c1.setAttribute('fill','#f0d060'); c1.setAttribute('display','none');
+  c1.setAttribute('r','6'); c1.setAttribute('fill','#f0d060'); c1.setAttribute('display','none');
   var c2=document.createElementNS('http://www.w3.org/2000/svg','circle');
-  c2.setAttribute('r','5'); c2.setAttribute('fill','#f0d060'); c2.setAttribute('display','none');
-  svg.appendChild(line); svg.appendChild(c1); svg.appendChild(c2);
-  el('pickWrapper').appendChild(svg);
+  c2.setAttribute('r','6'); c2.setAttribute('fill','#f0d060'); c2.setAttribute('display','none');
+  var txt=document.createElementNS('http://www.w3.org/2000/svg','text');
+  txt.setAttribute('fill','#f0d060'); txt.setAttribute('font-size','14');
+  txt.setAttribute('font-family','Space Mono,monospace'); txt.setAttribute('display','none');
+  svg.appendChild(line); svg.appendChild(c1); svg.appendChild(c2); svg.appendChild(txt);
+  vp.appendChild(svg);
   rulerLine=line;
 
-  function getXY(e){
-    var r=pc.getBoundingClientRect();
-    var clientX=e.touches?e.touches[0].clientX:e.clientX;
-    var clientY=e.touches?e.touches[0].clientY:e.clientY;
-    return{x:clientX-r.left,y:clientY-r.top};
+  /* Convert viewport coords → canvas image coords */
+  function toCanvas(ex,ey){
+    var r=vp.getBoundingClientRect();
+    var vx=ex-r.left, vy=ey-r.top;
+    return{x:(vx-vpOx)/vpScale, y:(vy-vpOy)/vpScale};
   }
+  function getTouch(e){ return e.touches?e.touches[0]:e; }
 
-  svg.addEventListener('mousedown',function(e){if(!rulerMode)return; e.stopPropagation();
-    var p=getXY(e); rulerP1={x:p.x/pc.width,y:p.y/pc.height};
+  svg.addEventListener('mousedown',rulerDown);
+  svg.addEventListener('touchstart',function(e){ e.preventDefault(); rulerDown(e.touches[0]); },{passive:false});
+
+  function rulerDown(e){
+    if(!rulerMode)return;
+    var p=toCanvas(e.clientX,e.clientY);
+    rulerP1={x:p.x,y:p.y}; rulerP2=null;
     c1.setAttribute('cx',p.x); c1.setAttribute('cy',p.y); c1.setAttribute('display','');
-    c2.setAttribute('display','none'); line.setAttribute('display','none');
-    el('rulerStatus').textContent=''; el('rulerConfirmBtn').disabled=true;
-  });
-  svg.addEventListener('touchstart',function(e){if(!rulerMode)return; e.preventDefault(); e.stopPropagation();
-    var p=getXY(e); rulerP1={x:p.x/pc.width,y:p.y/pc.height};
-    c1.setAttribute('cx',p.x); c1.setAttribute('cy',p.y); c1.setAttribute('display','');
-    c2.setAttribute('display','none'); line.setAttribute('display','none');
-  },{passive:false});
-
-  svg.addEventListener('mousemove',function(e){if(!rulerMode||!rulerP1)return; e.stopPropagation();
-    var p=getXY(e);
-    line.setAttribute('x1',rulerP1.x*pc.width); line.setAttribute('y1',rulerP1.y*pc.height);
-    line.setAttribute('x2',p.x); line.setAttribute('y2',p.y); line.setAttribute('display','');
-    c2.setAttribute('cx',p.x); c2.setAttribute('cy',p.y); c2.setAttribute('display','');
-  });
-  svg.addEventListener('touchmove',function(e){if(!rulerMode||!rulerP1)return; e.preventDefault(); e.stopPropagation();
-    var p=getXY(e);
-    line.setAttribute('x1',rulerP1.x*pc.width); line.setAttribute('y1',rulerP1.y*pc.height);
-    line.setAttribute('x2',p.x); line.setAttribute('y2',p.y); line.setAttribute('display','');
-    c2.setAttribute('cx',p.x); c2.setAttribute('cy',p.y); c2.setAttribute('display','');
-  },{passive:false});
-
-  function finishRuler(e){
+    c2.setAttribute('display','none'); line.setAttribute('display','none'); txt.setAttribute('display','none');
+    el('rulerStatus').textContent='Drag to end point…';
+    el('rulerConfirmBtn').disabled=true;
+  }
+  svg.addEventListener('mousemove',rulerMove);
+  svg.addEventListener('touchmove',function(e){ e.preventDefault(); rulerMove(e.touches[0]); },{passive:false});
+  function rulerMove(e){
     if(!rulerMode||!rulerP1)return;
-    var p=getXY(e);
-    rulerP2={x:p.x/pc.width,y:p.y/pc.height};
+    var p=toCanvas(e.clientX,e.clientY);
+    line.setAttribute('x1',rulerP1.x); line.setAttribute('y1',rulerP1.y);
+    line.setAttribute('x2',p.x); line.setAttribute('y2',p.y); line.setAttribute('display','');
     c2.setAttribute('cx',p.x); c2.setAttribute('cy',p.y); c2.setAttribute('display','');
-    var du=rulerP2.x-rulerP1.x, dv=rulerP2.y-rulerP1.y;
-    var pxDist=Math.sqrt(du*du+dv*dv);
-    el('rulerStatus').textContent='Line: '+Math.round(pxDist*pc.width)+' px on plan';
-    el('rulerConfirmBtn').disabled=pxDist<0.01;
+    var du=p.x-rulerP1.x, dv=p.y-rulerP1.y;
+    var px=Math.round(Math.sqrt(du*du+dv*dv));
+    txt.setAttribute('x',(rulerP1.x+p.x)/2+4); txt.setAttribute('y',(rulerP1.y+p.y)/2-6);
+    txt.textContent=px+'px'; txt.setAttribute('display','');
   }
-  svg.addEventListener('mouseup',function(e){e.stopPropagation(); finishRuler(e);});
-  svg.addEventListener('touchend',function(e){e.preventDefault(); e.stopPropagation(); finishRuler(e.changedTouches[0]?e.changedTouches[0]:e);},{passive:false});
+  svg.addEventListener('mouseup',rulerUp);
+  svg.addEventListener('touchend',function(e){ e.preventDefault(); rulerUp(getTouch(e.changedTouches[0]||e)); },{passive:false});
+  function rulerUp(e){
+    if(!rulerMode||!rulerP1)return;
+    var p=toCanvas(e.clientX,e.clientY);
+    rulerP2={x:p.x,y:p.y};
+    var du=(rulerP2.x-rulerP1.x)/el('pickCanvas').width;
+    var dv=(rulerP2.y-rulerP1.y)/el('pickCanvas').height;
+    var uvDist=Math.sqrt(du*du+dv*dv);
+    var pxDist=Math.sqrt((rulerP2.x-rulerP1.x)**2+(rulerP2.y-rulerP1.y)**2);
+    el('rulerStatus').textContent=Math.round(pxDist)+'px — enter real distance:';
+    el('rulerConfirmBtn').disabled=uvDist<0.005;
+  }
 }
-
-el('rulerModeBtn').addEventListener('click',function(){
-  rulerMode=!rulerMode;
-  this.className='pick-btn'+(rulerMode?' ruler-active':'');
-  this.textContent=rulerMode?'&#x1F4CF; Drawing\u2026':'&#x1F4CF; Set Scale';
-  el('rulerPanel2').style.display=rulerMode?'flex':'none';
-  var svg=el('pickWrapper').querySelector('#rulerSvg');
-  if(svg)svg.style.pointerEvents=rulerMode?'all':'none';
-  if(!rulerMode){rulerP1=null;rulerP2=null;}
-  // Block pickCanvas clicks in ruler mode
-  el('pickCanvas').style.pointerEvents=rulerMode?'none':'all';
-});
 
 el('rulerConfirmBtn').addEventListener('click',function(){
   if(!rulerP1||!rulerP2)return;
   var realMetres=parseFloat(el('rulerDistInput').value);
-  if(!realMetres||realMetres<=0){el('rulerStatus').textContent='Enter a valid distance'; return;}
-  var du=rulerP2.x-rulerP1.x, dv=rulerP2.y-rulerP1.y;
-  var uvDist=Math.sqrt(du*du+dv*dv*((pdfCanvas.width/pdfCanvas.height)**2)); // account for aspect
+  if(!realMetres||realMetres<=0){ el('rulerStatus').textContent='Enter a valid distance'; return; }
+  var du=(rulerP2.x-rulerP1.x)/el('pickCanvas').width;
+  var dv=(rulerP2.y-rulerP1.y)/el('pickCanvas').height;
+  var asp=pdfCanvas.width/pdfCanvas.height;
+  var uvDist=Math.sqrt(du*du+(dv*asp)*(dv*asp));
   metersPerUV=realMetres/uvDist;
-  el('rulerStatus').textContent='\u2714 Scale set: 1 unit = '+(metersPerUV).toFixed(3)+'m';
-  showToast('Scale: '+realMetres+'m across that line \u2714');
-  rulerMode=false; el('rulerModeBtn').className='pick-btn'; el('rulerModeBtn').textContent='&#x1F4CF; Set Scale';
-  el('pickCanvas').style.pointerEvents='all';
-  var svg=el('pickWrapper').querySelector('#rulerSvg');
-  if(svg)svg.style.pointerEvents='none';
+  el('rulerStatus').textContent='\u2714 Scale set — '+realMetres+'m = '+Math.round(Math.sqrt((rulerP2.x-rulerP1.x)**2+(rulerP2.y-rulerP1.y)**2))+'px';
+  el('rulerConfirmBtn').disabled=true;
+  /* Switch back to anchor tab */
+  setPickTab('anchor');
 });
 
 /* ═══════════════════════════════
@@ -1132,7 +1398,7 @@ function updateMeasureLabel(worldA, worldB){
 }
 
 el('measureBtn').addEventListener('click',function(){
-  if(!wxrPlaced&&!wxrFloorFound){showToast('Place the plan first');return;}
+  if(!wxrPlaced&&!wxrFloorFound){el('hudHint').textContent='Place the plan first';return;}
   enterMeasureMode();
 });
 el('measureClearBtn').addEventListener('click',function(){
@@ -1182,7 +1448,7 @@ function accClass(a){ return a==null?'red':a<10?'green':a<30?'yellow':'red'; }
 
 /* ── Start/stop GPS ── */
 function startGPS(){
-  if(!navigator.geolocation){ showToast('Geolocation not supported'); return; }
+  if(!navigator.geolocation){ el('gpsCoordsText').textContent='Geolocation not supported'; return; }
   gpsEnabled=true;
   el('gpsPanel').classList.add('show');
   el('dropPinBtn').style.display='';
@@ -1274,9 +1540,9 @@ el('gpsToggleBtn').addEventListener('click',function(){
 
 /* ── Drop Pin ── */
 el('dropPinBtn').addEventListener('click',function(){
-  if(!reticle||!reticle.visible){ showToast('Point at the ground first'); return; }
-  if(gpsLat==null){ showToast('No GPS fix yet'); return; }
-  if(gpsAcc>25){ showToast('GPS accuracy poor ('+Math.round(gpsAcc)+'m) — move to open sky'); return; }
+  if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
+  if(gpsLat==null){ el('gpsCoordsText').textContent='No GPS fix yet — wait for signal'; return; }
+  if(gpsAcc>25){ el('gpsAccText').textContent='Accuracy \u00b1'+Math.round(gpsAcc)+'m \u2014 move to open sky'; return; }
 
   var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
   var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
@@ -1307,7 +1573,7 @@ el('dropPinBtn').addEventListener('click',function(){
   };
   waypoints.push(wp);
 
-  showToast('WP'+(idx+1)+' pinned \u2014 GPS ±'+Math.round(gpsAcc)+'m');
+  el('hudHint').textContent='WP'+(idx+1)+' pinned • GPS ±'+Math.round(gpsAcc)+'m';
   renderMiniMap();
 
   /* Immediately run analysis if we have enough */
@@ -1513,53 +1779,104 @@ function openPickOverlay(){
   uvPicks=[];
   var N=corners.length;
   el('pickTitle').textContent='PICK '+N+' COLUMNS ON THE PLAN';
-  el('pickSub').textContent='Tap each column in the SAME ORDER you anchored them \u2022 Column 1 of '+N;
-  el('pickInfo').textContent='0 / '+N+' picked';
+  el('pickInfo').textContent='0 / '+N;
+  el('pickSub').textContent='Tap column 1';
   el('pickConfirmBtn').disabled=true;
+  el('rulerStatus').textContent='Drag a line across a known dimension';
+  el('rulerDistInput').value='';
+  el('rulerConfirmBtn').disabled=true;
+  rulerP1=null; rulerP2=null;
 
-  var maxW=window.innerWidth*0.94, maxH=window.innerHeight*0.58;
-  var asp=pdfCanvas.width/pdfCanvas.height;
-  var cw=asp>=maxW/maxH?maxW:maxH*asp;
-  var ch=asp>=maxW/maxH?maxW/asp:maxH;
+  /* Size canvas to PDF aspect, high res for zoom */
   var pc=el('pickCanvas');
-  pc.width=Math.round(cw); pc.height=Math.round(ch);
-  pc.getContext('2d').drawImage(pdfCanvas,0,0,cw,ch);
-  el('pickWrapper').querySelectorAll('.pdot').forEach(function(d){d.parentNode.removeChild(d);});
-  el('pickOverlay').classList.add('show');
-  // Init ruler after canvas is sized
-  setTimeout(function(){initRulerOnCanvas(pc);},50);
+  var NATIVE_W=Math.min(pdfCanvas.width, 2048);
+  var NATIVE_H=Math.round(NATIVE_W*(pdfCanvas.height/pdfCanvas.width));
+  pc.width=NATIVE_W; pc.height=NATIVE_H;
+  pc.getContext('2d').drawImage(pdfCanvas,0,0,NATIVE_W,NATIVE_H);
 
-  function handleXY(px,py){
-    if(uvPicks.length>=corners.length)return;
-    var u=Math.max(0,Math.min(1,px/pc.width));
-    var v=Math.max(0,Math.min(1,py/pc.height));
+  /* Clear old dots */
+  el('pickViewport').querySelectorAll('.pdot').forEach(function(d){d.remove();});
+
+  el('pickOverlay').classList.add('show');
+  setPickTab('anchor');
+
+  /* Reset zoom to fit */
+  setTimeout(function(){
+    resetVP();
+    initRulerOverlay();
+  }, 30);
+
+  /* Tap to place column UV picks */
+  function handleXY(vpx,vpy){
+    if(pickMode!=='anchor') return;
+    if(uvPicks.length>=corners.length) return;
+    /* Convert viewport px → canvas image coords → UV */
+    var cx=(vpx-vpOx)/vpScale;
+    var cy=(vpy-vpOy)/vpScale;
+    var u=Math.max(0,Math.min(1,cx/pc.width));
+    var v=Math.max(0,Math.min(1,cy/pc.height));
     uvPicks.push({u:u,v:v});
+
+    /* Place dot at canvas UV position, updated by applyVP */
     var rawCol=CORNER_COLORS[(uvPicks.length-1)%CORNER_COLORS.length];
     var hexCol='#'+rawCol.toString(16).padStart(6,'0');
     var dot=document.createElement('div');
     dot.className='pdot';
-    dot.style.cssText='position:absolute;width:22px;height:22px;border-radius:50%;background:'+hexCol+
-      ';color:#000;font-family:Courier New;font-size:10px;font-weight:bold;display:flex;'+
-      'align-items:center;justify-content:center;pointer-events:none;transform:translate(-50%,-50%);'+
-      'left:'+(px+pc.offsetLeft)+'px;top:'+(py+pc.offsetTop)+'px;z-index:10;';
+    dot.dataset.u=u; dot.dataset.v=v;
+    var sx=u*pc.width*vpScale+vpOx;
+    var sy=v*pc.height*vpScale+vpOy;
+    dot.style.cssText='position:absolute;width:22px;height:22px;border-radius:50%;'+
+      'background:'+hexCol+';color:#000;font-family:Space Mono,monospace;font-size:10px;'+
+      'font-weight:bold;display:flex;align-items:center;justify-content:center;'+
+      'pointer-events:none;transform:translate(-50%,-50%);left:'+sx+'px;top:'+sy+'px;z-index:10;';
     dot.textContent=uvPicks.length;
-    el('pickWrapper').appendChild(dot);
+    el('pickViewport').appendChild(dot);
+
     var rem=corners.length-uvPicks.length;
-    el('pickInfo').textContent=uvPicks.length+' / '+corners.length+' picked';
-    el('pickSub').textContent=rem>0?'Column '+(uvPicks.length+1)+' of '+corners.length:'All columns picked \u2014 tap Bind';
+    el('pickInfo').textContent=uvPicks.length+' / '+N;
+    el('pickSub').textContent=rem>0?'Tap column '+(uvPicks.length+1):'\u2714 All picked — tap Bind';
     el('pickConfirmBtn').disabled=rem>0;
   }
-  pc.ontouchstart=function(e){e.preventDefault();var t=e.changedTouches[0],r=pc.getBoundingClientRect();handleXY(t.clientX-r.left,t.clientY-r.top);};
-  pc.onclick=function(e){var r=pc.getBoundingClientRect();handleXY(e.clientX-r.left,e.clientY-r.top);};
+
+  var vp=el('pickViewport');
+  vp.ontouchstart=function(e){
+    /* Only register tap if not panning (check touch count) */
+    if(e.touches.length>1) return;
+    var t=e.changedTouches[0];
+    var r=vp.getBoundingClientRect();
+    /* Store tap start for tap-vs-pan discrimination */
+    vp._tapStart={x:t.clientX,y:t.clientY,time:Date.now()};
+  };
+  vp.ontouchend=function(e){
+    if(pickMode!=='anchor') return;
+    var t=e.changedTouches[0];
+    var ts=vp._tapStart;
+    if(!ts) return;
+    var dx=t.clientX-ts.x, dy=t.clientY-ts.y;
+    var dist=Math.sqrt(dx*dx+dy*dy);
+    var dur=Date.now()-ts.time;
+    /* Treat as tap if moved <8px and <300ms */
+    if(dist<8&&dur<300){
+      var r=vp.getBoundingClientRect();
+      handleXY(t.clientX-r.left,t.clientY-r.top);
+    }
+    vp._tapStart=null;
+  };
+  vp.onclick=function(e){
+    if(e.target.closest('.zoom-btn')) return;
+    var r=vp.getBoundingClientRect();
+    handleXY(e.clientX-r.left,e.clientY-r.top);
+  };
 }
 
 el('pickUndoBtn').addEventListener('click',function(){
   if(uvPicks.length===0)return;
   uvPicks.pop();
-  var dots=el('pickWrapper').querySelectorAll('.pdot');
-  if(dots.length>0)dots[dots.length-1].parentNode.removeChild(dots[dots.length-1]);
-  el('pickInfo').textContent=uvPicks.length+' / '+corners.length+' picked';
-  el('pickSub').textContent='Column '+(uvPicks.length+1)+' of '+corners.length;
+  var dots=el('pickViewport').querySelectorAll('.pdot');
+  if(dots.length>0)dots[dots.length-1].remove();
+  var N=corners.length;
+  el('pickInfo').textContent=uvPicks.length+' / '+N;
+  el('pickSub').textContent=uvPicks.length<N?'Tap column '+(uvPicks.length+1):'Tap column '+N;
   el('pickConfirmBtn').disabled=true;
 });
 el('pickCancelBtn').addEventListener('click',function(){
@@ -1573,8 +1890,10 @@ el('pickConfirmBtn').addEventListener('click',function(){
   buildBoundMesh();
 });
 function closePickOverlay(){
-  var pc=el('pickCanvas'); pc.onclick=null; pc.ontouchstart=null;
+  var vp=el('pickViewport');
+  vp.onclick=null; vp.ontouchstart=null; vp.ontouchend=null;
   el('pickOverlay').classList.remove('show');
+  rulerMode=false; rulerP1=null; rulerP2=null;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1677,7 +1996,7 @@ var planRigidGroup=null;   /* THREE.Group positioned by Kabsch each frame */
 
 function buildBoundMesh(){
   if(corners.length<2||uvPicks.length!==corners.length){
-    showToast('Need at least 2 column anchors'); showBtns('normal'); return;
+    el('hudHint').textContent='Need at least 2 column anchors'; showBtns('normal'); return;
   }
   if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   if(planRigidGroup&&scene){scene.remove(planRigidGroup);planRigidGroup=null;}
@@ -1724,7 +2043,7 @@ function buildBoundMesh(){
   el('cornerBadge').textContent='\u2714 Locked \u2022 '+corners.length+' column anchors';
   showBtns('normal');
   el('hudHint').textContent='Plan structure-locked \u2714 \u2022 All sensors active';
-  showToast('Plan rigid-locked to '+corners.length+' columns \u2714',4000);
+  el('hudHint').textContent='Plan rigid-locked to '+corners.length+' columns ✔';
 }
 
 /* Apply the Kabsch transform to the planRigidGroup */
@@ -1806,16 +2125,20 @@ function updateAnchors(frame,refSpace){
     });
   }
 
-  /* 3. Apply heading constraint from fused compass */
-  if(planBound&&headingLocked&&fusedHeading!=null){
-    /* fusedHeading is the plan's North-up bearing.
-       We only correct yaw by a small lerp each frame to avoid jumps.
-       Target yaw = fusedHeading in radians                           */
-    var targetYaw=fusedHeading*Math.PI/180;
+  /* 3. Apply true-North heading constraint from fused compass
+        targetYaw = how much to rotate plan in XR space so its top faces North.
+        If fusedHeading = H at placement (xrNorthOffset), then XR +Z pointed at
+        compass direction H. To make plan-top (UV top) face North (0°), we rotate
+        by -xrNorthOffset in XR space. As the phone drifts, fusedHeading changes —
+        we correct by the delta from the original reference.                      */
+  if(planBound&&headingLocked&&fusedHeading!=null&&xrNorthOffset!=null){
+    var headingDelta=fusedHeading-xrNorthOffset;
+    while(headingDelta>180)headingDelta-=360; while(headingDelta<-180)headingDelta+=360;
+    /* targetYaw: 0 = plan placed as-is at capture. Negative = rotate toward North. */
+    var targetYaw=planYaw-headingDelta*Math.PI/180*0.008;
     var diff=targetYaw-planYaw;
     while(diff>Math.PI)diff-=2*Math.PI; while(diff<-Math.PI)diff+=2*Math.PI;
-    /* Lerp weight: 0.008 per frame = ~0.5% correction → smooth but firm */
-    planYaw+=diff*0.008;
+    planYaw+=diff;
     if(planRigidGroup) planRigidGroup.rotation.y=planYaw;
     moved=true;
   }
@@ -2025,13 +2348,13 @@ function startWebXR(){
 
       /* ANCHOR MODE: place column anchor */
       if(traceMode){
-        if(corners.length>=MAX_CORNERS){showToast('Max '+MAX_CORNERS+' column anchors');return;}
+        if(corners.length>=MAX_CORNERS){el('hudHint').textContent='Max '+MAX_CORNERS+' column anchors reached';return;}
         var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
         var corner={worldPos:fp,anchor:null};
         corners.push(corner);
         addCornerVisual(fp,corners.length-1);
         updateCornerBadge();
-        showToast(currentSnap?'Column '+corners.length+' \u2014 snapped to structure \u2713':'Column '+corners.length+' anchored');
+        el('hudHint').textContent=currentSnap?'Column '+corners.length+' — snapped ✓':'Column '+corners.length+' anchored — walk to next';
         /* XRAnchor */
         if(typeof session.createAnchor==='function'){
           try{
@@ -2050,9 +2373,13 @@ function startWebXR(){
       planeGroup.position.set(rx,ry,rz); planeGroup.quaternion.copy(q); planeGroup.visible=true;
       surfaceQuat.copy(q); wxrPlaced=true;
       floorPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0).applyQuaternion(q).normalize(),new THREE.Vector3(rx,ry,rz));
+      /* Capture XR→North offset: the compass heading at this moment tells us
+         which XR direction is North. We store it so heading constraint is
+         always relative to true North, not arbitrary XR space.            */
+      if(fusedHeading!=null) xrNorthOffset=fusedHeading;
       applyFree(); hide('scanRing');
       el('hudHint').textContent='Plan placed \u2022 Tap Anchor to bind to columns';
-      showToast('Placed \u2014 tap Anchor, walk to each column base and tap');
+      el('hudHint').textContent='Plan placed • tap Anchor, walk to each column base';
       xfLocked=true; el('lockBtn').textContent='\uD83D\uDD12 Locked'; el('lockBtn').className='hud-btn g';
     });
 
