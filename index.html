@@ -4,12 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>AR Floorplan · Anchored</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 :root {
-  --ink:#080810; --paper:#f0ede4; --accent:#e84f2b;
+  --ink:#04050f; --paper:#e8e4db; --accent:#e84f2b;
   --green:#2be87a; --blue:#4da6ff; --yellow:#f0d060;
-  --mono:'Courier New',monospace;
+  --mono:'Space Mono',monospace;
+  --display:'Syne',sans-serif;
 }
 html,body { height:100%; overflow:hidden; background:var(--ink); color:var(--paper); font-family:var(--mono); }
 
@@ -19,32 +22,139 @@ html,body { height:100%; overflow:hidden; background:var(--ink); color:var(--pap
   align-items:center; justify-content:center; padding:24px;
   background:var(--ink); z-index:100; overflow-y:auto;
 }
-.eyebrow { font-size:11px; letter-spacing:.45em; text-transform:uppercase; color:var(--accent); margin-bottom:14px; }
-h1 { font-family:'Georgia',serif; font-style:italic; font-size:clamp(28px,7.5vw,54px); line-height:.92; text-align:center; margin-bottom:18px; }
-h1 em { color:var(--accent); font-style:normal; }
+
+/* Animated grid background */
+#landing::before {
+  content:''; position:absolute; inset:0; z-index:0;
+  background-image:
+    linear-gradient(rgba(232,79,43,.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232,79,43,.06) 1px, transparent 1px);
+  background-size:48px 48px;
+  animation:gridDrift 18s linear infinite;
+}
+#landing::after {
+  content:''; position:absolute; inset:0; z-index:0;
+  background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(232,79,43,.08) 0%, transparent 70%),
+              radial-gradient(ellipse 40% 40% at 15% 80%, rgba(77,166,255,.06) 0%, transparent 60%),
+              radial-gradient(ellipse 50% 40% at 85% 20%, rgba(43,232,122,.05) 0%, transparent 60%);
+  pointer-events:none;
+}
+@keyframes gridDrift { from{background-position:0 0} to{background-position:48px 48px} }
+
+.landing-inner {
+  position:relative; z-index:1; width:100%; max-width:520px;
+  display:flex; flex-direction:column; align-items:center;
+}
+
+/* Top nav bar */
+.l-nav {
+  width:100%; display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:52px; border-bottom:1px solid rgba(232,79,43,.2); padding-bottom:14px;
+}
+.l-logo {
+  font-family:var(--display); font-size:13px; font-weight:800; letter-spacing:.06em;
+  color:var(--paper); text-transform:uppercase;
+}
+.l-logo span { color:var(--accent); }
+.l-badge {
+  font-size:9px; letter-spacing:.3em; text-transform:uppercase;
+  padding:4px 10px; border:1px solid rgba(43,232,122,.4); color:var(--green);
+  border-radius:100px; background:rgba(43,232,122,.06);
+  animation:badgePulse 2.4s ease-in-out infinite;
+}
+@keyframes badgePulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+
+/* Main headline */
+.l-headline {
+  font-family:var(--display); font-weight:800;
+  font-size:clamp(36px,10vw,72px); line-height:.9;
+  text-align:center; letter-spacing:-.02em;
+  margin-bottom:10px;
+  animation:fadeUp .7s cubic-bezier(.16,1,.3,1) both;
+}
+.l-headline .line2 { display:block; color:var(--accent); font-style:italic; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+.l-sub {
+  font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+  color:rgba(232,228,219,.38); margin-bottom:36px;
+  animation:fadeUp .7s .12s cubic-bezier(.16,1,.3,1) both;
+}
+
+/* Feature tags */
+.l-tags {
+  display:flex; gap:8px; flex-wrap:wrap; justify-content:center;
+  margin-bottom:36px;
+  animation:fadeUp .7s .22s cubic-bezier(.16,1,.3,1) both;
+}
+.l-tag {
+  font-size:9px; letter-spacing:.22em; text-transform:uppercase;
+  padding:5px 12px; border-radius:100px;
+  border:1px solid rgba(255,255,255,.1); color:rgba(232,228,219,.5);
+  background:rgba(255,255,255,.03);
+}
+.l-tag.hi { border-color:rgba(77,166,255,.35); color:var(--blue); background:rgba(77,166,255,.06); }
+
+/* Drop zone */
 .drop-zone {
-  width:100%; max-width:460px; border:1.5px dashed rgba(240,237,228,.25);
-  border-radius:3px; padding:26px 20px; text-align:center; cursor:pointer;
-  transition:border-color .2s, background .2s;
+  width:100%; border:1px solid rgba(232,79,43,.25);
+  background:rgba(232,79,43,.03);
+  border-radius:4px; padding:28px 20px; text-align:center; cursor:pointer;
+  transition:border-color .2s, background .2s, box-shadow .2s;
+  position:relative; overflow:hidden;
+  animation:fadeUp .7s .32s cubic-bezier(.16,1,.3,1) both;
 }
-.drop-zone:hover,.drop-zone.over { border-color:var(--accent); background:rgba(232,79,43,.05); }
-.drop-icon { font-size:34px; display:block; margin-bottom:7px; }
-.drop-label { font-size:13px; letter-spacing:.15em; text-transform:uppercase; margin-bottom:5px; }
-.drop-sub { font-size:11px; color:rgba(240,237,228,.4); letter-spacing:.1em; }
+.drop-zone::before {
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(135deg, transparent 40%, rgba(232,79,43,.04) 100%);
+  pointer-events:none;
+}
+.drop-zone:hover, .drop-zone.over {
+  border-color:var(--accent); background:rgba(232,79,43,.07);
+  box-shadow:0 0 32px rgba(232,79,43,.12), inset 0 0 24px rgba(232,79,43,.04);
+}
+.drop-icon { font-size:28px; display:block; margin-bottom:9px; filter:grayscale(.4); }
+.drop-label { font-size:11px; letter-spacing:.22em; text-transform:uppercase; margin-bottom:5px; color:var(--paper); }
+.drop-sub { font-size:10px; color:rgba(232,228,219,.32); letter-spacing:.1em; }
 #fileInput { display:none; }
-#pdfThumb { display:none; margin-top:12px; max-width:100%; max-height:120px; border:1px solid rgba(255,255,255,.12); }
-#pageNav { display:none; align-items:center; gap:12px; margin-top:8px; font-size:12px; }
-.pg-btn { background:none; border:1px solid rgba(255,255,255,.25); color:var(--paper); width:28px; height:28px; cursor:pointer; font-size:14px; font-family:var(--mono); }
-.pg-btn:hover { border-color:var(--accent); color:var(--accent); }
-#launchBtn {
-  display:none; margin-top:16px; background:var(--accent); color:var(--paper);
-  border:none; padding:13px 38px; font-family:var(--mono); font-size:12px;
-  letter-spacing:.3em; text-transform:uppercase; cursor:pointer; transition:background .2s;
+
+/* Thumb preview */
+#pdfThumb {
+  display:none; margin-top:14px; max-width:100%; max-height:110px;
+  border:1px solid rgba(255,255,255,.1); border-radius:2px;
 }
+#pageNav { display:none; align-items:center; gap:12px; margin-top:8px; font-size:11px; }
+.pg-btn {
+  background:none; border:1px solid rgba(255,255,255,.2); color:var(--paper);
+  width:28px; height:28px; cursor:pointer; font-size:15px; font-family:var(--mono);
+  border-radius:2px; transition:border-color .15s, color .15s;
+}
+.pg-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* Launch button */
+#launchBtn {
+  display:none; margin-top:18px; position:relative; overflow:hidden;
+  background:var(--accent); color:#fff;
+  border:none; padding:16px 48px; font-family:var(--mono); font-size:11px;
+  letter-spacing:.32em; text-transform:uppercase; cursor:pointer;
+  border-radius:2px; transition:background .2s, box-shadow .2s;
+  animation:fadeUp .5s .4s cubic-bezier(.16,1,.3,1) both;
+}
+#launchBtn::after {
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
+  transform:translateX(-100%); transition:transform .5s;
+}
+#launchBtn:hover::after { transform:translateX(100%); }
 #launchBtn.show { display:block; }
-#launchBtn:hover { background:#c83d1e; }
-.note { margin-top:10px; font-size:11px; color:rgba(240,237,228,.26); letter-spacing:.07em; text-align:center; max-width:380px; line-height:1.8; }
-#errMsg { display:none; margin-top:10px; font-size:12px; color:var(--accent); }
+#launchBtn:hover { background:#c83d1e; box-shadow:0 0 28px rgba(232,79,43,.35); }
+
+.note {
+  margin-top:14px; font-size:10px; color:rgba(232,228,219,.2);
+  letter-spacing:.07em; text-align:center; max-width:380px; line-height:1.9;
+  animation:fadeUp .7s .45s cubic-bezier(.16,1,.3,1) both;
+}
+#errMsg { display:none; margin-top:10px; font-size:11px; color:var(--accent); letter-spacing:.08em; }
 
 /* ── AR SCREEN ── */
 #arScreen { display:none; position:fixed; inset:0; z-index:200; background:#000; }
@@ -92,6 +202,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 .hud-btn:hover  { background:rgba(232,79,43,.18); border-color:var(--accent); }
 .hud-btn.g  { background:rgba(43,232,122,.16); border-color:var(--green); color:var(--green); }
 .hud-btn.b  { background:rgba(77,166,255,.16); border-color:var(--blue); color:var(--blue); }
+.hud-btn.y  { background:rgba(240,208,96,.16); border-color:var(--yellow); color:var(--yellow); }
 .hud-btn.r  { border-color:rgba(232,79,43,.4); }
 
 /* Badges — inside xrOverlay */
@@ -131,9 +242,17 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   font-size:11px; letter-spacing:.11em; color:#fff; border-radius:100px; white-space:nowrap;
 }
 
-/* ── PDF CORNER PICK OVERLAY ──
-   CRITICAL: This MUST be inside #xrOverlay (the dom-overlay root)
-   so it appears over the camera feed in WebXR mode.              */
+/* Measurement label floating in 3D space (projected to screen) */
+#measureLabel {
+  display:none; position:absolute; pointer-events:none;
+  background:rgba(240,208,96,.92); color:#080810;
+  font-size:11px; font-weight:700; letter-spacing:.12em;
+  padding:5px 13px; border-radius:100px;
+  transform:translate(-50%,-50%);
+  box-shadow:0 2px 12px rgba(0,0,0,.4);
+}
+
+/* ── PICK OVERLAY ── */
 #pickOverlay {
   display:none; position:absolute; inset:0;
   background:rgba(0,0,0,.94);
@@ -142,10 +261,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 }
 #pickOverlay.show { display:flex; }
 #pickTitle { font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--accent); margin-bottom:6px; text-align:center; padding:0 16px; }
-#pickSub   { font-size:11px; color:rgba(240,237,228,.42); letter-spacing:.1em; margin-bottom:12px; text-align:center; padding:0 20px; line-height:1.6; }
-#pickCanvas { max-width:96vw; max-height:60vh; cursor:crosshair; touch-action:none; border:1px solid rgba(255,255,255,.1); display:block; }
-#pickInfo  { font-size:10px; letter-spacing:.16em; color:var(--blue); margin-top:9px; }
-.pick-btns { display:flex; gap:9px; margin-top:11px; }
+#pickSub   { font-size:11px; color:rgba(240,237,228,.42); letter-spacing:.1em; margin-bottom:8px; text-align:center; padding:0 20px; line-height:1.6; }
+#pickCanvas { max-width:96vw; max-height:52vh; cursor:crosshair; touch-action:none; border:1px solid rgba(255,255,255,.1); display:block; }
+#pickInfo  { font-size:10px; letter-spacing:.16em; color:var(--blue); margin-top:7px; }
+.pick-btns { display:flex; gap:9px; margin-top:10px; flex-wrap:wrap; justify-content:center; }
 .pick-btn {
   background:rgba(8,8,16,.88); border:1px solid rgba(255,255,255,.2); color:var(--paper);
   padding:10px 18px; font-family:var(--mono); font-size:11px; letter-spacing:.17em;
@@ -153,32 +272,75 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 }
 .pick-btn.confirm { background:var(--accent); border-color:var(--accent); }
 .pick-btn.confirm:disabled { background:#444; border-color:#444; cursor:not-allowed; color:#777; }
+.pick-btn.ruler-active { background:rgba(240,208,96,.18); border-color:var(--yellow); color:var(--yellow); }
+
+/* Scale ruler overlay inside pickOverlay */
+#rulerPanel {
+  display:none; width:100%; max-width:96vw; align-items:center;
+  justify-content:center; gap:8px; margin-top:6px; flex-wrap:wrap;
+}
+#rulerPanel.show { display:flex; }
+#rulerDistInput {
+  background:rgba(0,0,0,.6); border:1px solid rgba(240,208,96,.5); color:var(--yellow);
+  font-family:var(--mono); font-size:12px; padding:7px 10px; width:90px;
+  border-radius:2px; outline:none; text-align:center;
+}
+#rulerDistInput::placeholder { color:rgba(240,208,96,.3); }
+#rulerConfirmBtn {
+  background:rgba(240,208,96,.15); border:1px solid var(--yellow); color:var(--yellow);
+  padding:8px 14px; font-family:var(--mono); font-size:10px; letter-spacing:.15em;
+  text-transform:uppercase; cursor:pointer; border-radius:2px;
+}
+#rulerConfirmBtn:disabled { opacity:.35; cursor:not-allowed; }
+#rulerStatus { font-size:10px; letter-spacing:.12em; color:rgba(240,208,96,.65); }
+
+
 </style>
 </head>
 <body>
 
 <!-- LANDING (not inside xrOverlay — only shown before AR starts) -->
 <div id="landing">
-  <p class="eyebrow">AR Floorplan &middot; Anchored</p>
-  <h1>Structure-locked<br><em>floorplan AR.</em></h1>
-  <div class="drop-zone" id="dropZone">
-    <span class="drop-icon">&#x1F4D0;</span>
-    <p class="drop-label">Drop PDF or tap to browse</p>
-    <p class="drop-sub">Plane wireframes &middot; snap to edges &middot; drift-corrected</p>
-    <input type="file" id="fileInput" accept=".pdf,application/pdf">
-    <canvas id="pdfThumb"></canvas>
-    <div id="pageNav">
-      <button class="pg-btn" id="prevPg">&#8249;</button>
-      <span id="pgInfo">1 / 1</span>
-      <button class="pg-btn" id="nextPg">&#8250;</button>
+  <div class="landing-inner">
+    <nav class="l-nav">
+      <div class="l-logo"><span>AR</span>floor</div>
+      <div class="l-badge">&#x25CF; WebXR Live</div>
+    </nav>
+
+    <h1 class="l-headline">
+      Structure-locked
+      <span class="line2">Floorplan AR.</span>
+    </h1>
+    <p class="l-sub">Anchored &middot; Drift-corrected &middot; Real-time</p>
+
+    <div class="l-tags">
+      <span class="l-tag hi">Hit-test</span>
+      <span class="l-tag hi">Plane detection</span>
+      <span class="l-tag hi">XR Anchors</span>
+      <span class="l-tag">Scale ruler</span>
+      <span class="l-tag">Measurement</span>
+      <span class="l-tag">PDF overlay</span>
     </div>
+
+    <div class="drop-zone" id="dropZone">
+      <span class="drop-icon">&#x1F4C4;</span>
+      <p class="drop-label">Drop floorplan PDF or tap to browse</p>
+      <p class="drop-sub">Plane wireframes &middot; snap to edges &middot; drift-corrected anchors</p>
+      <input type="file" id="fileInput" accept=".pdf,application/pdf">
+      <canvas id="pdfThumb"></canvas>
+      <div id="pageNav">
+        <button class="pg-btn" id="prevPg">&#8249;</button>
+        <span id="pgInfo">1 / 1</span>
+        <button class="pg-btn" id="nextPg">&#8250;</button>
+      </div>
+    </div>
+    <div id="errMsg"></div>
+    <button id="launchBtn">Launch AR &rarr;</button>
+    <p class="note">
+      Scan floor &rarr; wireframes on detected surfaces &middot; Tap Trace &rarr; walk corners<br>
+      (snaps to edges) &rarr; set scale &rarr; pick PDF corners &rarr; plan binds live
+    </p>
   </div>
-  <div id="errMsg"></div>
-  <button id="launchBtn">Launch AR &rarr;</button>
-  <p class="note">
-    Scan floor/walls &rarr; coloured wireframes appear on detected surfaces.<br>
-    Tap Trace &rarr; walk corners (snaps to edges) &rarr; pick on PDF &rarr; plan binds live.
-  </p>
 </div>
 
 <!-- AR SCREEN -->
@@ -215,6 +377,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
     <div id="planeBadge">&#x2713; Surface Detected</div>
     <div id="driftBadge">&#x21BA; Anchors updated</div>
     <div id="toast"></div>
+    <div id="measureLabel"></div>
 
     <!-- ── PDF PICK OVERLAY (inside xrOverlay so it shows in WebXR) ── -->
     <div id="pickOverlay">
@@ -223,8 +386,19 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
       <div style="position:relative;display:inline-block;" id="pickWrapper">
         <canvas id="pickCanvas"></canvas>
       </div>
+      <!-- Scale ruler panel -->
+      <div id="rulerPanel">
+        <span id="rulerUnit">&#x1F4CF; Drag a line on the plan, enter real length:</span>
+      </div>
+      <div id="rulerPanel2" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px;">
+        <input type="number" id="rulerDistInput" placeholder="e.g. 4.5" min="0.01" step="0.01">
+        <span id="rulerUnit2" style="font-size:10px;letter-spacing:.18em;color:rgba(240,208,96,.7);">metres</span>
+        <button id="rulerConfirmBtn" disabled>Set Scale</button>
+        <span id="rulerStatus"></span>
+      </div>
       <p id="pickInfo">0 corners picked</p>
       <div class="pick-btns">
+        <button class="pick-btn" id="rulerModeBtn">&#x1F4CF; Set Scale</button>
         <button class="pick-btn" id="pickUndoBtn">&#x21B6; Undo</button>
         <button class="pick-btn" id="pickCancelBtn">Cancel</button>
         <button class="pick-btn confirm" id="pickConfirmBtn" disabled>Bind Plan &rarr;</button>
@@ -245,8 +419,13 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
         <button class="hud-btn" id="rotCW">&#8635; CW</button>
         <button class="hud-btn" id="lockBtn">&#x1F513; Unlock</button>
         <button class="hud-btn b" id="traceBtn">&#x25CE; Trace</button>
+        <button class="hud-btn y" id="measureBtn">&#x1F4CF; Measure</button>
         <button class="hud-btn" id="resetBtn">Reset</button>
         <button class="hud-btn r" id="exitBtn">&#x2715; Exit</button>
+      </div>
+      <div class="btn-row" id="measureBtns" style="display:none;">
+        <button class="hud-btn" id="measureClearBtn">&#x21B6; Clear</button>
+        <button class="hud-btn r" id="measureExitBtn">&#x2715; Done</button>
       </div>
       <div class="btn-row" id="traceBtns" style="display:none;">
         <button class="hud-btn" id="traceUndoBtn">&#x21B6; Undo</button>
@@ -312,6 +491,18 @@ var uvPicks=[];   // {u,v}
 var boundMesh=null, solveCount=0;
 var currentSnap=null;  // THREE.Vector3 | null
 
+/* Scale ruler */
+var metersPerUV=null;    // set by ruler: metres / UV unit distance
+var rulerMode=false;     // true while user is dragging ruler line on pickCanvas
+var rulerP1=null, rulerP2=null;   // {x,y} in pickCanvas coords (normalised 0-1)
+var rulerLine=null;      // SVG overlay line element
+
+/* Measurement tool */
+var measureMode=false;
+var measurePt1=null, measurePt2=null;   // THREE.Vector3 world positions
+var measureLine=null;    // THREE.Line in scene
+var measureDots=[];      // sphere meshes
+
 /* Three.js / XR */
 var xrSession=null, xrRefSpace=null, xrHitTestSrc=null;
 var renderer=null, scene=null, camera=null, reticle=null;
@@ -335,8 +526,9 @@ function el(id){ return document.getElementById(id); }
 function show(id,d){ el(id).style.display=d||'block'; }
 function hide(id){ el(id).style.display='none'; }
 function showBtns(which){
-  el('normalBtns').style.display = which==='normal'?'flex':'none';
-  el('traceBtns').style.display  = which==='trace'?'flex':'none';
+  el('normalBtns').style.display  = which==='normal'?'flex':'none';
+  el('traceBtns').style.display   = which==='trace'?'flex':'none';
+  el('measureBtns').style.display = which==='measure'?'flex':'none';
 }
 function showToast(msg,dur){
   el('toast').textContent=msg; show('toast');
@@ -491,6 +683,9 @@ function doReset(){
   traceMode=false; corners=[]; uvPicks=[];
   wxrPlaced=false; xfLocked=true; xfRotY=0; xfScaleM=1;
   currentSnap=null; solveCount=0;
+  measureMode=false; measurePt1=null; measurePt2=null;
+  metersPerUV=null; rulerP1=null; rulerP2=null;
+  clearMeasureVisuals(); hide('measureLabel');
   if(planeGroup)planeGroup.visible=false;
   if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   clearWireVisuals(); clearPlaneWires();
@@ -623,6 +818,172 @@ function snapToNearestPlaneVertex(pos,frame,refSpace){
 }
 
 /* ═══════════════════════════════
+   SCALE RULER (in pick overlay)
+═══════════════════════════════ */
+function initRulerOnCanvas(pc){
+  // Remove old SVG ruler overlay if any
+  var old=el('pickWrapper').querySelector('#rulerSvg');
+  if(old)old.parentNode.removeChild(old);
+  rulerP1=null; rulerP2=null; rulerMode=false;
+
+  // Create SVG overlay
+  var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.id='rulerSvg';
+  svg.setAttribute('width',pc.width); svg.setAttribute('height',pc.height);
+  svg.style.cssText='position:absolute;left:'+pc.offsetLeft+'px;top:'+pc.offsetTop+'px;pointer-events:all;z-index:5;';
+  var line=document.createElementNS('http://www.w3.org/2000/svg','line');
+  line.setAttribute('stroke','#f0d060'); line.setAttribute('stroke-width','2.5');
+  line.setAttribute('stroke-dasharray','6 4'); line.setAttribute('display','none');
+  var c1=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  c1.setAttribute('r','5'); c1.setAttribute('fill','#f0d060'); c1.setAttribute('display','none');
+  var c2=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  c2.setAttribute('r','5'); c2.setAttribute('fill','#f0d060'); c2.setAttribute('display','none');
+  svg.appendChild(line); svg.appendChild(c1); svg.appendChild(c2);
+  el('pickWrapper').appendChild(svg);
+  rulerLine=line;
+
+  function getXY(e){
+    var r=pc.getBoundingClientRect();
+    var clientX=e.touches?e.touches[0].clientX:e.clientX;
+    var clientY=e.touches?e.touches[0].clientY:e.clientY;
+    return{x:clientX-r.left,y:clientY-r.top};
+  }
+
+  svg.addEventListener('mousedown',function(e){if(!rulerMode)return; e.stopPropagation();
+    var p=getXY(e); rulerP1={x:p.x/pc.width,y:p.y/pc.height};
+    c1.setAttribute('cx',p.x); c1.setAttribute('cy',p.y); c1.setAttribute('display','');
+    c2.setAttribute('display','none'); line.setAttribute('display','none');
+    el('rulerStatus').textContent=''; el('rulerConfirmBtn').disabled=true;
+  });
+  svg.addEventListener('touchstart',function(e){if(!rulerMode)return; e.preventDefault(); e.stopPropagation();
+    var p=getXY(e); rulerP1={x:p.x/pc.width,y:p.y/pc.height};
+    c1.setAttribute('cx',p.x); c1.setAttribute('cy',p.y); c1.setAttribute('display','');
+    c2.setAttribute('display','none'); line.setAttribute('display','none');
+  },{passive:false});
+
+  svg.addEventListener('mousemove',function(e){if(!rulerMode||!rulerP1)return; e.stopPropagation();
+    var p=getXY(e);
+    line.setAttribute('x1',rulerP1.x*pc.width); line.setAttribute('y1',rulerP1.y*pc.height);
+    line.setAttribute('x2',p.x); line.setAttribute('y2',p.y); line.setAttribute('display','');
+    c2.setAttribute('cx',p.x); c2.setAttribute('cy',p.y); c2.setAttribute('display','');
+  });
+  svg.addEventListener('touchmove',function(e){if(!rulerMode||!rulerP1)return; e.preventDefault(); e.stopPropagation();
+    var p=getXY(e);
+    line.setAttribute('x1',rulerP1.x*pc.width); line.setAttribute('y1',rulerP1.y*pc.height);
+    line.setAttribute('x2',p.x); line.setAttribute('y2',p.y); line.setAttribute('display','');
+    c2.setAttribute('cx',p.x); c2.setAttribute('cy',p.y); c2.setAttribute('display','');
+  },{passive:false});
+
+  function finishRuler(e){
+    if(!rulerMode||!rulerP1)return;
+    var p=getXY(e);
+    rulerP2={x:p.x/pc.width,y:p.y/pc.height};
+    c2.setAttribute('cx',p.x); c2.setAttribute('cy',p.y); c2.setAttribute('display','');
+    var du=rulerP2.x-rulerP1.x, dv=rulerP2.y-rulerP1.y;
+    var pxDist=Math.sqrt(du*du+dv*dv);
+    el('rulerStatus').textContent='Line: '+Math.round(pxDist*pc.width)+' px on plan';
+    el('rulerConfirmBtn').disabled=pxDist<0.01;
+  }
+  svg.addEventListener('mouseup',function(e){e.stopPropagation(); finishRuler(e);});
+  svg.addEventListener('touchend',function(e){e.preventDefault(); e.stopPropagation(); finishRuler(e.changedTouches[0]?e.changedTouches[0]:e);},{passive:false});
+}
+
+el('rulerModeBtn').addEventListener('click',function(){
+  rulerMode=!rulerMode;
+  this.className='pick-btn'+(rulerMode?' ruler-active':'');
+  this.textContent=rulerMode?'&#x1F4CF; Drawing\u2026':'&#x1F4CF; Set Scale';
+  el('rulerPanel2').style.display=rulerMode?'flex':'none';
+  var svg=el('pickWrapper').querySelector('#rulerSvg');
+  if(svg)svg.style.pointerEvents=rulerMode?'all':'none';
+  if(!rulerMode){rulerP1=null;rulerP2=null;}
+  // Block pickCanvas clicks in ruler mode
+  el('pickCanvas').style.pointerEvents=rulerMode?'none':'all';
+});
+
+el('rulerConfirmBtn').addEventListener('click',function(){
+  if(!rulerP1||!rulerP2)return;
+  var realMetres=parseFloat(el('rulerDistInput').value);
+  if(!realMetres||realMetres<=0){el('rulerStatus').textContent='Enter a valid distance'; return;}
+  var du=rulerP2.x-rulerP1.x, dv=rulerP2.y-rulerP1.y;
+  var uvDist=Math.sqrt(du*du+dv*dv*((pdfCanvas.width/pdfCanvas.height)**2)); // account for aspect
+  metersPerUV=realMetres/uvDist;
+  el('rulerStatus').textContent='\u2714 Scale set: 1 unit = '+(metersPerUV).toFixed(3)+'m';
+  showToast('Scale: '+realMetres+'m across that line \u2714');
+  rulerMode=false; el('rulerModeBtn').className='pick-btn'; el('rulerModeBtn').textContent='&#x1F4CF; Set Scale';
+  el('pickCanvas').style.pointerEvents='all';
+  var svg=el('pickWrapper').querySelector('#rulerSvg');
+  if(svg)svg.style.pointerEvents='none';
+});
+
+/* ═══════════════════════════════
+   MEASUREMENT TOOL
+═══════════════════════════════ */
+function enterMeasureMode(){
+  measureMode=true; measurePt1=null; measurePt2=null;
+  clearMeasureVisuals();
+  el('normalBtns').style.display='none';
+  el('measureBtns').style.display='flex';
+  hide('measureLabel');
+  el('hudHint').textContent='Tap floor for point 1\u2026';
+}
+function exitMeasureMode(){
+  measureMode=false; measurePt1=null; measurePt2=null;
+  clearMeasureVisuals();
+  el('normalBtns').style.display='flex';
+  el('measureBtns').style.display='none';
+  hide('measureLabel');
+  el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap to measure':'Point camera at the floor';
+}
+function clearMeasureVisuals(){
+  if(!scene)return;
+  if(measureLine){scene.remove(measureLine);measureLine=null;}
+  measureDots.forEach(function(d){scene.remove(d);}); measureDots=[];
+}
+function buildMeasureLine(a,b){
+  clearMeasureVisuals();
+  [a,b].forEach(function(p){
+    var dot=new THREE.Mesh(new THREE.SphereGeometry(0.028,10,10),new THREE.MeshBasicMaterial({color:0xf0d060}));
+    dot.position.set(p.x,p.y+0.028,p.z); scene.add(dot); measureDots.push(dot);
+  });
+  var geo=new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(a.x,a.y+0.015,a.z),
+    new THREE.Vector3(b.x,b.y+0.015,b.z)
+  ]);
+  measureLine=new THREE.Line(geo,new THREE.LineBasicMaterial({color:0xf0d060,linewidth:2}));
+  scene.add(measureLine);
+}
+function updateMeasureLabel(worldA, worldB){
+  // Calculate raw 3D distance
+  var dx=worldB.x-worldA.x, dy=worldB.y-worldA.y, dz=worldB.z-worldA.z;
+  var dist3D=Math.sqrt(dx*dx+dy*dy+dz*dz);
+  var label=el('measureLabel');
+  if(metersPerUV){
+    // We have a user-set scale — but note: if plan is bound, world coords ARE metric already.
+    // metersPerUV was set in UV space. World metres are actual AR metres.
+    label.textContent=dist3D.toFixed(2)+' m';
+  } else {
+    label.textContent=dist3D.toFixed(2)+' m (AR)';
+  }
+  // Project midpoint to screen
+  var mid=new THREE.Vector3((worldA.x+worldB.x)/2,(worldA.y+worldB.y)/2+0.06,(worldA.z+worldB.z)/2);
+  var proj=mid.clone().project(camera);
+  var sx=(proj.x*0.5+0.5)*window.innerWidth;
+  var sy=(-proj.y*0.5+0.5)*window.innerHeight;
+  label.style.left=sx+'px'; label.style.top=sy+'px';
+  show('measureLabel');
+}
+
+el('measureBtn').addEventListener('click',function(){
+  if(!wxrPlaced&&!wxrFloorFound){showToast('Place the plan first');return;}
+  enterMeasureMode();
+});
+el('measureClearBtn').addEventListener('click',function(){
+  measurePt1=null; measurePt2=null; clearMeasureVisuals(); hide('measureLabel');
+  el('hudHint').textContent='Tap floor for point 1\u2026';
+});
+el('measureExitBtn').addEventListener('click',exitMeasureMode);
+
+/* ═══════════════════════════════
    PDF CORNER PICK OVERLAY
 ═══════════════════════════════ */
 function openPickOverlay(){
@@ -642,6 +1003,8 @@ function openPickOverlay(){
   pc.getContext('2d').drawImage(pdfCanvas,0,0,cw,ch);
   el('pickWrapper').querySelectorAll('.pdot').forEach(function(d){d.parentNode.removeChild(d);});
   el('pickOverlay').classList.add('show');
+  // Init ruler after canvas is sized
+  setTimeout(function(){initRulerOnCanvas(pc);},50);
 
   function handleXY(px,py){
     if(uvPicks.length>=corners.length)return;
@@ -837,6 +1200,24 @@ function startWebXR(){
       if(!reticle.visible)return;
       var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
 
+      /* MEASURE MODE */
+      if(measureMode){
+        var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
+        if(!measurePt1){
+          measurePt1=fp;
+          var dot=new THREE.Mesh(new THREE.SphereGeometry(0.028,10,10),new THREE.MeshBasicMaterial({color:0xf0d060}));
+          dot.position.set(fp.x,fp.y+0.028,fp.z); scene.add(dot); measureDots.push(dot);
+          el('hudHint').textContent='Tap floor for point 2\u2026';
+        } else {
+          measurePt2=fp;
+          buildMeasureLine(measurePt1,measurePt2);
+          updateMeasureLabel(measurePt1,measurePt2);
+          measurePt1=null; measurePt2=null; // allow re-measure
+          el('hudHint').textContent='Tap to measure again or Done';
+        }
+        return;
+      }
+
       /* TRACE: add corner */
       if(traceMode){
         if(corners.length>=MAX_CORNERS){showToast('Max '+MAX_CORNERS+' corners');return;}
@@ -910,6 +1291,16 @@ function startWebXR(){
 function xrFrame(frame){
   if(!frame)return;
   renderer.render(scene,camera);
+
+  /* Update measure label position (project to screen each frame) */
+  if(measureLine&&camera){
+    var ma=measureLine.geometry.attributes.position;
+    if(ma&&ma.count>=2){
+      var wA={x:ma.getX(0),y:ma.getY(0)+0.04,z:ma.getZ(0)};
+      var wB={x:ma.getX(1),y:ma.getY(1)+0.04,z:ma.getZ(1)};
+      updateMeasureLabel(wA,wB);
+    }
+  }
 
   /* Update plane wireframes */
   if(xrRefSpace){
