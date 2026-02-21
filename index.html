@@ -294,8 +294,74 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 #rulerConfirmBtn:disabled { opacity:.35; cursor:not-allowed; }
 #rulerStatus { font-size:10px; letter-spacing:.12em; color:rgba(240,208,96,.65); }
 
+/* ── GPS / COMPASS HUD PANEL ── */
+#gpsPanel {
+  position:absolute; top:14px; left:14px;
+  display:none; flex-direction:column; gap:5px;
+  pointer-events:all; z-index:10;
+}
+#gpsPanel.show { display:flex; }
+#gpsBadge {
+  display:flex; align-items:center; gap:7px;
+  background:rgba(4,5,15,.88); backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,.1); border-radius:6px;
+  padding:7px 11px; min-width:180px;
+}
+#gpsAccDot {
+  width:8px; height:8px; border-radius:50%; flex-shrink:0;
+  background:var(--green); box-shadow:0 0 6px var(--green);
+  transition:background .4s, box-shadow .4s;
+}
+#gpsAccDot.yellow { background:var(--yellow); box-shadow:0 0 6px var(--yellow); }
+#gpsAccDot.red    { background:var(--accent);  box-shadow:0 0 6px var(--accent); }
+#gpsText { font-size:9px; letter-spacing:.1em; line-height:1.7; color:rgba(232,228,219,.6); }
+#gpsText strong { color:var(--paper); letter-spacing:.04em; display:block; }
+#compassBadge {
+  display:flex; align-items:center; gap:8px;
+  background:rgba(4,5,15,.88); backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,.1); border-radius:6px;
+  padding:6px 11px;
+}
+#compassRose { width:28px; height:28px; flex-shrink:0; }
+#compassRose svg { display:block; transition:transform .25s ease; }
+#compassText { font-size:9px; letter-spacing:.1em; color:rgba(232,228,219,.6); line-height:1.7; }
+#compassText strong { color:var(--paper); display:block; }
+#gpsDriftBadge {
+  display:none; align-items:center; gap:6px;
+  background:rgba(4,5,15,.88); backdrop-filter:blur(12px);
+  border-radius:6px; padding:6px 11px; border:1px solid rgba(255,255,255,.1);
+  font-size:9px; letter-spacing:.11em; line-height:1.6; color:var(--paper);
+}
+#gpsDriftBadge.show { display:flex; }
+#gpsDriftBadge.ok   { border-color:rgba(43,232,122,.4); color:var(--green); }
+#gpsDriftBadge.warn { border-color:rgba(240,208,96,.4); color:var(--yellow); }
+#gpsDriftBadge.bad  { border-color:rgba(232,79,43,.5);  color:var(--accent); }
+.wp-label {
+  position:absolute; pointer-events:none; white-space:nowrap;
+  background:rgba(77,166,255,.92); color:#04050f;
+  font-size:9px; font-weight:700; letter-spacing:.1em;
+  padding:3px 9px; border-radius:100px;
+  transform:translate(-50%,-140%);
+  box-shadow:0 2px 8px rgba(0,0,0,.5);
+}
+#gpsMap {
+  display:none; position:absolute; bottom:160px; right:14px;
+  width:140px; height:140px;
+  background:rgba(4,5,15,.92); backdrop-filter:blur(10px);
+  border:1px solid rgba(77,166,255,.25); border-radius:6px;
+  overflow:hidden; pointer-events:none;
+}
+#gpsMap.show { display:block; }
+#gpsMapCanvas { width:140px; height:140px; display:block; }
+#gpsMapLabel {
+  position:absolute; bottom:4px; left:0; right:0; text-align:center;
+  font-size:8px; letter-spacing:.15em; color:rgba(77,166,255,.45); text-transform:uppercase;
+}
+#gpsBtns { display:none; }
+#gpsBtns.show { display:flex; }
 
 </style>
+
 </head>
 <body>
 
@@ -352,6 +418,42 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
        EVERYTHING the user sees/taps in AR must live here.
        ═══════════════════════════════════════════════════════ -->
   <div id="xrOverlay">
+
+    <!-- ── GPS / COMPASS PANEL (top-left) ── -->
+    <div id="gpsPanel">
+      <div id="gpsBadge">
+        <div id="gpsAccDot"></div>
+        <div id="gpsText">
+          <strong id="gpsCoordsText">Acquiring GPS…</strong>
+          <span id="gpsAccText">accuracy: —</span>
+        </div>
+      </div>
+      <div id="compassBadge">
+        <div id="compassRose">
+          <svg width="28" height="28" viewBox="0 0 28 28" id="compassSvg">
+            <circle cx="14" cy="14" r="13" stroke="rgba(255,255,255,.12)" stroke-width="1" fill="none"/>
+            <!-- N pointer red, S pointer white -->
+            <polygon points="14,3 11,14 14,12 17,14" fill="#e84f2b"/>
+            <polygon points="14,25 11,14 14,16 17,14" fill="rgba(255,255,255,.4)"/>
+            <circle cx="14" cy="14" r="2" fill="rgba(255,255,255,.6)"/>
+          </svg>
+        </div>
+        <div id="compassText">
+          <strong id="compassHeadingText">—°</strong>
+          <span id="compassDirText">compass</span>
+        </div>
+      </div>
+      <div id="gpsDriftBadge"></div>
+    </div>
+
+    <!-- GPS minimap -->
+    <div id="gpsMap">
+      <canvas id="gpsMapCanvas" width="140" height="140"></canvas>
+      <div id="gpsMapLabel">GPS Waypoints</div>
+    </div>
+
+    <!-- Waypoint label container -->
+    <div id="wpLabels" style="position:absolute;inset:0;pointer-events:none;"></div>
 
     <!-- Scan / snap reticles -->
     <div id="scanRing">
@@ -420,6 +522,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
         <button class="hud-btn" id="lockBtn">&#x1F513; Unlock</button>
         <button class="hud-btn b" id="traceBtn">&#x25CE; Trace</button>
         <button class="hud-btn y" id="measureBtn">&#x1F4CF; Measure</button>
+        <button class="hud-btn b" id="dropPinBtn" style="display:none;">&#x1F4CD; Pin</button>
+        <button class="hud-btn" id="gpsToggleBtn">&#x1F6F0; GPS</button>
         <button class="hud-btn" id="resetBtn">Reset</button>
         <button class="hud-btn r" id="exitBtn">&#x2715; Exit</button>
       </div>
@@ -627,6 +731,7 @@ el('traceCancelBtn').addEventListener('click',cancelTrace);
 el('resetBtn').addEventListener('click',doReset);
 el('exitBtn').addEventListener('click',function(){
   if(xrSession){try{xrSession.end();}catch(e){}xrSession=null;}
+  if(gpsEnabled)stopGPS();
   hide('arScreen'); show('landing','flex'); doReset();
 });
 
@@ -686,6 +791,7 @@ function doReset(){
   measureMode=false; measurePt1=null; measurePt2=null;
   metersPerUV=null; rulerP1=null; rulerP2=null;
   clearMeasureVisuals(); hide('measureLabel');
+  clearWaypoints();
   if(planeGroup)planeGroup.visible=false;
   if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   clearWireVisuals(); clearPlaneWires();
@@ -983,9 +1089,370 @@ el('measureClearBtn').addEventListener('click',function(){
 });
 el('measureExitBtn').addEventListener('click',exitMeasureMode);
 
-/* ═══════════════════════════════
-   PDF CORNER PICK OVERLAY
-═══════════════════════════════ */
+/* ═══════════════════════════════════════════════════
+   GPS · COMPASS · WAYPOINTS · DRIFT ANALYSIS
+   ═══════════════════════════════════════════════════
+
+   GPS state
+   ─────────────────────────────────────────────────── */
+var gpsEnabled=false;
+var gpsWatchId=null;
+var gpsLat=null, gpsLng=null, gpsAcc=null, gpsAlt=null;
+var gpsFix=null;          // latest GeolocationPosition
+
+/* Compass state */
+var compassHeading=null;          // degrees true (0=N, 90=E)
+var compassListening=false;
+
+/* Waypoints — each: { id, gps:{lat,lng,acc}, world:{x,y,z}, label, dot:THREE.Mesh, labelEl } */
+var waypoints=[];
+var WP_COLORS=[0x4da6ff,0xe030f0,0x30e0f0,0xf09030,0xff88aa];
+
+/* ── Geolocation helpers ── */
+function haversineM(lat1,lng1,lat2,lng2){
+  var R=6371000, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+
+        Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+        Math.sin(dLng/2)*Math.sin(dLng/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function bearingDeg(lat1,lng1,lat2,lng2){
+  var dLng=(lng2-lng1)*Math.PI/180;
+  var y=Math.sin(dLng)*Math.cos(lat2*Math.PI/180);
+  var x=Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180)-
+        Math.sin(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.cos(dLng);
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+function fmtCoord(v,pos,neg){ return Math.abs(v).toFixed(6)+'\u00b0 '+(v>=0?pos:neg); }
+function fmtAcc(a){ return a<5?'±'+a.toFixed(1)+'m':a<20?'±'+Math.round(a)+'m':'±'+Math.round(a)+'m ⚠'; }
+
+function accClass(a){ return a==null?'red':a<10?'green':a<30?'yellow':'red'; }
+
+/* ── Start/stop GPS ── */
+function startGPS(){
+  if(!navigator.geolocation){ showToast('Geolocation not supported'); return; }
+  gpsEnabled=true;
+  el('gpsPanel').classList.add('show');
+  el('dropPinBtn').style.display='';
+  el('gpsToggleBtn').className='hud-btn g';
+  el('gpsToggleBtn').textContent='\uD83D\uDEF0 GPS On';
+  gpsWatchId=navigator.geolocation.watchPosition(
+    onGpsFix, onGpsErr,
+    {enableHighAccuracy:true, maximumAge:2000, timeout:10000}
+  );
+  startCompass();
+  show('gpsMap'); renderMiniMap();
+}
+function stopGPS(){
+  gpsEnabled=false;
+  if(gpsWatchId!=null){ navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId=null; }
+  el('gpsPanel').classList.remove('show');
+  el('dropPinBtn').style.display='none';
+  el('gpsToggleBtn').className='hud-btn';
+  el('gpsToggleBtn').textContent='\uD83D\uDEF0 GPS';
+  hide('gpsMap');
+  stopCompass();
+}
+
+function onGpsFix(pos){
+  gpsFix=pos;
+  gpsLat=pos.coords.latitude; gpsLng=pos.coords.longitude;
+  gpsAcc=pos.coords.accuracy; gpsAlt=pos.coords.altitude;
+  updateGPSBadge();
+  /* If we have 2+ paired waypoints, run drift analysis */
+  var paired=waypoints.filter(function(w){return w.gps&&w.world;});
+  if(paired.length>=2) runDriftAnalysis(paired);
+}
+function onGpsErr(e){ el('gpsCoordsText').textContent='GPS error: '+e.message; }
+
+function updateGPSBadge(){
+  if(gpsLat==null)return;
+  el('gpsCoordsText').textContent=fmtCoord(gpsLat,'N','S')+'  '+fmtCoord(gpsLng,'E','W');
+  el('gpsAccText').textContent='acc: '+fmtAcc(gpsAcc)+(gpsAlt!=null?' · alt: '+Math.round(gpsAlt)+'m':'');
+  var dot=el('gpsAccDot');
+  dot.className=''; dot.classList.add(accClass(gpsAcc));
+  renderMiniMap();
+}
+
+/* ── Compass (DeviceOrientationEvent) ── */
+function startCompass(){
+  if(compassListening)return;
+  function handler(e){
+    /* iOS: webkitCompassHeading. Android: 360 - alpha for true heading */
+    var h=null;
+    if(e.webkitCompassHeading!=null){ h=e.webkitCompassHeading; }
+    else if(e.absolute&&e.alpha!=null){ h=(360-e.alpha)%360; }
+    else if(e.alpha!=null){ h=(360-e.alpha)%360; }   // non-absolute fallback
+    if(h==null)return;
+    compassHeading=h;
+    updateCompassBadge(h);
+  }
+  if(typeof DeviceOrientationEvent!=='undefined'&&
+     typeof DeviceOrientationEvent.requestPermission==='function'){
+    /* iOS 13+ requires permission */
+    DeviceOrientationEvent.requestPermission().then(function(s){
+      if(s==='granted'){ window.addEventListener('deviceorientation',handler,true); compassListening=true; }
+    }).catch(function(){});
+  } else {
+    window.addEventListener('deviceorientation',handler,true);
+    compassListening=true;
+  }
+}
+function stopCompass(){
+  /* We can't easily remove anonymous listener but gpsEnabled gate stops updates */
+  compassListening=false;
+}
+function updateCompassBadge(h){
+  if(!gpsEnabled)return;
+  el('compassHeadingText').textContent=Math.round(h)+'\u00b0';
+  var dirs=['N','NE','E','SE','S','SW','W','NW','N'];
+  el('compassDirText').textContent=dirs[Math.round(h/45)%8];
+  /* Rotate compass rose — needle points to N, so rotate svg by -heading to keep N up */
+  el('compassSvg').style.transform='rotate('+(-h)+'deg)';
+}
+
+/* ── GPS Toggle button ── */
+el('gpsToggleBtn').addEventListener('click',function(){
+  if(gpsEnabled) stopGPS(); else startGPS();
+});
+
+/* ── Drop Pin ── */
+el('dropPinBtn').addEventListener('click',function(){
+  if(!reticle||!reticle.visible){ showToast('Point at the ground first'); return; }
+  if(gpsLat==null){ showToast('No GPS fix yet'); return; }
+  if(gpsAcc>25){ showToast('GPS accuracy poor ('+Math.round(gpsAcc)+'m) — move to open sky'); return; }
+
+  var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
+  var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
+  var idx=waypoints.length;
+  var col=WP_COLORS[idx%WP_COLORS.length];
+
+  /* 3D dot */
+  var dot=new THREE.Mesh(
+    new THREE.SphereGeometry(0.045,12,12),
+    new THREE.MeshBasicMaterial({color:col})
+  );
+  dot.position.set(fp.x,fp.y+0.045,fp.z);
+  scene.add(dot);
+
+  /* DOM label */
+  var lbl=document.createElement('div');
+  lbl.className='wp-label';
+  lbl.textContent='WP'+(idx+1)+' ±'+Math.round(gpsAcc)+'m';
+  lbl.style.background='#'+col.toString(16).padStart(6,'0');
+  lbl.style.color=col>0x888888?'#04050f':'#ffffff';
+  el('wpLabels').appendChild(lbl);
+
+  var wp={
+    id:idx+1,
+    gps:{lat:gpsLat,lng:gpsLng,acc:gpsAcc},
+    world:{x:fp.x,y:fp.y,z:fp.z},
+    dot:dot, labelEl:lbl
+  };
+  waypoints.push(wp);
+
+  showToast('WP'+(idx+1)+' pinned \u2014 GPS ±'+Math.round(gpsAcc)+'m');
+  renderMiniMap();
+
+  /* Immediately run analysis if we have enough */
+  var paired=waypoints.filter(function(w){return w.gps&&w.world;});
+  if(paired.length>=2) runDriftAnalysis(paired);
+});
+
+/* ── Drift Analysis ──────────────────────────────────────────────
+   For each pair of waypoints we compare:
+     GPS distance between them  (haversine metres)
+     XR world distance between them  (3D euclidean, XZ only for floor)
+   The ratio tells us if the XR scale is off.
+   We also compute how much the current GPS fix would imply the plan
+   origin has drifted from its XR position.
+   ──────────────────────────────────────────────────────────────── */
+function runDriftAnalysis(paired){
+  var errors=[];
+  for(var i=0;i<paired.length-1;i++){
+    for(var j=i+1;j<paired.length;j++){
+      var a=paired[i], b=paired[j];
+      var gpsDist=haversineM(a.gps.lat,a.gps.lng,b.gps.lat,b.gps.lng);
+      var dx=b.world.x-a.world.x, dz=b.world.z-a.world.z;
+      var xrDist=Math.sqrt(dx*dx+dz*dz);
+      if(xrDist<0.01)continue;
+      var ratio=gpsDist/xrDist;     // 1.0 = perfect, >1 XR is compressed, <1 expanded
+      var scalePct=Math.abs(ratio-1)*100;
+      /* Combined GPS accuracy budget for this pair */
+      var accBudget=Math.sqrt(a.gps.acc*a.gps.acc+b.gps.acc*b.gps.acc);
+      errors.push({gpsDist:gpsDist,xrDist:xrDist,ratio:ratio,scalePct:scalePct,accBudget:accBudget,i:i,j:j});
+    }
+  }
+  if(errors.length===0)return;
+
+  /* Mean scale error */
+  var meanScale=errors.reduce(function(s,e){return s+e.scalePct;},0)/errors.length;
+  var meanAcc=errors.reduce(function(s,e){return s+e.accBudget;},0)/errors.length;
+
+  /* Current GPS fix vs nearest waypoint XR anchor — positional drift */
+  var driftM=null;
+  if(gpsLat!=null&&paired.length>0){
+    /* Use WP with best GPS accuracy */
+    var best=paired.slice().sort(function(a,b){return a.gps.acc-b.gps.acc;})[0];
+    var gpsDelta=haversineM(gpsLat,gpsLng,best.gps.lat,best.gps.lng);
+    var bearing=bearingDeg(best.gps.lat,best.gps.lng,gpsLat,gpsLng);
+    /* Current XR camera position (approximate — we don't have it directly,
+       but we can warn if the GPS delta is large compared to accuracy) */
+    driftM=gpsDelta; /* relative to best waypoint GPS origin */
+  }
+
+  /* Compose status message */
+  var badge=el('gpsDriftBadge');
+  var cls='ok', msg='';
+  if(meanScale<5&&(driftM==null||driftM<meanAcc)){
+    cls='ok';
+    msg='\u2714 Scale OK (\u00b1'+meanScale.toFixed(1)+'%) \u2022 GPS ±'+Math.round(meanAcc)+'m';
+  } else if(meanScale<15){
+    cls='warn';
+    msg='\u26A0 Scale drift '+meanScale.toFixed(1)+'% \u2022 GPS ±'+Math.round(meanAcc)+'m';
+  } else {
+    cls='bad';
+    msg='\u26D4 Scale drift '+meanScale.toFixed(1)+'% — check anchors';
+  }
+  if(driftM!=null&&driftM>meanAcc){
+    msg+='\n\u21BA Pos drift ~'+driftM.toFixed(1)+'m from WP1';
+    if(cls==='ok')cls='warn';
+  }
+  badge.textContent=msg; badge.className=''; badge.classList.add('show',cls);
+}
+
+/* ── GPS Minimap ── */
+function renderMiniMap(){
+  if(!gpsEnabled)return;
+  var c=el('gpsMapCanvas'), ctx=c.getContext('2d');
+  var W=140,H=140;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='rgba(4,5,15,.95)'; ctx.fillRect(0,0,W,H);
+
+  /* Grid */
+  ctx.strokeStyle='rgba(77,166,255,.1)'; ctx.lineWidth=1;
+  for(var g=0;g<W;g+=14){ ctx.beginPath(); ctx.moveTo(g,0); ctx.lineTo(g,H); ctx.stroke(); }
+  for(var g2=0;g2<H;g2+=14){ ctx.beginPath(); ctx.moveTo(0,g2); ctx.lineTo(W,g2); ctx.stroke(); }
+
+  /* Cross-hair centre */
+  ctx.strokeStyle='rgba(77,166,255,.25)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+
+  if(waypoints.length===0&&gpsLat==null){ return; }
+
+  /* Gather all points including current fix */
+  var pts=waypoints.map(function(w){return{lat:w.gps.lat,lng:w.gps.lng,wp:w};});
+  if(gpsLat!=null) pts.push({lat:gpsLat,lng:gpsLng,current:true});
+
+  if(pts.length===0)return;
+
+  /* Bounds */
+  var lats=pts.map(function(p){return p.lat;}), lngs=pts.map(function(p){return p.lng;});
+  var minLat=Math.min.apply(null,lats),maxLat=Math.max.apply(null,lats);
+  var minLng=Math.min.apply(null,lngs),maxLng=Math.max.apply(null,lngs);
+  var spanLat=maxLat-minLat||0.0001, spanLng=maxLng-minLng||0.0001;
+  /* Add 20% padding */
+  var padLat=spanLat*0.25, padLng=spanLng*0.25;
+  var L0=minLat-padLat, L1=maxLat+padLat, G0=minLng-padLng, G1=maxLng+padLng;
+
+  function toXY(lat,lng){
+    return{
+      x:(lng-G0)/(G1-G0)*(W-16)+8,
+      y:(1-(lat-L0)/(L1-L0))*(H-16)+8
+    };
+  }
+
+  /* Draw lines between waypoints in order */
+  if(waypoints.length>=2){
+    ctx.strokeStyle='rgba(77,166,255,.35)'; ctx.lineWidth=1.5; ctx.setLineDash([3,3]);
+    ctx.beginPath();
+    waypoints.forEach(function(w,i){
+      var p=toXY(w.gps.lat,w.gps.lng);
+      if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);
+    });
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  /* Accuracy circle for current fix */
+  if(gpsLat!=null&&gpsAcc!=null){
+    var cp=toXY(gpsLat,gpsLng);
+    /* convert accuracy to pixels — very rough: 1 deg lat ≈ 111km */
+    var accPx=gpsAcc/111000*(H-16)/(L1-L0)*0.5;
+    ctx.beginPath(); ctx.arc(cp.x,cp.y,Math.max(3,accPx),0,Math.PI*2);
+    ctx.fillStyle='rgba(232,79,43,.08)'; ctx.fill();
+    ctx.strokeStyle='rgba(232,79,43,.3)'; ctx.lineWidth=1; ctx.stroke();
+  }
+
+  /* Waypoint dots */
+  waypoints.forEach(function(w){
+    var p=toXY(w.gps.lat,w.gps.lng);
+    var hexCol='#'+(WP_COLORS[(w.id-1)%WP_COLORS.length]).toString(16).padStart(6,'0');
+    ctx.beginPath(); ctx.arc(p.x,p.y,5,0,Math.PI*2);
+    ctx.fillStyle=hexCol; ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font='bold 8px monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(w.id,p.x,p.y);
+    /* Accuracy ring */
+    if(w.gps.acc!=null){
+      var acp=w.gps.acc/111000*(H-16)/(L1-L0)*0.5;
+      ctx.beginPath(); ctx.arc(p.x,p.y,Math.max(5,acp),0,Math.PI*2);
+      ctx.strokeStyle=hexCol+'55'; ctx.lineWidth=1; ctx.stroke();
+    }
+  });
+
+  /* Current GPS position */
+  if(gpsLat!=null){
+    var cp2=toXY(gpsLat,gpsLng);
+    ctx.beginPath(); ctx.arc(cp2.x,cp2.y,5,0,Math.PI*2);
+    ctx.fillStyle='var(--accent)'; ctx.fill();
+    /* Compass direction wedge */
+    if(compassHeading!=null){
+      var hRad=compassHeading*Math.PI/180;
+      ctx.beginPath(); ctx.moveTo(cp2.x,cp2.y);
+      ctx.lineTo(cp2.x+Math.sin(hRad)*14,cp2.y-Math.cos(hRad)*14);
+      ctx.strokeStyle='rgba(232,79,43,.7)'; ctx.lineWidth=1.5; ctx.stroke();
+    }
+    /* Label */
+    ctx.fillStyle='rgba(232,79,43,.9)'; ctx.font='7px monospace';
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText('YOU',cp2.x,cp2.y-7);
+  }
+
+  /* N arrow */
+  ctx.fillStyle='rgba(232,79,43,.7)'; ctx.font='bold 9px monospace';
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('N\u2191',4,4);
+}
+
+/* ── Update waypoint DOM labels each frame (project 3D→2D) ── */
+function updateWaypointLabels(){
+  if(!camera||waypoints.length===0)return;
+  waypoints.forEach(function(w){
+    if(!w.labelEl||!w.world)return;
+    var v=new THREE.Vector3(w.world.x,w.world.y+0.25,w.world.z);
+    var proj=v.clone().project(camera);
+    if(proj.z>1){ w.labelEl.style.display='none'; return; } /* behind camera */
+    var sx=(proj.x*.5+.5)*window.innerWidth;
+    var sy=(-.5*proj.y+.5)*window.innerHeight;
+    w.labelEl.style.display='';
+    w.labelEl.style.left=sx+'px';
+    w.labelEl.style.top=sy+'px';
+  });
+}
+
+/* Clear waypoints on full reset */
+function clearWaypoints(){
+  waypoints.forEach(function(w){
+    if(w.dot&&scene)scene.remove(w.dot);
+    if(w.labelEl&&w.labelEl.parentNode)w.labelEl.parentNode.removeChild(w.labelEl);
+  });
+  waypoints=[];
+  var badge=el('gpsDriftBadge'); badge.className=''; badge.textContent='';
+  renderMiniMap();
+}
+
+
 function openPickOverlay(){
   uvPicks=[];
   var N=corners.length;
@@ -1301,6 +1768,9 @@ function xrFrame(frame){
       updateMeasureLabel(wA,wB);
     }
   }
+
+  /* Update GPS waypoint label screen positions */
+  updateWaypointLabels();
 
   /* Update plane wireframes */
   if(xrRefSpace){
