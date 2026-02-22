@@ -433,9 +433,133 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 #gpsBtns { display:none; }
 #gpsBtns.show { display:flex; }
 
+/* ═══════════════════════════════════════
+   STEP WIZARD
+   ═══════════════════════════════════════ */
+
+/* Progress bar — thin strip at very top of AR screen */
+#stepBar {
+  display:none; position:absolute; top:0; left:0; right:0; z-index:200;
+  height:3px; background:rgba(255,255,255,.08);
+  pointer-events:none;
+}
+#stepBarFill {
+  height:100%; background:var(--accent);
+  transition:width .5s cubic-bezier(.4,0,.2,1);
+}
+
+/* Full-screen step card overlay */
+#stepCard {
+  display:none; position:absolute; inset:0; z-index:180;
+  background:rgba(4,5,15,.96);
+  flex-direction:column; align-items:center; justify-content:center;
+  padding:32px 28px; pointer-events:all;
+  animation:cardIn .35s cubic-bezier(.4,0,.2,1);
+}
+#stepCard.show { display:flex; }
+@keyframes cardIn {
+  from { opacity:0; transform:translateY(18px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* Step pill */
+.sc-step {
+  font-size:9px; letter-spacing:.35em; text-transform:uppercase;
+  color:var(--accent); background:rgba(232,79,43,.12);
+  border:1px solid rgba(232,79,43,.25); border-radius:100px;
+  padding:4px 14px; margin-bottom:20px;
+}
+
+/* Icon area */
+.sc-icon {
+  width:80px; height:80px; border-radius:50%;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+  display:flex; align-items:center; justify-content:center;
+  font-size:34px; margin-bottom:22px; position:relative;
+}
+/* Animated ring on icon */
+.sc-icon::before {
+  content:''; position:absolute; inset:-6px; border-radius:50%;
+  border:1px solid rgba(232,79,43,.2);
+  animation:iconPulse 2.5s ease-in-out infinite;
+}
+@keyframes iconPulse {
+  0%,100%{ transform:scale(1);   opacity:.4; }
+  50%    { transform:scale(1.08); opacity:.9; }
+}
+
+.sc-title {
+  font-family:var(--display); font-size:24px; font-weight:800;
+  letter-spacing:-.01em; color:var(--paper);
+  text-align:center; margin-bottom:8px; line-height:1.2;
+}
+.sc-sub {
+  font-size:12px; letter-spacing:.06em; line-height:1.7;
+  color:rgba(232,228,219,.45); text-align:center;
+  max-width:300px; margin-bottom:28px;
+}
+
+/* Live status row inside card (GPS signal etc.) */
+.sc-status {
+  display:flex; align-items:center; gap:10px;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+  border-radius:8px; padding:10px 18px; margin-bottom:24px;
+  min-width:240px; justify-content:center;
+}
+.sc-dot {
+  width:8px; height:8px; border-radius:50%; flex-shrink:0;
+  background:var(--accent); box-shadow:0 0 6px var(--accent);
+  transition:background .3s, box-shadow .3s;
+}
+.sc-dot.yellow{ background:var(--yellow); box-shadow:0 0 6px var(--yellow); }
+.sc-dot.green { background:var(--green);  box-shadow:0 0 6px var(--green); }
+.sc-status-text { font-size:10px; letter-spacing:.1em; color:rgba(232,228,219,.6); }
+.sc-status-text strong { color:var(--paper); display:block; font-size:11px; }
+
+/* Primary CTA button */
+.sc-btn {
+  background:var(--accent); color:#fff; border:none;
+  font-family:var(--mono); font-size:11px; letter-spacing:.22em;
+  text-transform:uppercase; padding:14px 32px; border-radius:3px;
+  cursor:pointer; transition:background .15s, transform .1s;
+  min-width:200px; text-align:center;
+}
+.sc-btn:hover { background:#c83d1e; }
+.sc-btn:active { transform:scale(.97); }
+.sc-btn:disabled {
+  background:rgba(255,255,255,.08); color:rgba(255,255,255,.25);
+  cursor:not-allowed; transform:none;
+}
+.sc-btn.secondary {
+  background:transparent; border:1px solid rgba(255,255,255,.2);
+  color:rgba(255,255,255,.5); margin-top:10px;
+  font-size:10px; letter-spacing:.18em; padding:10px 24px;
+}
+
+/* Step 3 anchor card: slides to bottom strip so AR is visible */
+#stepCard.anchor-mode {
+  justify-content:flex-end;
+  padding-bottom:28px;
+  background:linear-gradient(to top, rgba(4,5,15,.92) 0%, rgba(4,5,15,.0) 60%) !important;
+}
+#stepCard.anchor-mode .sc-icon,
+#stepCard.anchor-mode .sc-title,
+#stepCard.anchor-mode .sc-sub,
+#stepCard.anchor-mode .sc-dots { display:none !important; }
+#stepCard.anchor-mode .sc-step { margin-bottom:10px; }
+#stepCard.anchor-mode .sc-status { margin-bottom:16px; }
+
+  display:flex; gap:6px; margin-top:28px;
+}
+.sc-dot-s {
+  width:6px; height:6px; border-radius:50%;
+  background:rgba(255,255,255,.15); transition:background .3s;
+}
+.sc-dot-s.active { background:var(--accent); }
+.sc-dot-s.done   { background:rgba(232,79,43,.4); }
+
 </style>
 
-</head>
 <body>
 
 <!-- LANDING (not inside xrOverlay — only shown before AR starts) -->
@@ -492,7 +616,32 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
        ═══════════════════════════════════════════════════════ -->
   <div id="xrOverlay">
 
-    <!-- ── GPS / COMPASS PANEL (top-left) ── -->
+    <!-- Step progress bar (always visible once AR starts) -->
+  <div id="stepBar"><div id="stepBarFill" style="width:0%"></div></div>
+
+  <!-- Full-screen step cards -->
+  <div id="stepCard" class="show">
+    <div class="sc-step" id="scPill">Step 1 of 6</div>
+    <div class="sc-icon" id="scIcon">📡</div>
+    <h2 class="sc-title" id="scTitle">Activate Sensors</h2>
+    <p class="sc-sub" id="scSub">GPS and compass must be active before starting. Move to open sky for best accuracy.</p>
+    <div class="sc-status" id="scStatus">
+      <div class="sc-dot" id="scDot"></div>
+      <div class="sc-status-text"><strong id="scStatusMain">Waiting for GPS…</strong><span id="scStatusSub">accuracy: —</span></div>
+    </div>
+    <button class="sc-btn" id="scBtn" disabled>Continue →</button>
+    <button class="sc-btn secondary" id="scSecondary" style="display:none"></button>
+    <div class="sc-dots" id="scDots">
+      <div class="sc-dot-s active" data-s="0"></div>
+      <div class="sc-dot-s" data-s="1"></div>
+      <div class="sc-dot-s" data-s="2"></div>
+      <div class="sc-dot-s" data-s="3"></div>
+      <div class="sc-dot-s" data-s="4"></div>
+      <div class="sc-dot-s" data-s="5"></div>
+    </div>
+  </div>
+
+  <!-- ── GPS / COMPASS PANEL (top-left) ── -->
     <div id="gpsPanel">
       <div id="gpsBadge">
         <div id="gpsAccDot"></div>
@@ -763,9 +912,298 @@ var planesEnabled=false;    // true once we confirm frame.detectedPlanes works
 
 var CORNER_COLORS=[0xe84f2b,0x2be87a,0x4da6ff,0xf0d060,0xe030f0,0x30e0f0,0xf09030,0xff88aa,0x88ffcc,0xccaaff];
 
-/* ═══════════════════════════════
-   DOM HELPERS
-═══════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   WIZARD STATE MACHINE
+   6 steps, each with its own card config and entry/exit hooks.
+   currentStep: 0-5  (0=sensors, 1=place, 2=orient, 3=anchor, 4=pick, 5=bound)
+   ═══════════════════════════════════════════════════════════════ */
+var currentStep = -1;   /* -1 = not started (landing screen) */
+var GPS_ACC_GATE = 15;  /* metres — required to pass step 0    */
+
+var STEPS = [
+  /* 0 — SENSORS */
+  {
+    pill:'Step 1 · Sensors',
+    icon:'📡',
+    title:'Activate Sensors',
+    sub:'GPS and compass are required for True North alignment and drift correction. Move to open sky.',
+    btnLabel:'Sensors Ready →',
+    btnDisabled:true,
+    hasStatus:true,
+    hasSecondary:false,
+    barPct:0
+  },
+  /* 1 — PLACE */
+  {
+    pill:'Step 2 · Place',
+    icon:'📐',
+    title:'Place the Plan',
+    sub:'Point your camera at the ground. When the reticle appears, tap to place the plan. It will auto-align to True North.',
+    btnLabel:'Skip to Orient →',
+    btnDisabled:false,
+    hasStatus:false,
+    hasSecondary:false,
+    barPct:17
+  },
+  /* 2 — ORIENT */
+  {
+    pill:'Step 3 · Orient',
+    icon:'🔄',
+    title:'Orient the Plan',
+    sub:'Pinch to scale · Two-finger rotate · Single-finger drag (unlock first). When the plan matches the site, lock it.',
+    btnLabel:'Plan is Positioned →',
+    btnDisabled:false,
+    hasStatus:false,
+    hasSecondary:false,
+    barPct:34
+  },
+  /* 3 — ANCHOR */
+  {
+    pill:'Step 4 · Anchor',
+    icon:'⊙',
+    title:'Anchor to Columns',
+    sub:'Walk to each physical column base and tap the ground. GPS + structure snap captured per anchor. Minimum 3.',
+    btnLabel:'Done — Pick on Plan →',
+    btnDisabled:true,
+    hasStatus:true,
+    hasSecondary:false,
+    barPct:50
+  },
+  /* 4 — PICK */
+  {
+    pill:'Step 5 · Pick',
+    icon:'🎯',
+    title:'Identify on Plan',
+    sub:'Tap each column on the PDF in the same order you anchored them. Use Scale tab to set a known dimension.',
+    btnLabel:'Open Plan Picker →',
+    btnDisabled:false,
+    hasStatus:false,
+    hasSecondary:false,
+    barPct:68
+  },
+  /* 5 — BOUND */
+  {
+    pill:'Step 6 · Bound',
+    icon:'✓',
+    title:'Plan Locked',
+    sub:'Rigid-body solve complete. Add more column anchors anytime to improve accuracy.',
+    btnLabel:'Close',
+    btnDisabled:false,
+    hasStatus:true,
+    hasSecondary:true,
+    secondaryLabel:'+ Add More Anchors',
+    barPct:100
+  }
+];
+
+function goStep(n){
+  currentStep = n;
+  var s = STEPS[n];
+
+  /* Update card content */
+  el('scPill').textContent   = s.pill;
+  el('scIcon').textContent   = s.icon;
+  el('scTitle').textContent  = s.title;
+  el('scSub').textContent    = s.sub;
+  el('scBtn').textContent    = s.btnLabel;
+  el('scBtn').disabled       = s.btnDisabled;
+  el('scStatus').style.display = s.hasStatus ? 'flex' : 'none';
+
+  var sec = el('scSecondary');
+  if(s.hasSecondary){
+    sec.style.display=''; sec.textContent=s.secondaryLabel||'';
+  } else { sec.style.display='none'; }
+
+  /* Progress bar */
+  el('stepBar').style.display='block';
+  el('stepBarFill').style.width = s.barPct + '%';
+
+  /* Dot indicators */
+  el('scDots').querySelectorAll('.sc-dot-s').forEach(function(d){
+    var i = parseInt(d.dataset.s);
+    d.className = 'sc-dot-s' + (i===n?' active':i<n?' done':'');
+  });
+
+  /* HUD visibility — hide during early wizard steps to reduce noise */
+  var showHud = n >= 2;
+  el('hud').style.display = showHud ? '' : 'none';
+
+  /* Show card */
+  el('stepCard').className = 'show' + (n===3?' anchor-mode':'');
+
+  /* Step-specific setup */
+  if(n===0) stepSensorsEnter();
+  if(n===1) stepPlaceEnter();
+  if(n===2) stepOrientEnter();
+  if(n===3) stepAnchorEnter();
+  if(n===4) stepPickEnter();
+  if(n===5) stepBoundEnter();
+}
+
+function dismissCard(){
+  el('stepCard').className = '';
+}
+
+/* ── scBtn click routing ── */
+el('scBtn').addEventListener('click', function(){
+  if(currentStep===0) { /* gate: only reachable if GPS ok */ goStep(1); }
+  else if(currentStep===1) { dismissCard(); } /* plan places on tap, or skip */
+  else if(currentStep===2) { dismissCard(); el('lockBtn').click(); }
+  else if(currentStep===3) { if(corners.length>=3){ goStep(4); } }
+  else if(currentStep===4) { dismissCard(); openPickOverlay(); }
+  else if(currentStep===5) { dismissCard(); }
+});
+
+/* ── scSecondary click routing ── */
+el('scSecondary').addEventListener('click', function(){
+  if(currentStep===5){
+    dismissCard();
+    enterTraceMode();
+  }
+});
+
+/* ─────────────────────────────────────────
+   Step 0 — SENSORS
+   Starts GPS immediately. Updates card live.
+   ───────────────────────────────────────── */
+function stepSensorsEnter(){
+  el('scDot').className = 'sc-dot';
+  el('scStatusMain').textContent = 'Starting GPS…';
+  el('scStatusSub').textContent  = 'accuracy: —';
+  startGPS();  /* always force-start at step 0 */
+}
+
+/* Called from onGpsFix — updates sensor card while on step 0 */
+function updateSensorCard(){
+  if(currentStep !== 0) return;
+  var acc = gpsAcc;
+  var ready = acc != null && acc <= GPS_ACC_GATE;
+  var compassOk = compassHeading != null;
+
+  /* Dot colour */
+  var dotCls = acc==null?'':'  ' + (acc<=GPS_ACC_GATE?'green':acc<=30?'yellow':'');
+  el('scDot').className = 'sc-dot' + dotCls.trimEnd();
+
+  el('scStatusMain').textContent = gpsLat!=null
+    ? (Math.abs(gpsLat).toFixed(5)+'° '+(gpsLat>=0?'N':'S')+'  '+Math.abs(gpsLng).toFixed(5)+'° '+(gpsLng>=0?'E':'W'))
+    : 'Acquiring GPS…';
+
+  var accStr = acc!=null ? '±'+acc.toFixed(0)+'m' : '—';
+  var compassStr = compassOk ? ' · compass ✓' : ' · compass…';
+  el('scStatusSub').textContent = 'accuracy: ' + accStr + compassStr;
+
+  /* Unlock continue when GPS ≤ gate AND compass active */
+  el('scBtn').disabled = !(ready && compassOk);
+  if(ready && compassOk) {
+    el('scBtn').textContent = 'Sensors Ready →';
+  }
+}
+
+/* ─────────────────────────────────────────
+   Step 1 — PLACE
+   Dismisses as soon as user taps floor.
+   ───────────────────────────────────────── */
+function stepPlaceEnter(){
+  /* Card stays up — it dismisses automatically when wxrPlaced fires */
+  el('hudHint').textContent = 'Point camera at the ground and tap to place';
+}
+
+/* Called from placement code when wxrPlaced becomes true */
+function onPlanPlaced(){
+  if(currentStep === 1){
+    dismissCard();
+    goStep(2);
+  }
+}
+
+/* ─────────────────────────────────────────
+   Step 2 — ORIENT
+   User adjusts plan over site. Taps continue
+   when satisfied (or lockBtn triggers it).
+   ───────────────────────────────────────── */
+function stepOrientEnter(){
+  /* Unlock the plan for free transform */
+  xfLocked = false;
+  el('lockBtn').textContent = '🔓 Unlock';
+  el('lockBtn').className   = 'hud-btn';
+  el('hudHint').textContent = 'Pinch · rotate · drag to align plan over site';
+}
+
+/* ─────────────────────────────────────────
+   Step 3 — ANCHOR
+   Walk to columns, tap. Card stays visible
+   as a mini-HUD showing count.
+   ───────────────────────────────────────── */
+function stepAnchorEnter(){
+  el('scStatus').style.display = 'flex';
+  el('scDot').className = 'sc-dot yellow';
+  el('scStatusMain').textContent = '0 columns anchored';
+  el('scStatusSub').textContent  = 'minimum 3 required';
+  el('scBtn').disabled = true;
+  enterTraceMode();
+  /* Slide card to bottom strip — AR is fully visible above it */
+  el('stepCard').classList.add('anchor-mode');
+}
+
+/* Called from updateCornerBadge when a new corner is added */
+function updateAnchorCard(){
+  if(currentStep !== 3) return;
+  var n = corners.length;
+  el('scDot').className = 'sc-dot' + (n>=3?' green':' yellow');
+  el('scStatusMain').textContent = n + ' column' + (n!==1?'s':'') + ' anchored';
+  el('scStatusSub').textContent  = n<3 ? (3-n)+' more needed' : 'tap Done or add more';
+  el('scBtn').disabled = n < 3;
+  if(n>=3) el('scBtn').textContent = 'Done — Pick on Plan →';
+}
+
+/* ─────────────────────────────────────────
+   Step 4 — PICK
+   Card is a gateway — button opens picker.
+   ───────────────────────────────────────── */
+function stepPickEnter(){
+  el('stepCard').classList.remove('anchor-mode');
+  el('stepCard').style.background = '';
+}
+
+/* Called when pickConfirmBtn fires buildBoundMesh */
+function onPlanBound(){
+  goStep(5);
+}
+
+/* ─────────────────────────────────────────
+   Step 5 — BOUND
+   Live constraint quality shown in card.
+   ───────────────────────────────────────── */
+function stepBoundEnter(){
+  el('stepCard').style.background = '';
+  el('scDot').className = 'sc-dot green';
+  el('scStatusMain').textContent = corners.length + ' column anchors';
+  el('scStatusSub').textContent  = 'all sensors active · plan rigid-locked';
+}
+
+/* Update bound card quality live */
+function updateBoundCard(){
+  if(currentStep !== 5) return;
+  var overall = (constraintQuality.xrAnchor*0.35 + constraintQuality.compass*0.30 +
+                 constraintQuality.gpsBearing*0.15 + constraintQuality.planeSnap*0.20);
+  el('scDot').className = 'sc-dot' + (overall>0.75?' green':overall>0.45?' yellow':'');
+  el('scStatusSub').textContent = 'lock quality: ' + Math.round(overall*100) + '%  ·  solve #' + solveCount;
+}
+
+/* ─────────────────────────────────────────
+   Wizard-aware doReset
+   ───────────────────────────────────────── */
+function wizardReset(){
+  doReset();
+  currentStep = -1;
+  el('stepBar').style.display = 'none';
+  el('stepBarFill').style.width = '0%';
+  el('stepCard').style.background = '';
+  el('stepCard').classList.remove('anchor-mode');
+  el('stepCard').className = '';  /* hide card */
+}
+
+
 function el(id){ return document.getElementById(id); }
 function show(id,d){ el(id).style.display=d||'block'; }
 function hide(id){ el(id).style.display='none'; }
@@ -829,10 +1267,12 @@ el('nextPg').addEventListener('click',function(){if(pdfDoc&&currentPage<pdfDoc.n
 el('launchBtn').addEventListener('click',function(){
   if(!pdfCanvas)return;
   hide('landing'); show('arScreen');
+  /* Start WebXR first, then immediately enter wizard step 0 */
   if(navigator.xr){
     navigator.xr.isSessionSupported('immersive-ar')
-      .then(function(ok){ok?startWebXR():noXR();}).catch(noXR);
-  }else{noXR();}
+      .then(function(ok){ ok?startWebXR():noXR(); }).catch(noXR);
+  } else { noXR(); }
+  goStep(0);
 });
 function noXR(){el('hudHint').textContent='WebXR not supported \u2014 requires Android Chrome or compatible AR browser';}
 
@@ -860,12 +1300,6 @@ el('alignBtn').addEventListener('click',function(){
   }
   el('hudHint').textContent='True North locked \u2014 '+Math.round(h)+'\u00b0 \u2714';
 });
-el('lockBtn').addEventListener('click',function(){
-  xfLocked=!xfLocked;
-  this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Unlock';
-  this.className=xfLocked?'hud-btn g':'hud-btn';
-  el('hudHint').textContent=xfLocked?'Plan locked ✔':'Drag to reposition';
-});
 function applyFree(){if(planeGroup&&wxrPlaced)planeGroup.rotation.y=xfRotY;}
 
 el('traceBtn').addEventListener('click',function(){
@@ -878,10 +1312,23 @@ el('traceDoneBtn').addEventListener('click',function(){
   showBtns('normal');
   hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
   traceMode=false;
-  openPickOverlay();
+  if(currentStep===3){ goStep(4); }   /* show step-4 card as gateway to picker */
+  else { openPickOverlay(); }          /* already past wizard, open directly */
 });
 el('traceCancelBtn').addEventListener('click',cancelTrace);
-el('resetBtn').addEventListener('click',doReset);
+el('resetBtn').addEventListener('click', wizardReset);
+
+/* lockBtn — on step 2 (orient), locking advances to step 3 */
+el('lockBtn').addEventListener('click',function(){
+  xfLocked=!xfLocked;
+  this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Unlock';
+  this.className=xfLocked?'hud-btn g':'hud-btn';
+  el('hudHint').textContent=xfLocked?'Plan locked \u2714':'Drag to reposition';
+  /* Step 2: first time user locks = advance to anchor step */
+  if(xfLocked && currentStep===2){
+    goStep(3);
+  }
+});
 el('exitBtn').addEventListener('click',function(){
   if(xrSession){try{xrSession.end();}catch(e){}xrSession=null;}
   if(gpsEnabled)stopGPS();
@@ -917,6 +1364,7 @@ function updateCornerBadge(){
   el('cornerBadge').textContent=n+' column'+(n!==1?'s':'')+' anchored'+
     (n<3?' \u2014 need '+(3-n)+' more':' \u2014 tap Done when ready');
   el('traceDoneBtn').style.opacity=n>=3?'1':'0.4';
+  updateAnchorCard();   /* keep wizard step-3 card in sync */
 }
 function addCornerVisual(pos,idx){
   var col=CORNER_COLORS[idx%CORNER_COLORS.length];
@@ -1478,7 +1926,7 @@ function onGpsFix(pos){
   gpsAcc=pos.coords.accuracy; gpsAlt=pos.coords.altitude;
   updateGPSBadge();
   ingestGPSForBearing(gpsLat,gpsLng,gpsAcc);
-  /* Run GPS drift analysis against column waypoints */
+  updateSensorCard();   /* updates step-0 card if we're still there */
   var paired=waypoints.filter(function(w){return w.gps&&w.world;});
   if(paired.length>=2) runDriftAnalysis(paired);
 }
@@ -1506,9 +1954,9 @@ function startCompass(){
     if(h==null)return;
     compassHeading=h;
     updateCompassBadge(h);
-    /* Feed complementary filter — passes raw alpha for gyro delta */
     var alphaRaw=e.alpha||0;
     updateFusedHeading(h, alphaRaw, ts);
+    updateSensorCard();  /* refresh compass status on step-0 card */
   }
   if(typeof DeviceOrientationEvent!=='undefined'&&
      typeof DeviceOrientationEvent.requestPermission==='function'){
@@ -1888,6 +2336,7 @@ el('pickConfirmBtn').addEventListener('click',function(){
   if(uvPicks.length!==corners.length)return;
   closePickOverlay();
   buildBoundMesh();
+  onPlanBound();   /* wizard step 4 → 5 */
 });
 function closePickOverlay(){
   var vp=el('pickViewport');
@@ -2075,6 +2524,7 @@ function reSolvePlan(){
     ' \u2022 #'+solveCount+' ('+ms+'ms)';
   constraintQuality.xrAnchor=Math.max(0,1-sol.residualM/0.1);
   updateConstraintPanel();
+  updateBoundCard();   /* keep step-5 card quality live */
   return true;
 }
 
@@ -2373,14 +2823,10 @@ function startWebXR(){
       planeGroup.position.set(rx,ry,rz); planeGroup.quaternion.copy(q); planeGroup.visible=true;
       surfaceQuat.copy(q); wxrPlaced=true;
       floorPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0).applyQuaternion(q).normalize(),new THREE.Vector3(rx,ry,rz));
-      /* Capture XR→North offset: the compass heading at this moment tells us
-         which XR direction is North. We store it so heading constraint is
-         always relative to true North, not arbitrary XR space.            */
       if(fusedHeading!=null) xrNorthOffset=fusedHeading;
       applyFree(); hide('scanRing');
-      el('hudHint').textContent='Plan placed \u2022 Tap Anchor to bind to columns';
-      el('hudHint').textContent='Plan placed • tap Anchor, walk to each column base';
       xfLocked=true; el('lockBtn').textContent='\uD83D\uDD12 Locked'; el('lockBtn').className='hud-btn g';
+      onPlanPlaced();   /* wizard step 1 → 2 */
     });
 
     /* Touch pan / pinch */
