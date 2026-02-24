@@ -1456,6 +1456,10 @@ function doReset(){
    (Chrome flag or supported device).
    Falls back gracefully when unavailable.
 ═══════════════════════════════ */
+
+/* Separate map for floor grid segments so they are cleaned up with their plane */
+var planeGrids=new Map();  /* XRPlane → THREE.LineSegments */
+
 function updatePlaneWireframes(frame, refSpace){
   if(!frame.detectedPlanes) return;
   planesEnabled=true;
@@ -1481,12 +1485,20 @@ function updatePlaneWireframes(frame, refSpace){
 
       var existing=planeWires.get(plane);
       if(existing){
-        /* Update positions in-place */
+        /* Update boundary loop positions in-place */
         var arr=new Float32Array(lifted.length*3);
         lifted.forEach(function(p,i){arr[i*3]=p.x;arr[i*3+1]=p.y;arr[i*3+2]=p.z;});
         existing.geometry.setAttribute('position',new THREE.BufferAttribute(arr,3));
         existing.geometry.attributes.position.needsUpdate=true;
         existing.geometry.computeBoundingSphere();
+
+        /* Update floor grid in-place too */
+        if(!isWall){
+          var existingGrid=planeGrids.get(plane);
+          if(existingGrid){ scene.remove(existingGrid); planeGrids.delete(plane); }
+          var newGrid=buildFloorGrid(pm, plane.polygon, col);
+          if(newGrid){ scene.add(newGrid); planeGrids.set(plane,newGrid); }
+        }
       } else {
         var geo=new THREE.BufferGeometry().setFromPoints(lifted);
         var mat=new THREE.LineBasicMaterial({color:col,transparent:true,opacity:isWall?0.75:0.55});
@@ -1494,25 +1506,35 @@ function updatePlaneWireframes(frame, refSpace){
         scene.add(loop);
         planeWires.set(plane,loop);
 
-        /* For floor planes also draw a grid inside the boundary so the
-           surface area is visible when looking straight down           */
+        /* For floor planes draw a fill grid — stored separately for proper cleanup */
         if(!isWall){
-          drawFloorGrid(pm, plane.polygon, col);
+          var grid=buildFloorGrid(pm, plane.polygon, col);
+          if(grid){ scene.add(grid); planeGrids.set(plane,grid); }
+        }
+
+        /* For wall planes run column-face classification */
+        if(isWall){
+          classifyWallPlane(plane, plane.polygon, pm);
         }
       }
       seen.add(plane);
     }catch(e){}
   });
 
-  /* Remove stale plane wires */
+  /* Remove stale plane wires AND their grids */
   planeWires.forEach(function(wire,key){
-    if(typeof key!=='string' && !seen.has(key)){
+    if(!seen.has(key)){
       scene.remove(wire); planeWires.delete(key);
+      /* Also remove associated floor grid */
+      var grid=planeGrids.get(key);
+      if(grid){ scene.remove(grid); planeGrids.delete(key); }
     }
   });
 }
 
-function drawFloorGrid(pm, polygon, col){
+/* Returns a LineSegments object for the floor grid (caller adds to scene).
+   Does NOT add to scene itself — avoids the old random-key leak.          */
+function buildFloorGrid(pm, polygon, col){
   var xs=polygon.map(function(v){return v.x;});
   var zs=polygon.map(function(v){return v.z;});
   var minX=Math.min.apply(null,xs),maxX=Math.max.apply(null,xs);
@@ -1530,38 +1552,130 @@ function drawFloorGrid(pm, polygon, col){
     var p4=new THREE.Vector3(maxX,0.007,z).applyMatrix4(pm);
     pts.push(p3,p4);
   }
-  if(pts.length<2)return;
+  if(pts.length<2) return null;
   var geo=new THREE.BufferGeometry().setFromPoints(pts);
   var mat=new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0.18});
-  var segs=new THREE.LineSegments(geo,mat);
-  scene.add(segs);
-  /* Store with string key so it doesn't get reaped by the plane cleanup loop */
-  planeWires.set('grid_'+Math.random().toString(36).slice(2),segs);
+  return new THREE.LineSegments(geo,mat);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   WALL PLANE CLASSIFICATION
+   Called once per new vertical plane.  Analyses the polygon to
+   decide whether this plane looks like:
+     • A long wall  — one axis >> other (aspect ratio > 3:1)
+     • A column face — roughly square-ish in 2D extent (< 3:1)
+                        AND small area (< 2 m²)
+   Colours and labels are applied to the existing wire so the user
+   can see what the device has detected.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Registry of detected structural elements for snap use */
+var detectedColumns=[];   /* [{centre:{x,y,z}, width, height, normal:{x,z}}] */
+var detectedWalls=[];     /* [{centre:{x,y,z}, length, height, normal:{x,z}}] */
+
+function classifyWallPlane(plane, polygon, pm){
+  /* Compute world-space bounding box of the polygon */
+  var wxs=[], wys=[], wzs=[];
+  polygon.forEach(function(v){
+    var wp=new THREE.Vector3(v.x,v.y,v.z).applyMatrix4(pm);
+    wxs.push(wp.x); wys.push(wp.y); wzs.push(wp.z);
+  });
+  var minX=Math.min.apply(null,wxs), maxX=Math.max.apply(null,wxs);
+  var minY=Math.min.apply(null,wys), maxY=Math.max.apply(null,wys);
+  var minZ=Math.min.apply(null,wzs), maxZ=Math.max.apply(null,wzs);
+
+  var spanX=maxX-minX, spanY=maxY-minY, spanZ=maxZ-minZ;
+  /* Horizontal extent of the plane face */
+  var hSpan=Math.sqrt(spanX*spanX+spanZ*spanZ);
+  var area=hSpan*spanY;
+
+  /* Extract plane normal from the transform matrix (local Y → world) */
+  var nx=pm.elements[4], nz=pm.elements[6];
+  var nLen=Math.sqrt(nx*nx+nz*nz)||1;
+  nx/=nLen; nz/=nLen;
+
+  var cx=(minX+maxX)/2, cy=(minY+maxY)/2, cz=(minZ+maxZ)/2;
+  var aspect=hSpan/(spanY||0.001);
+
+  var isColumn=(area < 2.0 && aspect < 3.0);
+
+  if(isColumn){
+    detectedColumns.push({
+      centre:{x:cx,y:cy,z:cz},
+      width:hSpan, height:spanY,
+      normal:{x:nx,z:nz},
+      plane:plane
+    });
+    /* Tint the wire orange to distinguish column faces from walls */
+    var wire=planeWires.get(plane);
+    if(wire) wire.material.color.setHex(0xf09030);
+  } else {
+    detectedWalls.push({
+      centre:{x:cx,y:cy,z:cz},
+      length:hSpan, height:spanY,
+      normal:{x:nx,z:nz},
+      plane:plane
+    });
+  }
 }
 
 function clearPlaneWires(){
   if(!scene)return;
   planeWires.forEach(function(w){scene.remove(w);});
-  planeWires.clear(); planesEnabled=false;
+  planeWires.clear();
+  planeGrids.forEach(function(g){scene.remove(g);});
+  planeGrids.clear();
+  detectedColumns=[];
+  detectedWalls=[];
+  planesEnabled=false;
 }
 
 /* ═══════════════════════════════
-   SNAP TO NEAREST PLANE VERTEX
+   SNAP TO NEAREST PLANE FEATURE
+   Snaps to polygon vertices AND edge midpoints (much more useful for
+   column faces where the snap target is typically the face centre).
+   Uses a tighter threshold for floor planes and a wider one for walls
+   since wall polygon vertices can be far from the column base.
 ═══════════════════════════════ */
-var SNAP_DIST=0.35;
+var SNAP_DIST_FLOOR=0.35;   /* metres — floor plane vertex snap radius  */
+var SNAP_DIST_WALL =0.55;   /* metres — wall/column face snap radius     */
+
 function snapToNearestPlaneVertex(pos,frame,refSpace){
   if(!frame.detectedPlanes) return null;
-  var best=null, bestD2=SNAP_DIST*SNAP_DIST;
+  var best=null, bestD2=Infinity;
+
   frame.detectedPlanes.forEach(function(plane){
     if(!plane.planeSpace) return;
     try{
       var pp=frame.getPose(plane.planeSpace,refSpace);
       if(!pp) return;
       var pm=new THREE.Matrix4().fromArray(pp.transform.matrix);
-      plane.polygon.forEach(function(v){
-        var wp=new THREE.Vector3(v.x,v.y,v.z).applyMatrix4(pm);
+      var isWall=plane.orientation==='vertical';
+      var threshold=isWall?SNAP_DIST_WALL:SNAP_DIST_FLOOR;
+      var thresh2=threshold*threshold;
+
+      var worldPts=plane.polygon.map(function(v){
+        return new THREE.Vector3(v.x,v.y,v.z).applyMatrix4(pm);
+      });
+
+      /* Snap candidates: polygon vertices + edge midpoints */
+      var candidates=worldPts.slice();
+      for(var i=0;i<worldPts.length;i++){
+        var a=worldPts[i], b=worldPts[(i+1)%worldPts.length];
+        candidates.push(new THREE.Vector3((a.x+b.x)/2,(a.y+b.y)/2,(a.z+b.z)/2));
+      }
+      /* For column-like planes (small area), also try the polygon centroid */
+      if(isWall){
+        var cx=0,cy=0,cz=0;
+        worldPts.forEach(function(p){cx+=p.x;cy+=p.y;cz+=p.z;});
+        var n=worldPts.length||1;
+        candidates.push(new THREE.Vector3(cx/n,cy/n,cz/n));
+      }
+
+      candidates.forEach(function(wp){
+        /* Compare in XZ only (we're snapping on the floor plane) */
         var dx=wp.x-pos.x, dz=wp.z-pos.z, d2=dx*dx+dz*dz;
-        if(d2<bestD2){bestD2=d2;best=wp.clone();}
+        if(d2<thresh2 && d2<bestD2){ bestD2=d2; best=wp.clone(); }
       });
     }catch(e){}
   });
@@ -2651,7 +2765,7 @@ function updateAnchors(frame,refSpace){
     }catch(e){}
   });
 
-  /* 2. Periodic plane-vertex re-snap */
+  /* 2. Periodic plane-vertex re-snap (vertices + edge midpoints via upgraded snap fn) */
   reSnapFrameCounter++;
   if(reSnapFrameCounter>=RESNAP_INTERVAL){
     reSnapFrameCounter=0;
@@ -2662,36 +2776,51 @@ function updateAnchors(frame,refSpace){
       if(!snapped)return;
       var dx=snapped.x-c.worldPos.x, dz=snapped.z-c.worldPos.z;
       var dist=Math.sqrt(dx*dx+dz*dz);
+      /* Use the larger wall threshold as the outer gate for re-snap corrections.
+         Silent correction is still limited to RESNAP_THRESHOLD (0.15m) to avoid
+         large jumps, but the detection window now reaches wall vertices properly. */
+      var detectLimit=Math.max(RESNAP_THRESHOLD, SNAP_DIST_WALL);
       if(dist>0.005&&dist<RESNAP_THRESHOLD){
         /* Silent correction — within tolerance */
         c.worldPos.x=snapped.x; c.worldPos.z=snapped.z;
         snapMoved=true; moved=true;
         constraintQuality.planeSnap=1.0;
-      } else if(dist>=RESNAP_THRESHOLD){
-        /* Too large — flag but don't apply */
-        constraintQuality.planeSnap=Math.max(0,1-dist/0.5);
-      } else {
+      } else if(dist>=RESNAP_THRESHOLD && dist<detectLimit){
+        /* Detectable but too large to silently apply — flag only */
+        constraintQuality.planeSnap=Math.max(0,1-dist/detectLimit);
+      } else if(dist<0.005){
         constraintQuality.planeSnap=1.0;
       }
     });
   }
 
-  /* 3. Apply true-North heading constraint from fused compass
-        targetYaw = how much to rotate plan in XR space so its top faces North.
-        If fusedHeading = H at placement (xrNorthOffset), then XR +Z pointed at
-        compass direction H. To make plan-top (UV top) face North (0°), we rotate
-        by -xrNorthOffset in XR space. As the phone drifts, fusedHeading changes —
-        we correct by the delta from the original reference.                      */
+  /* 3. Apply true-North heading constraint from fused compass.
+        We only nudge the plan when the heading has changed meaningfully
+        since the last frame — avoids the previous bug where planYaw
+        accumulated a tiny fixed step every frame even when stationary.
+
+        targetYaw: the yaw planRigidGroup should have so that plan-top
+        faces North. Derived from (fusedHeading - xrNorthOffset) which
+        gives the XR-space rotation the plan needs to compensate for
+        device heading drift since placement.                            */
   if(planBound&&headingLocked&&fusedHeading!=null&&xrNorthOffset!=null){
     var headingDelta=fusedHeading-xrNorthOffset;
     while(headingDelta>180)headingDelta-=360; while(headingDelta<-180)headingDelta+=360;
-    /* targetYaw: 0 = plan placed as-is at capture. Negative = rotate toward North. */
-    var targetYaw=planYaw-headingDelta*Math.PI/180*0.008;
-    var diff=targetYaw-planYaw;
+
+    /* targetYaw that would keep plan-top pointing North */
+    var targetYaw = -headingDelta * Math.PI / 180;
+
+    /* How far are we from where we should be? */
+    var diff = targetYaw - planYaw;
     while(diff>Math.PI)diff-=2*Math.PI; while(diff<-Math.PI)diff+=2*Math.PI;
-    planYaw+=diff;
-    if(planRigidGroup) planRigidGroup.rotation.y=planYaw;
-    moved=true;
+
+    /* Only apply if there's a real difference (> 0.1° ≈ 0.00175 rad)
+       and blend gently so it doesn't snap harshly                       */
+    if(Math.abs(diff) > 0.00175){
+      planYaw += diff * 0.015;   /* exponential approach — ~1.5% per frame */
+      if(planRigidGroup) planRigidGroup.rotation.y = planYaw;
+      moved = true;
+    }
   }
 
   return moved;
@@ -2887,9 +3016,10 @@ function startWebXR(){
     var holdRing=new THREE.Line(holdRingGeo,holdRingMat);
     holdRing.visible=false; scene.add(holdRing);
 
-    function commitAnchor(rx,ry,rz){
+    function commitAnchor(rx,ry,rz,wasSnapped){
       if(corners.length>=MAX_CORNERS){el('hudHint').textContent='Max '+MAX_CORNERS+' column anchors reached';return;}
-      var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
+      /* Use the position exactly as passed in — already frozen at press time */
+      var fp={x:rx,y:ry,z:rz};
       /* Capture GPS alongside XR anchor */
       var corner={
         worldPos:fp, anchor:null,
@@ -2898,7 +3028,7 @@ function startWebXR(){
       corners.push(corner);
       addCornerVisual(fp,corners.length-1);
       updateCornerBadge();
-      el('hudHint').textContent=currentSnap?'Column '+corners.length+' \u2014 snapped \u2713':'Column '+corners.length+' anchored';
+      el('hudHint').textContent=wasSnapped?'Column '+corners.length+' \u2014 snapped \u2713':'Column '+corners.length+' anchored';
 
       /* Auto-drop GPS waypoint if we have a fix */
       if(corner.gps && gpsLat!=null){
@@ -2916,34 +3046,62 @@ function startWebXR(){
         renderMiniMap();
       }
 
-      /* XRAnchor */
+      /* XRAnchor — create for drift correction.
+         If anchors feature is absent or fails, flag it clearly so the user
+         knows drift correction is position-only (no re-localization).       */
       if(typeof session.createAnchor==='function'){
         try{
           var cidx=corners.length-1;
-          session.createAnchor(new XRRigidTransform(new DOMPointReadOnly(fp.x,fp.y,fp.z,1),new DOMPointReadOnly(0,0,0,1)),xrRefSpace)
-            .then(function(a){corners[cidx].anchor=a;}).catch(function(){});
-        }catch(e){}
+          session.createAnchor(
+            new XRRigidTransform(
+              new DOMPointReadOnly(fp.x,fp.y,fp.z,1),
+              new DOMPointReadOnly(0,0,0,1)
+            ),
+            xrRefSpace
+          ).then(function(a){
+            corners[cidx].anchor=a;
+          }).catch(function(err){
+            /* Anchor creation failed — GPS+plane snap still work but warn */
+            showToast('\u26A0 XR anchor failed \u2014 drift correction limited',3500);
+            console.warn('createAnchor rejected:',err);
+          });
+        }catch(e){
+          showToast('\u26A0 XR anchors unavailable \u2014 GPS + plane snap only',3500);
+        }
+      } else {
+        /* Browser doesn't support anchors at all — one-time notice */
+        if(corners.length===1){
+          showToast('\u26A0 XR anchors not supported \u2014 GPS + plane snap active',4000);
+        }
       }
 
       /* If plan is already bound, re-solve with new anchor */
       if(planBound) reSolvePlan();
     }
 
-    /* SELECT start — begin hold timer */
+    /* SELECT start — begin hold timer.
+       We snapshot BOTH the raw reticle position AND any active snap
+       at the moment of press. The commit uses this frozen position so
+       that movement during the hold does not displace the anchor.      */
     session.addEventListener('selectstart',function(){
       if(!reticle.visible)return;
       if(!traceMode) return;  /* hold only applies to anchor mode */
-      holdStartPos={
-        x:reticle.matrix.elements[12],
-        y:reticle.matrix.elements[13],
-        z:reticle.matrix.elements[14]
-      };
+
+      /* Freeze position + snap at press time */
+      var rx=reticle.matrix.elements[12];
+      var ry=reticle.matrix.elements[13];
+      var rz=reticle.matrix.elements[14];
+      var frozenPos = currentSnap
+        ? {x:currentSnap.x, y:currentSnap.y, z:currentSnap.z, wasSnapped:true}
+        : {x:rx, y:ry, z:rz, wasSnapped:false};
+
+      holdStartPos = frozenPos;
       holdProgress=0;
       holdTimer=setTimeout(function(){
-        /* Held long enough — commit */
+        /* Held long enough — commit using the frozen-at-press position */
         holdTimer=null; holdProgress=0; holdRing.visible=false;
-        if(holdStartPos && reticle.visible){
-          commitAnchor(holdStartPos.x,holdStartPos.y,holdStartPos.z);
+        if(holdStartPos){
+          commitAnchor(holdStartPos.x, holdStartPos.y, holdStartPos.z, holdStartPos.wasSnapped);
         }
         holdStartPos=null;
       }, HOLD_MS);
