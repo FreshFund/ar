@@ -462,6 +462,19 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   to   { opacity:1; transform:translateY(0); }
 }
 
+/* ── Dismiss (×) button — top-right of card ── */
+#scDismiss {
+  display:none; position:absolute; top:18px; right:18px;
+  width:34px; height:34px; border-radius:50%;
+  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12);
+  color:rgba(255,255,255,.45); font-size:16px; line-height:1;
+  cursor:pointer; pointer-events:all;
+  transition:background .15s, color .15s;
+  align-items:center; justify-content:center;
+}
+#scDismiss.show { display:flex; }
+#scDismiss:hover { background:rgba(255,255,255,.12); color:#fff; }
+
 /* Step pill */
 .sc-step {
   font-size:9px; letter-spacing:.35em; text-transform:uppercase;
@@ -477,7 +490,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   display:flex; align-items:center; justify-content:center;
   font-size:34px; margin-bottom:22px; position:relative;
 }
-/* Animated ring on icon */
 .sc-icon::before {
   content:''; position:absolute; inset:-6px; border-radius:50%;
   border:1px solid rgba(232,79,43,.2);
@@ -496,8 +508,29 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 .sc-sub {
   font-size:12px; letter-spacing:.06em; line-height:1.7;
   color:rgba(232,228,219,.45); text-align:center;
-  max-width:300px; margin-bottom:28px;
+  max-width:300px; margin-bottom:20px;
 }
+
+/* ── Accuracy tips list ── */
+#scTips {
+  display:none; width:100%; max-width:320px;
+  margin-bottom:22px; flex-direction:column; gap:7px;
+}
+#scTips.show { display:flex; }
+.sc-tip {
+  display:flex; align-items:flex-start; gap:10px;
+  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07);
+  border-radius:6px; padding:9px 13px;
+}
+.sc-tip-icon { font-size:15px; flex-shrink:0; margin-top:1px; }
+.sc-tip-text { font-size:10px; letter-spacing:.07em; line-height:1.6;
+               color:rgba(232,228,219,.5); }
+.sc-tip-text strong { color:var(--paper); display:block; margin-bottom:1px; }
+/* Tip accent colours */
+.sc-tip.green { border-color:rgba(43,232,122,.2); }
+.sc-tip.green .sc-tip-icon { filter:hue-rotate(80deg); }
+.sc-tip.blue  { border-color:rgba(77,166,255,.2); }
+.sc-tip.yellow{ border-color:rgba(240,208,96,.2); }
 
 /* Live status row inside card (GPS signal etc.) */
 .sc-status {
@@ -536,7 +569,24 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   font-size:10px; letter-spacing:.18em; padding:10px 24px;
 }
 
-/* Step 3 anchor card: slides to bottom strip so AR is visible */
+/* ── Peek / collapsible mode — card collapses to bottom strip.
+   Used for steps where the action happens in the camera view
+   (Place, Orient, Scan) so the full screen is never blocked.    ── */
+#stepCard.peek-mode {
+  justify-content:flex-end;
+  padding-bottom:28px;
+  background:linear-gradient(to top, rgba(4,5,15,.94) 0%, transparent 55%) !important;
+}
+#stepCard.peek-mode .sc-icon,
+#stepCard.peek-mode .sc-title,
+#stepCard.peek-mode .sc-sub,
+#stepCard.peek-mode .sc-dots,
+#stepCard.peek-mode #scTips   { display:none !important; }
+#stepCard.peek-mode .sc-step  { margin-bottom:10px; }
+#stepCard.peek-mode .sc-status{ margin-bottom:16px; }
+#stepCard.peek-mode #scDismiss{ display:none !important; }
+
+/* Anchor mode — same strip layout used for step 4 */
 #stepCard.anchor-mode {
   justify-content:flex-end;
   padding-bottom:28px;
@@ -549,6 +599,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 #stepCard.anchor-mode .sc-step { margin-bottom:10px; }
 #stepCard.anchor-mode .sc-status { margin-bottom:16px; }
 
+/* Step-dots nav */
+.sc-dots {
   display:flex; gap:6px; margin-top:28px;
 }
 .sc-dot-s {
@@ -621,17 +673,24 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 
   <!-- Full-screen step cards -->
   <div id="stepCard" class="show">
-    <div class="sc-step" id="scPill">Step 1 of 6</div>
+    <!-- Dismiss button (shown on steps where action must happen in camera view) -->
+    <button id="scDismiss" aria-label="Dismiss">&#x2715;</button>
+
+    <div class="sc-step" id="scPill">Step 1 of 8</div>
     <div class="sc-icon" id="scIcon">📡</div>
     <h2 class="sc-title" id="scTitle">Activate Sensors</h2>
     <p class="sc-sub" id="scSub">GPS and compass must be active before starting. Move to open sky for best accuracy.</p>
+
+    <!-- Accuracy tips — populated per-step by JS -->
+    <div id="scTips"></div>
+
     <div class="sc-status" id="scStatus">
       <div class="sc-dot" id="scDot"></div>
       <div class="sc-status-text"><strong id="scStatusMain">Waiting for GPS…</strong><span id="scStatusSub">accuracy: —</span></div>
     </div>
     <button class="sc-btn" id="scBtn" disabled>Continue →</button>
     <button class="sc-btn secondary" id="scSecondary" style="display:none"></button>
-    <!-- Anchor-mode action row (only visible in step 3 strip) -->
+    <!-- Anchor-mode action row (only visible in step 4 strip) -->
     <div id="scAnchorBtns" style="display:none;gap:10px;margin-top:10px;">
       <button class="sc-btn secondary" id="scAnchorUndo" style="margin-top:0;">↶ Undo</button>
       <button class="sc-btn secondary" id="scAnchorRestart" style="margin-top:0;">↺ Restart</button>
@@ -643,6 +702,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
       <div class="sc-dot-s" data-s="3"></div>
       <div class="sc-dot-s" data-s="4"></div>
       <div class="sc-dot-s" data-s="5"></div>
+      <div class="sc-dot-s" data-s="6"></div>
+      <div class="sc-dot-s" data-s="7"></div>
     </div>
   </div>
 
@@ -927,78 +988,177 @@ var currentStep = -1;   /* -1 = not started (landing screen) */
 var GPS_ACC_GATE = 15;  /* metres — required to pass step 0    */
 
 var STEPS = [
-  /* 0 — SENSORS */
+  /* ── 0  SENSORS ─────────────────────────────────────────────────
+     Blocks until GPS ≤ 15 m and compass active.
+     No dismiss — accuracy here pays off through every later step.  */
   {
     pill:'Step 1 · Sensors',
     icon:'📡',
     title:'Activate Sensors',
-    sub:'GPS and compass are required for True North alignment and drift correction. Move to open sky.',
+    sub:'GPS and compass lock the plan to True North and correct drift. Stand near a window or step outside for best signal.',
     btnLabel:'Sensors Ready →',
     btnDisabled:true,
     hasStatus:true,
     hasSecondary:false,
-    barPct:0
+    dismissable:false,
+    peekMode:false,
+    barPct:0,
+    tips:[
+      {icon:'🌤️',cls:'green',  title:'Open sky = best accuracy', body:'GPS accuracy inside is typically ±15–30 m. Near a window or outdoors drops to ±3–5 m, dramatically improving plan lock.'},
+      {icon:'🔄',cls:'yellow', title:'Calibrate compass',         body:'If the compass shows "—°", slowly rotate your phone in a figure-8 to calibrate the magnetometer before continuing.'},
+      {icon:'⚡',cls:'blue',   title:'Keep screen on',            body:'Allow the screen to stay on during setup. Screen-off pauses sensor polling on some Android devices.'}
+    ]
   },
-  /* 1 — PLACE */
+
+  /* ── 1  ENVIRONMENT SCAN ─────────────────────────────────────────
+     Dismissed by button → peek strip. Auto-advances when enough
+     planes detected (handled in updateScanCard).                    */
   {
-    pill:'Step 2 · Place',
+    pill:'Step 2 · Scan',
+    icon:'🔍',
+    title:'Scan the Environment',
+    sub:'Sweep slowly across the floor and up the walls. The more surfaces mapped now, the more stable the anchor snapping later.',
+    btnLabel:'Start Scanning →',
+    btnDisabled:false,
+    hasStatus:true,
+    hasSecondary:false,
+    dismissable:true,        /* × lets user collapse to peek strip early */
+    peekMode:true,
+    barPct:12,
+    tips:[
+      {icon:'🚶',cls:'green',  title:'Slow, sweeping movements', body:'Fast panning loses tracking. Move steadily — one full sweep of the room takes about 30 seconds and covers most surfaces.'},
+      {icon:'🧱',cls:'blue',   title:'Scan walls & columns',     body:'Tilt up to capture vertical surfaces. Column faces detected now become snap targets when you anchor later.'},
+      {icon:'💡',cls:'yellow', title:'Avoid strong backlighting', body:'Pointing into bright windows washes out features. Turn so the light is behind or to the side of you.'},
+      {icon:'↕️',cls:'green',  title:'Cover floor-to-waist height', body:'The device maps what the cameras see. Floor-level and mid-height panning together give the richest surface model.'}
+    ]
+  },
+
+  /* ── 2  PLACE ────────────────────────────────────────────────────
+     Starts in peek mode — card collapses immediately so the
+     floor and reticle are fully visible.
+     Auto-dismissed when the user taps the floor (onPlanPlaced).    */
+  {
+    pill:'Step 3 · Place',
     icon:'📐',
     title:'Place the Plan',
-    sub:'Point your camera at the ground. When the reticle appears, tap to place the plan. It will auto-align to True North.',
-    btnLabel:'Skip to Orient →',
+    sub:'Point your camera at the floor until the red reticle appears, then tap to drop the floorplan.',
+    btnLabel:'Got it →',
     btnDisabled:false,
     hasStatus:false,
     hasSecondary:false,
-    barPct:17
+    dismissable:true,
+    peekMode:true,
+    barPct:25,
+    tips:[
+      {icon:'🎯',cls:'green', title:'Place near the centre',   body:'Dropping the plan in the middle of the space keeps all columns within comfortable walking distance without losing tracking.'},
+      {icon:'🪵',cls:'blue',  title:'Flat, textured floor only', body:'Tap on hard flooring — rugs, mats, or reflective surfaces confuse plane detection and cause the plan to tilt or float.'},
+      {icon:'↔️',cls:'yellow',title:'Give yourself room',      body:'Stand at least 1.5 m from the nearest wall when placing so the reticle settles on a fully detected floor plane.'}
+    ]
   },
-  /* 2 — ORIENT */
+
+  /* ── 3  ORIENT ───────────────────────────────────────────────────
+     Collapses so the full plan overlay is visible while adjusting.  */
   {
-    pill:'Step 3 · Orient',
+    pill:'Step 4 · Orient',
     icon:'🔄',
     title:'Orient the Plan',
-    sub:'Pinch to scale · Two-finger rotate · Single-finger drag (unlock first). When the plan matches the site, lock it.',
-    btnLabel:'Plan is Positioned →',
+    sub:'Rotate and scale the overlay until it matches the real space, then lock it.',
+    btnLabel:'Got it — I\'ll adjust →',
     btnDisabled:false,
     hasStatus:false,
     hasSecondary:false,
-    barPct:34
+    dismissable:true,
+    peekMode:true,
+    barPct:37,
+    tips:[
+      {icon:'🧭',cls:'green',  title:'Tap "Align N" first',     body:'If the compass is stable, Align N rotates the plan so its top faces True North automatically — often gets you within 5°.'},
+      {icon:'👁️',cls:'yellow', title:'Use a known wall as reference', body:'Find a wall that appears in both the plan and the room. Rotate until the plan wall and the real wall are parallel.'},
+      {icon:'🔒',cls:'blue',   title:'Lock before anchoring',   body:'Tap Lock to freeze the plan position. The plan must not move while you walk to each column — lock it before continuing.'},
+      {icon:'📐',cls:'green',  title:'Scale roughly first',     body:'Pinch-zoom until a bay width on the plan matches the real bay width by eye. Exact scale is set later with the ruler.'}
+    ]
   },
-  /* 3 — ANCHOR */
+
+  /* ── 4  ANCHOR ───────────────────────────────────────────────────
+     Uses anchor-mode strip (not full card). Not dismissable.        */
   {
-    pill:'Step 4 · Anchor',
+    pill:'Step 5 · Anchor',
     icon:'⊙',
     title:'Anchor to Columns',
-    sub:'Walk to each physical column base and tap the ground. GPS + structure snap captured per anchor. Minimum 3.',
-    btnLabel:'Done — Pick on Plan →',
+    sub:'Walk to each column base and hold the reticle on it for 0.6 s. The reticle snaps to detected column edges.',
+    btnLabel:'Done — Set Scale →',
     btnDisabled:true,
     hasStatus:true,
     hasSecondary:false,
-    barPct:50
+    dismissable:false,
+    peekMode:false,
+    barPct:50,
+    tips:[]
   },
-  /* 4 — PICK */
+
+  /* ── 5  SCALE ────────────────────────────────────────────────────
+     Lets the user set a known real-world dimension on the plan.
+     Secondary skips if column spacing is known from the solve.      */
   {
-    pill:'Step 5 · Pick',
+    pill:'Step 6 · Scale',
+    icon:'📏',
+    title:'Set Real-World Scale',
+    sub:'Drag a line between two points on the plan whose real-world distance you know, then enter the measurement.',
+    btnLabel:'Open Plan → Set Scale →',
+    btnDisabled:false,
+    hasStatus:false,
+    hasSecondary:true,
+    secondaryLabel:'Skip — use anchor spacing',
+    dismissable:false,
+    peekMode:false,
+    barPct:62,
+    tips:[
+      {icon:'📐',cls:'green',  title:'Column grid = best reference', body:'If you know the structural bay (e.g. 6 m between columns), drag between those two column marks on the plan. Accuracy < 1 %.'},
+      {icon:'🚪',cls:'blue',   title:'Door or window width',         body:'Standard door openings (0.9 m clear) or window module widths also work well when column spacing is unknown.'},
+      {icon:'⚠️',cls:'yellow', title:'Why this matters',             body:'Without a known dimension, scale is estimated from XR anchor spacing which can drift ±5 %. Setting it halves that error.'}
+    ]
+  },
+
+  /* ── 6  PICK ─────────────────────────────────────────────────────
+     User identifies anchored columns on the PDF.                    */
+  {
+    pill:'Step 7 · Pick',
     icon:'🎯',
     title:'Identify on Plan',
-    sub:'Hold on each column on the PDF in the same order you anchored them. Use Scale tab to set a known dimension.',
+    sub:'Hold your finger on each column in the PDF — in the same order you walked to them.',
     btnLabel:'Open Plan Picker →',
     btnDisabled:false,
     hasStatus:false,
     hasSecondary:false,
-    barPct:68
+    dismissable:false,
+    peekMode:false,
+    barPct:75,
+    tips:[
+      {icon:'🔢',cls:'blue',   title:'Order must match',        body:'Column 1 in the PDF must be the first column you anchored physically. The coloured dots in AR show the order.'},
+      {icon:'🔍',cls:'green',  title:'Zoom in to pick precisely', body:'Tap + or pinch-zoom on the plan image. Picking the exact column centre (not its edge) gives the best solve residual.'},
+      {icon:'📏',cls:'yellow', title:'Set scale first if you haven\'t', body:'Switch to the Scale tab before confirming picks. Scale and picks together give a significantly better rigid-body solve.'}
+    ]
   },
-  /* 5 — BOUND */
+
+  /* ── 7  BOUND ────────────────────────────────────────────────────
+     Live quality readout. Secondary lets user add more anchors.     */
   {
-    pill:'Step 6 · Bound',
+    pill:'Step 8 · Bound',
     icon:'✓',
     title:'Plan Locked',
-    sub:'Rigid-body solve complete. Add more column anchors anytime to improve accuracy.',
+    sub:'Rigid-body solve complete. The plan is structure-locked to the space.',
     btnLabel:'Close',
     btnDisabled:false,
     hasStatus:true,
     hasSecondary:true,
     secondaryLabel:'+ Add More Anchors',
-    barPct:100
+    dismissable:false,
+    peekMode:false,
+    barPct:100,
+    tips:[
+      {icon:'➕',cls:'green',  title:'More anchors = less drift',  body:'Each additional column anchor tightens the Kabsch solve. 6+ anchors typically cuts residual error by half vs 3.'},
+      {icon:'🔁',cls:'blue',   title:'Re-scan if plan drifts',    body:'If the overlay floats after moving around, tap Reset Scan in the HUD to rebuild the surface mesh and re-lock anchors.'},
+      {icon:'📍',cls:'yellow', title:'GPS waypoints record position', body:'Drop a GPS pin at each column base (GPS button → Pin) to enable long-range drift analysis across the session.'}
+    ]
   }
 ];
 
@@ -1006,7 +1166,7 @@ function goStep(n){
   currentStep = n;
   var s = STEPS[n];
 
-  /* Update card content */
+  /* ── Card content ── */
   el('scPill').textContent   = s.pill;
   el('scIcon').textContent   = s.icon;
   el('scTitle').textContent  = s.title;
@@ -1020,66 +1180,121 @@ function goStep(n){
     sec.style.display=''; sec.textContent=s.secondaryLabel||'';
   } else { sec.style.display='none'; }
 
-  /* Progress bar */
+  /* ── Tips ── */
+  var tipsEl = el('scTips');
+  tipsEl.innerHTML = '';
+  if(s.tips && s.tips.length){
+    s.tips.forEach(function(t){
+      var div=document.createElement('div');
+      div.className='sc-tip'+(t.cls?' '+t.cls:'');
+      div.innerHTML='<span class="sc-tip-icon">'+t.icon+'</span>'
+        +'<div class="sc-tip-text"><strong>'+t.title+'</strong>'+t.body+'</div>';
+      tipsEl.appendChild(div);
+    });
+    tipsEl.className='show';
+  } else {
+    tipsEl.className='';
+  }
+
+  /* ── Dismiss (×) button ── */
+  var dismiss = el('scDismiss');
+  if(s.dismissable){
+    dismiss.className='show';
+    dismiss.onclick=function(){ dismissCard(); };
+  } else {
+    dismiss.className='';
+    dismiss.onclick=null;
+  }
+
+  /* ── Progress bar ── */
   el('stepBar').style.display='block';
   el('stepBarFill').style.width = s.barPct + '%';
 
-  /* Dot indicators */
+  /* ── Step dots ── */
   el('scDots').querySelectorAll('.sc-dot-s').forEach(function(d){
     var i = parseInt(d.dataset.s);
     d.className = 'sc-dot-s' + (i===n?' active':i<n?' done':'');
   });
 
-  /* HUD visibility — hide during early wizard steps to reduce noise */
-  var showHud = n >= 2;
+  /* ── HUD visibility — hide during early steps to reduce noise ── */
+  var showHud = n >= 3;   /* show from Orient step onward */
   el('hud').style.display = showHud ? '' : 'none';
 
-  /* Show card */
-  el('stepCard').className = 'show' + (n===3?' anchor-mode':'');
+  /* ── Card class & initial peek state ──
+     Peek-mode steps collapse immediately after rendering so the camera
+     view is never fully blocked. The user sees the tip for ~0 ms then
+     the card slides to a bottom strip (they can still see tips via the strip). */
+  if(n === 4){
+    el('stepCard').className = 'show anchor-mode';
+  } else if(s.peekMode){
+    /* Show full card briefly so user reads the tips, then auto-collapse */
+    el('stepCard').className = 'show';
+    /* Re-show dismiss for peek steps so user can manually collapse too */
+    dismiss.className='show';
+  } else {
+    el('stepCard').className = 'show';
+  }
 
-  /* Step-specific setup */
+  /* ── Step-specific enter hooks ── */
   if(n===0) stepSensorsEnter();
-  if(n===1) stepPlaceEnter();
-  if(n===2) stepOrientEnter();
-  if(n===3) stepAnchorEnter();
-  if(n===4) stepPickEnter();
-  if(n===5) stepBoundEnter();
+  if(n===1) stepScanEnter();
+  if(n===2) stepPlaceEnter();
+  if(n===3) stepOrientEnter();
+  if(n===4) stepAnchorEnter();
+  if(n===5) stepScaleEnter();
+  if(n===6) stepPickEnter();
+  if(n===7) stepBoundEnter();
 }
 
 function dismissCard(){
   el('stepCard').className = '';
 }
 
+/* Collapse card to peek strip (gradient footer) without fully hiding it.
+   Called by the main CTA on peek-mode steps after the user reads the tips. */
+function peekCard(){
+  el('stepCard').className = 'show peek-mode';
+}
+
 /* ── scBtn click routing ──
-   Each card is an EXPLAINER that dismisses, then the step action happens.
-   The card does NOT trigger the action — it just gets out of the way.      */
+   Peek-mode steps: CTA collapses card to strip so action can happen.
+   Blocking steps: CTA advances the wizard or opens an overlay.      */
 el('scBtn').addEventListener('click', function(){
   if(currentStep===0){
-    /* Sensors gate — only enabled when GPS+compass ready. Dismiss → show place card */
+    /* Sensors gate — advances to scan step */
     goStep(1);
   } else if(currentStep===1){
-    /* "Got it" — dismiss card, user now taps the ground themselves */
-    dismissCard();
-    el('hudHint').textContent='Point camera at ground \u2022 tap to place plan';
+    /* "Start Scanning" — collapse to peek strip; camera view opens */
+    peekCard();
+    el('hudHint').textContent='Sweep camera across floor and walls to build mesh';
   } else if(currentStep===2){
-    /* "Got it" — dismiss card, user adjusts freely then taps Lock themselves */
-    dismissCard();
-    el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag to position \u2022 tap Lock when ready';
+    /* "Got it" — collapse; user taps floor to place */
+    peekCard();
+    el('hudHint').textContent='Point camera at ground \u2022 tap to place plan';
   } else if(currentStep===3){
-    /* "Done" on anchor step — only reaches here if corners.length>=3 */
+    /* "Got it" — collapse; user adjusts, then locks */
+    peekCard();
+    el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when ready';
+  } else if(currentStep===4){
+    /* Anchor Done — only reachable when corners.length >= 3 */
     if(corners.length>=3){
-      /* Stop trace mode, show pick card */
       traceMode=false;
       hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
       showBtns('normal');
-      goStep(4);
+      goStep(5);
     }
-  } else if(currentStep===4){
-    /* "Open Plan Picker" — dismiss card, open the PDF picker */
+  } else if(currentStep===5){
+    /* "Open Plan & Set Scale" — open picker on Scale tab */
     dismissCard();
     openPickOverlay();
-  } else if(currentStep===5){
-    /* Close — dismiss bound card */
+    /* Switch to Scale tab automatically */
+    setTimeout(function(){ if(typeof setPickTab==='function') setPickTab('ruler'); }, 80);
+  } else if(currentStep===6){
+    /* "Open Plan Picker" — open picker on Anchor tab */
+    dismissCard();
+    openPickOverlay();
+  } else if(currentStep===7){
+    /* Close bound card */
     dismissCard();
   }
 });
@@ -1087,6 +1302,10 @@ el('scBtn').addEventListener('click', function(){
 /* ── scSecondary click routing ── */
 el('scSecondary').addEventListener('click', function(){
   if(currentStep===5){
+    /* Skip scale — proceed directly to pick */
+    goStep(6);
+  } else if(currentStep===7){
+    /* Add more anchors */
     dismissCard();
     enterTraceMode();
   }
@@ -1130,38 +1349,68 @@ function updateSensorCard(){
 }
 
 /* ─────────────────────────────────────────
-   Step 1 — PLACE
-   Dismisses as soon as user taps floor.
+   Step 1 — ENVIRONMENT SCAN
+   User sweeps camera to build surface mesh.
+   Status row shows plane count live.
+   Auto-advances when enough planes detected.
+   ───────────────────────────────────────── */
+var scanPlaneCount = 0;
+var SCAN_PLANE_GATE = 3;   /* minimum planes before "enough" */
+
+function stepScanEnter(){
+  el('scDot').className = 'sc-dot yellow';
+  el('scStatusMain').textContent = 'Scanning…';
+  el('scStatusSub').textContent  = '0 surfaces detected';
+  el('hud').style.display = 'none';  /* keep HUD hidden during scan */
+}
+
+/* Called from updatePlaneWireframes each frame to update scan card */
+function updateScanCard(){
+  if(currentStep !== 1) return;
+  var n = planeWires.size;
+  scanPlaneCount = n;
+  var floors = 0, walls = 0;
+  planeWires.forEach(function(wire, plane){
+    if(typeof plane === 'object' && plane.orientation){
+      if(plane.orientation === 'vertical') walls++;
+      else floors++;
+    }
+  });
+  var dotCls = n === 0 ? '' : n < SCAN_PLANE_GATE ? ' yellow' : ' green';
+  el('scDot').className = 'sc-dot' + dotCls;
+  el('scStatusMain').textContent = n + ' surface' + (n!==1?'s':'') + ' detected';
+  el('scStatusSub').textContent  = floors + ' floor' + (floors!==1?'s':'') + ' · ' + walls + ' wall' + (walls!==1?'s':'');
+}
+
+/* ─────────────────────────────────────────
+   Step 2 — PLACE
+   Dismissed automatically when wxrPlaced fires.
    ───────────────────────────────────────── */
 function stepPlaceEnter(){
-  /* Card stays up — it dismisses automatically when wxrPlaced fires */
   el('hudHint').textContent = 'Point camera at the ground and tap to place';
 }
 
 /* Called from placement code when wxrPlaced becomes true */
 function onPlanPlaced(){
-  if(currentStep === 1){
+  if(currentStep === 2){
     dismissCard();
-    goStep(2);
+    goStep(3);
   }
 }
 
 /* ─────────────────────────────────────────
-   Step 2 — ORIENT
-   User adjusts plan over site. Taps continue
-   when satisfied (or lockBtn triggers it).
+   Step 3 — ORIENT
+   Collapses so the full plan overlay is visible.
+   Advances when the user taps Lock.
    ───────────────────────────────────────── */
 function stepOrientEnter(){
-  /* Card explains gestures. User taps "Got it", card dismisses.
-     They adjust freely. When they tap Lock → advances to step 3.
-     Plan starts locked from placement — unlock button is right there. */
   el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag to align plan over site';
 }
 
 /* ─────────────────────────────────────────
-   Step 3 — ANCHOR
-   Walk to columns, tap. Card stays visible
-   as a mini-HUD showing count.
+   Step 4 — ANCHOR
+   Walk to columns, hold to anchor.
+   Uses anchor-mode strip.
    ───────────────────────────────────────── */
 function stepAnchorEnter(){
   el('scStatus').style.display = 'flex';
@@ -1169,7 +1418,7 @@ function stepAnchorEnter(){
   el('scStatusMain').textContent = '0 columns anchored';
   el('scStatusSub').textContent  = 'hold reticle on column base to place';
   el('scBtn').disabled = true;
-  el('scBtn').textContent = 'Done — Pick on Plan →';
+  el('scBtn').textContent = 'Done — Set Scale →';
   el('scAnchorBtns').style.display = 'flex';
   enterTraceMode();
 }
@@ -1185,17 +1434,28 @@ el('scAnchorRestart').addEventListener('click', function(){
 
 /* Called from updateCornerBadge when a new corner is added */
 function updateAnchorCard(){
-  if(currentStep !== 3) return;
+  if(currentStep !== 4) return;
   var n = corners.length;
   el('scDot').className = 'sc-dot' + (n>=3?' green':' yellow');
   el('scStatusMain').textContent = n + ' column' + (n!==1?'s':'') + ' anchored';
   el('scStatusSub').textContent  = n<3 ? (3-n)+' more needed' : 'tap Done or add more';
   el('scBtn').disabled = n < 3;
-  if(n>=3) el('scBtn').textContent = 'Done — Pick on Plan →';
+  if(n>=3) el('scBtn').textContent = 'Done — Set Scale →';
 }
 
 /* ─────────────────────────────────────────
-   Step 4 — PICK
+   Step 5 — SCALE
+   Card explains scale setting, button opens
+   picker on the Scale tab.
+   ───────────────────────────────────────── */
+function stepScaleEnter(){
+  el('stepCard').classList.remove('anchor-mode');
+  el('stepCard').style.background = '';
+  el('scAnchorBtns').style.display = 'none';
+}
+
+/* ─────────────────────────────────────────
+   Step 6 — PICK
    Card is a gateway — button opens picker.
    ───────────────────────────────────────── */
 function stepPickEnter(){
@@ -1206,11 +1466,11 @@ function stepPickEnter(){
 
 /* Called when pickConfirmBtn fires buildBoundMesh */
 function onPlanBound(){
-  goStep(5);
+  goStep(7);
 }
 
 /* ─────────────────────────────────────────
-   Step 5 — BOUND
+   Step 7 — BOUND
    Live constraint quality shown in card.
    ───────────────────────────────────────── */
 function stepBoundEnter(){
@@ -1222,7 +1482,7 @@ function stepBoundEnter(){
 
 /* Update bound card quality live */
 function updateBoundCard(){
-  if(currentStep !== 5) return;
+  if(currentStep !== 7) return;
   var overall = (constraintQuality.xrAnchor*0.35 + constraintQuality.compass*0.30 +
                  constraintQuality.gpsBearing*0.15 + constraintQuality.planeSnap*0.20);
   el('scDot').className = 'sc-dot' + (overall>0.75?' green':overall>0.45?' yellow':'');
@@ -1235,6 +1495,7 @@ function updateBoundCard(){
 function wizardReset(){
   doReset();
   currentStep = -1;
+  scanPlaneCount = 0;
   el('stepBar').style.display = 'none';
   el('stepBarFill').style.width = '0%';
   el('stepCard').style.background = '';
@@ -1351,21 +1612,21 @@ el('traceDoneBtn').addEventListener('click',function(){
   showBtns('normal');
   hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
   traceMode=false;
-  if(currentStep===3){ goStep(4); }   /* show step-4 card as gateway to picker */
+  if(currentStep===4){ goStep(5); }   /* anchor done → scale step */
   else { openPickOverlay(); }          /* already past wizard, open directly */
 });
 el('traceCancelBtn').addEventListener('click',cancelTrace);
 el('resetBtn').addEventListener('click', wizardReset);
 
-/* lockBtn — on step 2 (orient), locking advances to step 3 */
+/* lockBtn — on step 3 (orient), locking advances to step 4 (anchor) */
 el('lockBtn').addEventListener('click',function(){
   xfLocked=!xfLocked;
   this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Unlock';
   this.className=xfLocked?'hud-btn g':'hud-btn';
   el('hudHint').textContent=xfLocked?'Plan locked \u2714':'Drag to reposition';
-  /* Step 2: first time user locks = advance to anchor step */
-  if(xfLocked && currentStep===2){
-    goStep(3);
+  /* Step 3 (Orient): first time user locks = advance to anchor step */
+  if(xfLocked && currentStep===3){
+    goStep(4);
   }
 });
 el('exitBtn').addEventListener('click',function(){
@@ -1530,6 +1791,9 @@ function updatePlaneWireframes(frame, refSpace){
       if(grid){ scene.remove(grid); planeGrids.delete(key); }
     }
   });
+
+  /* Update scan step card with live plane counts */
+  updateScanCard();
 }
 
 /* Returns a LineSegments object for the floor grid (caller adds to scene).
