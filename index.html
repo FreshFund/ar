@@ -172,6 +172,7 @@ html,body { height:100%; overflow:hidden; background:var(--ink); color:var(--pap
   position:absolute; bottom:0; left:0; right:0; padding:10px 12px 34px;
   display:flex; flex-direction:column; align-items:center; gap:8px;
   pointer-events:none;
+  z-index:190;   /* above stepCard (180) so buttons are never covered */
 }
 #hudHint {
   font-size:11px; letter-spacing:.15em; text-transform:uppercase;
@@ -579,7 +580,12 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   justify-content:flex-end;
   padding-bottom:28px;
   background:linear-gradient(to top, rgba(4,5,15,.94) 0%, transparent 55%) !important;
+  pointer-events:none;   /* pass ALL touches through transparent top half */
 }
+/* Re-enable pointer events only on visible bottom content */
+#stepCard.peek-mode .sc-step,
+#stepCard.peek-mode .sc-status { pointer-events:all; }
+
 #stepCard.peek-mode .sc-icon,
 #stepCard.peek-mode .sc-title,
 #stepCard.peek-mode .sc-sub,
@@ -850,8 +856,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
         <button class="hud-btn r" id="traceCancelBtn">&#x2715; Cancel</button>
       </div>
       <div class="btn-row" id="surveyBtns" style="display:none;">
-        <button class="hud-btn b" id="surveyPinBtn">&#x1F4CD; Drop Pin</button>
-        <button class="hud-btn g" id="surveyDoneBtn" style="opacity:0.4;" disabled>&#x2713; Done Surveying</button>
+        <button class="hud-btn" id="surveyUndoBtn">&#x21B6; Undo</button>
+        <button class="hud-btn b" id="surveyPinBtn">&#x1F4CD; Pin</button>
+        <button class="hud-btn g" id="surveyDoneBtn" style="opacity:0.4;" disabled>&#x2713; Done</button>
       </div>
     </div>
 
@@ -1395,19 +1402,20 @@ function updateGpsSurveyCard(){
   doneBtn.style.opacity=n>=3?'1':'0.4';
 }
 
-/* surveyPinBtn — same logic as the normal dropPinBtn but always accessible */
-el('surveyPinBtn').addEventListener('click',function(){
-  if(!reticle||!reticle.visible){
-    el('hudHint').textContent='Point camera at ground to place pin'; return;
-  }
-  if(gpsLat==null){
-    el('hudHint').textContent='No GPS fix yet \u2014 wait for signal'; return;
-  }
-  if(gpsAcc>30){
-    el('hudHint').textContent='GPS \u00b1'+Math.round(gpsAcc)+'m \u2014 move to open sky'; return;
-  }
-  /* Re-use existing drop-pin logic by triggering it directly */
-  var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
+el('surveyUndoBtn').addEventListener('click',function(){
+  if(waypoints.length===0) return;
+  var wp=waypoints.pop();
+  if(wp.dot) scene.remove(wp.dot);
+  if(wp.labelEl) wp.labelEl.remove();
+  el('hudHint').textContent=waypoints.length+' point'+(waypoints.length!==1?'s':'')+' \u2014 '+(waypoints.length<3?(3-waypoints.length)+' more needed':'tap Done when ready');
+  renderMiniMap();
+  updateGpsSurveyCard();
+});
+/* Shared function — drop a survey pin at a given XR world position.
+   Called from both the Pin button and the select tap-to-pin handler.  */
+function dropSurveyPin(rx,ry,rz){
+  if(gpsLat==null){ el('hudHint').textContent='No GPS fix yet \u2014 wait for signal'; return; }
+  if(gpsAcc>30){ el('hudHint').textContent='GPS \u00b1'+Math.round(gpsAcc)+'m \u2014 move to open sky'; return; }
   var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
   var idx=waypoints.length;
   var col=WP_COLORS[idx%WP_COLORS.length];
@@ -1419,13 +1427,18 @@ el('surveyPinBtn').addEventListener('click',function(){
   lbl.style.background='#'+col.toString(16).padStart(6,'0');
   lbl.style.color=col>0x888888?'#04050f':'#ffffff';
   el('wpLabels').appendChild(lbl);
-  var wp={id:idx+1,gps:{lat:gpsLat,lng:gpsLng,acc:gpsAcc},world:{x:fp.x,y:fp.y,z:fp.z},dot:dot,labelEl:lbl};
-  waypoints.push(wp);
+  waypoints.push({id:idx+1,gps:{lat:gpsLat,lng:gpsLng,acc:gpsAcc},world:{x:fp.x,y:fp.y,z:fp.z},dot:dot,labelEl:lbl});
   el('hudHint').textContent='P'+(idx+1)+' pinned \u2022 \u00b1'+Math.round(gpsAcc)+'m'+(idx<2?' \u2014 '+(2-idx)+' more needed':'');
   renderMiniMap();
   updateGpsSurveyCard();
   var paired=waypoints.filter(function(w){return w.gps&&w.world;});
   if(paired.length>=2) runDriftAnalysis(paired);
+}
+
+el('surveyPinBtn').addEventListener('click',function(){
+  if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
+  var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
+  dropSurveyPin(rx,ry,rz);
 });
 
 el('surveyDoneBtn').addEventListener('click',function(){
@@ -3481,8 +3494,18 @@ function startWebXR(){
 
     /* SELECT (instant tap) — used for placement and measure only */
     session.addEventListener('select',function(){
+      var rx=reticle.visible?reticle.matrix.elements[12]:0;
+      var ry=reticle.visible?reticle.matrix.elements[13]:0;
+      var rz=reticle.visible?reticle.matrix.elements[14]:0;
+
+      /* SURVEY MODE — tap always drops a GPS pin (reticle optional) */
+      if(currentStep===1){
+        dropSurveyPin(rx,ry,rz);
+        return;
+      }
+
+      /* All other modes require the reticle to be visible */
       if(!reticle.visible)return;
-      var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
 
       /* MEASURE MODE — instant tap ok */
       if(measureMode){
