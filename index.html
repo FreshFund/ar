@@ -3505,8 +3505,9 @@ function startWebXR(){
       /* ANCHOR MODE — handled by hold, not instant tap */
       if(traceMode) return;
 
-      /* INITIAL PLACEMENT — instant tap */
-      if(wxrPlaced)return;
+      /* INITIAL PLACEMENT — only allowed in Place step (4) or after wizard */
+      if(wxrPlaced) return;
+      if(currentStep !== 4 && currentStep !== -1) return;  /* wizard active but not on Place step */
       var q=new THREE.Quaternion();
       new THREE.Matrix4().fromArray(reticle.matrix.elements).decompose(new THREE.Vector3(),q,new THREE.Vector3());
       planeGroup.position.set(rx,ry,rz); planeGroup.quaternion.copy(q); planeGroup.visible=true;
