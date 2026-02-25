@@ -452,8 +452,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 #stepCard {
   display:none; position:absolute; inset:0; z-index:180;
   background:rgba(4,5,15,.96);
-  flex-direction:column; align-items:center; justify-content:center;
-  padding:32px 28px; pointer-events:all;
+  flex-direction:column; align-items:center; justify-content:flex-start;
+  padding:48px 28px 32px;
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  pointer-events:all;
   animation:cardIn .35s cubic-bezier(.4,0,.2,1);
 }
 #stepCard.show { display:flex; }
@@ -480,15 +482,15 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   font-size:9px; letter-spacing:.35em; text-transform:uppercase;
   color:var(--accent); background:rgba(232,79,43,.12);
   border:1px solid rgba(232,79,43,.25); border-radius:100px;
-  padding:4px 14px; margin-bottom:20px;
+  padding:4px 14px; margin-bottom:14px;
 }
 
 /* Icon area */
 .sc-icon {
-  width:80px; height:80px; border-radius:50%;
+  width:64px; height:64px; border-radius:50%;
   background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
   display:flex; align-items:center; justify-content:center;
-  font-size:34px; margin-bottom:22px; position:relative;
+  font-size:28px; margin-bottom:16px; position:relative; flex-shrink:0;
 }
 .sc-icon::before {
   content:''; position:absolute; inset:-6px; border-radius:50%;
@@ -501,20 +503,21 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 }
 
 .sc-title {
-  font-family:var(--display); font-size:24px; font-weight:800;
+  font-family:var(--display); font-size:22px; font-weight:800;
   letter-spacing:-.01em; color:var(--paper);
-  text-align:center; margin-bottom:8px; line-height:1.2;
+  text-align:center; margin-bottom:6px; line-height:1.2;
 }
 .sc-sub {
-  font-size:12px; letter-spacing:.06em; line-height:1.7;
+  font-size:12px; letter-spacing:.06em; line-height:1.65;
   color:rgba(232,228,219,.45); text-align:center;
-  max-width:300px; margin-bottom:20px;
+  max-width:300px; margin-bottom:16px;
 }
 
 /* ── Accuracy tips list ── */
 #scTips {
   display:none; width:100%; max-width:320px;
   margin-bottom:22px; flex-direction:column; gap:7px;
+  max-height:38vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
 }
 #scTips.show { display:flex; }
 .sc-tip {
@@ -536,7 +539,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 .sc-status {
   display:flex; align-items:center; gap:10px;
   background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
-  border-radius:8px; padding:10px 18px; margin-bottom:24px;
+  border-radius:8px; padding:10px 18px; margin-bottom:18px;
   min-width:240px; justify-content:center;
 }
 .sc-dot {
