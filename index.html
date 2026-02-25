@@ -574,7 +574,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 
 /* ── Peek / collapsible mode — card collapses to bottom strip.
    Used for steps where the action happens in the camera view
-   (Place, Orient, Scan) so the full screen is never blocked.    ── */
+   (Place, Orient, Scan, Survey) so the full screen is never blocked. ── */
 #stepCard.peek-mode {
   justify-content:flex-end;
   padding-bottom:28px;
@@ -584,10 +584,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 #stepCard.peek-mode .sc-title,
 #stepCard.peek-mode .sc-sub,
 #stepCard.peek-mode .sc-dots,
-#stepCard.peek-mode #scTips   { display:none !important; }
-#stepCard.peek-mode .sc-step  { margin-bottom:10px; }
-#stepCard.peek-mode .sc-status{ margin-bottom:16px; }
-#stepCard.peek-mode #scDismiss{ display:none !important; }
+#stepCard.peek-mode #scTips,
+#stepCard.peek-mode .sc-btn,
+#stepCard.peek-mode #scDismiss { display:none !important; }
 
 /* Anchor mode — same strip layout used for step 4 */
 #stepCard.anchor-mode {
@@ -1254,12 +1253,9 @@ function goStep(n){
   });
 
   /* ── HUD visibility ──
-     Step 0: sensors — hide (no controls needed yet)
-     Step 1: GPS survey — show (Pin button needed)
-     Step 2: scan — hide (stepScanEnter re-hides it; shown on surface detect)
-     Step 3+: always show                                                  */
-  var showHud = (n===1 || n>=3);
-  el('hud').style.display = showHud ? '' : 'none';
+     Hide by default when showing full info card.
+     Each step's enter function or enterSurveyMode/peekCard reveals it. */
+  el('hud').style.display = 'none';
 
   /* ── Card class & initial peek state ──
      Peek-mode steps collapse immediately after rendering so the camera
@@ -1292,9 +1288,10 @@ function dismissCard(){
 }
 
 /* Collapse card to peek strip (gradient footer) without fully hiding it.
-   Called by the main CTA on peek-mode steps after the user reads the tips. */
+   Also reveals the HUD — peek steps always need HUD controls accessible. */
 function peekCard(){
   el('stepCard').className = 'show peek-mode';
+  el('hud').style.display = '';
 }
 
 /* ── scBtn click routing ── */
@@ -1492,6 +1489,7 @@ function updateScanCard(){
    Anchor-mode strip. Minimum 2 (ideally 4+).
    ───────────────────────────────────────────────────────────────── */
 function stepAnchorEnter(){
+  el('hud').style.display='';
   el('scStatus').style.display='flex';
   el('scDot').className='sc-dot yellow';
   el('scStatusMain').textContent='0 columns anchored';
@@ -1527,6 +1525,7 @@ function stepPlaceEnter(){
   el('stepCard').classList.remove('anchor-mode');
   el('stepCard').style.background='';
   el('scAnchorBtns').style.display='none';
+  el('hud').style.display='';
   el('hudHint').textContent='Point camera at the floor and tap to place drawing';
 }
 
@@ -1542,7 +1541,6 @@ function stepOrientEnter(){
   xfLocked=false;
   el('lockBtn').textContent='\uD83D\uDD13 Unlock';
   el('lockBtn').className='hud-btn';
-  el('hud').style.display='';
   el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when columns align';
 }
 
@@ -1554,6 +1552,7 @@ function stepPickEnter(){
   el('stepCard').classList.remove('anchor-mode');
   el('stepCard').style.background='';
   el('scAnchorBtns').style.display='none';
+  el('hud').style.display='';
 }
 
 function onPlanBound(){ goStep(7); }
@@ -1565,6 +1564,7 @@ function onPlanBound(){ goStep(7); }
 var readyToastFired=false;
 
 function stepBoundEnter(){
+  el('hud').style.display='';
   el('stepCard').style.background='';
   el('scDot').className='sc-dot green';
   el('scStatusMain').textContent=corners.length+' column anchors';
