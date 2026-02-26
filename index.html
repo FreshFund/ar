@@ -594,18 +594,23 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 #stepCard.peek-mode .sc-btn,
 #stepCard.peek-mode #scDismiss { display:none !important; }
 
-/* Anchor mode — same strip layout used for step 4 */
+/* Anchor mode strip — collapses card to bottom, shows status + done btn */
 #stepCard.anchor-mode {
   justify-content:flex-end;
   padding-bottom:28px;
   background:linear-gradient(to top, rgba(4,5,15,.92) 0%, rgba(4,5,15,.0) 60%) !important;
+  pointer-events:none;
 }
+#stepCard.anchor-mode .sc-step,
+#stepCard.anchor-mode .sc-status,
+#stepCard.anchor-mode .sc-btn,
+#stepCard.anchor-mode #scAnchorBtns { pointer-events:all; }
 #stepCard.anchor-mode .sc-icon,
 #stepCard.anchor-mode .sc-title,
 #stepCard.anchor-mode .sc-sub,
-#stepCard.anchor-mode .sc-dots { display:none !important; }
-#stepCard.anchor-mode .sc-step { margin-bottom:10px; }
-#stepCard.anchor-mode .sc-status { margin-bottom:16px; }
+#stepCard.anchor-mode .sc-dots,
+#stepCard.anchor-mode #scTips,
+#stepCard.anchor-mode #scDismiss    { display:none !important; }
 
 /* Step-dots nav */
 .sc-dots {
@@ -1085,21 +1090,29 @@ var STEPS = [
   },
 
   /* ── 3  ANCHORS ──────────────────────────────────────────────────
-     Walk to columns, hold-to-anchor. GPS captured per anchor.
-     Uses anchor-mode strip — not full card.                        */
+     Full info card → "Place Anchors" collapses to anchor-mode strip. */
   {
     pill:'Step 4 · Column Anchors',
     icon:'⊙',
     title:'Anchor to Columns',
-    sub:'Walk to each column base and hold the reticle on it for 0.6 s. GPS is captured alongside each XR anchor — minimum 2, ideally 4+.',
-    btnLabel:'Anchors Done →',
-    btnDisabled:true,
-    hasStatus:true,
+    sub:'Walk to each column base and hold the reticle on it for 0.6 s. GPS is captured with each anchor. Minimum 2, ideally 4+.',
+    btnLabel:'Place Anchors →',
+    btnDisabled:false,
+    hasStatus:false,
     hasSecondary:false,
-    dismissable:false,
-    peekMode:false,
+    dismissable:true,
+    peekMode:true,
     barPct:43,
-    tips:[]
+    tips:[
+      {icon:'🚶',cls:'green',  title:'Walk right up to the base',
+       body:'Stand within 0.5 m of the column base. The reticle snaps to detected column edges — you\'ll see it jump green when locked.'},
+      {icon:'⏱️',cls:'blue',   title:'Hold for 0.6 seconds',
+       body:'Keep the reticle still on the column base until the green ring completes. Movement during the hold cancels it.'},
+      {icon:'📍',cls:'yellow', title:'GPS is captured per anchor',
+       body:'Each anchor records your current GPS fix alongside the XR position. More anchors = better triangulation and less drift over time.'},
+      {icon:'↩️',cls:'green',  title:'Undo if you mis-place',
+       body:'Tap Undo to remove the last anchor and try again. You can restart the whole set if needed.'}
+    ]
   },
 
   /* ── 4  PLACE ────────────────────────────────────────────────────
@@ -1240,8 +1253,8 @@ function goStep(n){
   if(s.dismissable){
     dismiss.className='show';
     dismiss.onclick=function(){
-      /* Survey step needs to activate survey HUD, not just hide the card */
       if(currentStep===1){ enterSurveyMode(); }
+      else if(currentStep===3){ enterAnchorMode(); }
       else { dismissCard(); }
     };
   } else {
@@ -1315,11 +1328,17 @@ el('scBtn').addEventListener('click', function(){
       el('hudHint').textContent='Sweep camera across floor and walls';
     }
   } else if(currentStep===3){
-    if(corners.length>=2){              /* anchors done → place          */
-      traceMode=false;
-      hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
-      showBtns('normal');
-      goStep(4);
+    var inStrip = el('stepCard').className.indexOf('anchor-mode')!==-1;
+    if(inStrip){
+      /* "Anchors Done" — advance to Place step */
+      if(corners.length>=2){
+        traceMode=false;
+        hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
+        showBtns('normal');
+        goStep(4);
+      }
+    } else {
+      enterAnchorMode();                /* collapse info card, start anchoring */
     }
   } else if(currentStep===4){
     peekCard();                         /* "Got it" → collapse, tap floor */
@@ -1502,11 +1521,21 @@ function updateScanCard(){
    Anchor-mode strip. Minimum 2 (ideally 4+).
    ───────────────────────────────────────────────────────────────── */
 function stepAnchorEnter(){
+  /* Don't start trace mode yet — wait for "Place Anchors" button.
+     Status row and anchor buttons are set up here but hidden until
+     the card collapses to the anchor strip.                        */
+  el('scAnchorBtns').style.display='none';
+  el('hudHint').textContent='Read the tips, then tap Place Anchors';
+}
+
+function enterAnchorMode(){
+  /* Called when user taps "Place Anchors →" — collapses card to strip */
+  el('stepCard').className='show anchor-mode';
   el('hud').style.display='';
   el('scStatus').style.display='flex';
   el('scDot').className='sc-dot yellow';
   el('scStatusMain').textContent='0 columns anchored';
-  el('scStatusSub').textContent='hold reticle on column base to place';
+  el('scStatusSub').textContent='hold reticle on column base';
   el('scBtn').disabled=true;
   el('scBtn').textContent='Anchors Done →';
   el('scAnchorBtns').style.display='flex';
@@ -1729,8 +1758,7 @@ el('traceDoneBtn').addEventListener('click',function(){
   traceMode=false;
   if(currentStep===3){ goStep(4); }    /* anchors done → place step */
   else { openPickOverlay(); }           /* already past wizard, open directly */
-});
-el('traceCancelBtn').addEventListener('click',cancelTrace);
+});el('traceCancelBtn').addEventListener('click',cancelTrace);
 el('resetBtn').addEventListener('click', wizardReset);
 
 /* lockBtn — on step 5 (orient), locking advances to step 6 (pick) */
@@ -3498,8 +3526,10 @@ function startWebXR(){
       var ry=reticle.visible?reticle.matrix.elements[13]:0;
       var rz=reticle.visible?reticle.matrix.elements[14]:0;
 
-      /* SURVEY MODE — tap always drops a GPS pin (reticle optional) */
+      /* SURVEY MODE — tap drops a GPS pin, but only once surveying has started
+         (card collapsed to peek strip). Ignore taps on the full info card.    */
       if(currentStep===1){
+        if(el('stepCard').className.indexOf('peek-mode')===-1) return; /* full card still showing */
         dropSurveyPin(rx,ry,rz);
         return;
       }
