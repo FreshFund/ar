@@ -3486,26 +3486,16 @@ function startWebXR(){
       if(planBound) reSolvePlan();
     }
 
-    /* SELECT start — begin hold timer.
-       We snapshot BOTH the raw reticle position AND any active snap
-       at the moment of press. The commit uses this frozen position so
-       that movement during the hold does not displace the anchor.      */
+    /* SELECT start — begin hold timer for anchor mode */
     session.addEventListener('selectstart',function(){
       if(!reticle.visible)return;
-      if(!traceMode) return;  /* hold only applies to anchor mode */
+      if(!traceMode) return;
 
-      /* Freeze position + snap at press time */
-      var rx=reticle.matrix.elements[12];
-      var ry=reticle.matrix.elements[13];
-      var rz=reticle.matrix.elements[14];
-      var frozenPos = currentSnap
-        ? {x:currentSnap.x, y:currentSnap.y, z:currentSnap.z, wasSnapped:true}
-        : {x:rx, y:ry, z:rz, wasSnapped:false};
-
-      holdStartPos = frozenPos;
+      holdStartPos = currentSnap
+        ? {x:currentSnap.x, y:currentSnap.y, z:currentSnap.z, wasSnapped:true, _t:Date.now()}
+        : {x:reticle.matrix.elements[12], y:reticle.matrix.elements[13], z:reticle.matrix.elements[14], wasSnapped:false, _t:Date.now()};
       holdProgress=0;
       holdTimer=setTimeout(function(){
-        /* Held long enough — commit using the frozen-at-press position */
         holdTimer=null; holdProgress=0; holdRing.visible=false;
         if(holdStartPos){
           commitAnchor(holdStartPos.x, holdStartPos.y, holdStartPos.z, holdStartPos.wasSnapped);
@@ -3514,10 +3504,21 @@ function startWebXR(){
       }, HOLD_MS);
     });
 
-    /* SELECT end — if released before hold time, cancel */
+    /* SELECT end — commit immediately if held long enough, else cancel */
     session.addEventListener('selectend',function(){
-      if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
-      holdStartPos=null; holdProgress=0; holdRing.visible=false;
+      if(!holdStartPos){ holdRing.visible=false; return; }
+      var held = Date.now() - (holdStartPos._t||0);
+      if(held >= HOLD_MS * 0.8){
+        /* Close enough — commit */
+        if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
+        holdRing.visible=false;
+        commitAnchor(holdStartPos.x, holdStartPos.y, holdStartPos.z, holdStartPos.wasSnapped);
+      } else {
+        /* Released too early — cancel */
+        if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
+        holdRing.visible=false;
+      }
+      holdStartPos=null; holdProgress=0;
     });
 
     /* SELECT (instant tap) — used for placement and measure only */
@@ -3555,8 +3556,15 @@ function startWebXR(){
         return;
       }
 
-      /* ANCHOR MODE — handled by hold, not instant tap */
-      if(traceMode) return;
+      /* ANCHOR MODE — instant tap places an anchor; hold also works via selectend */
+      if(traceMode){
+        var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
+        /* Cancel any pending hold timer to avoid double-commit */
+        if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
+        holdStartPos=null; holdProgress=0; holdRing.visible=false;
+        commitAnchor(fp.x,fp.y,fp.z,!!currentSnap);
+        return;
+      }
 
       /* INITIAL PLACEMENT — only allowed in Place step (4) or after wizard */
       if(wxrPlaced) return;
