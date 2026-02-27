@@ -438,6 +438,35 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
    STEP WIZARD
    ═══════════════════════════════════════ */
 
+/* UI toggle button — always top-right, always visible */
+#uiToggleBtn {
+  position:absolute; top:10px; right:10px; z-index:400;
+  background:rgba(8,8,16,.75); backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,.18); color:rgba(255,255,255,.8);
+  width:36px; height:36px; border-radius:8px;
+  font-size:16px; cursor:pointer; pointer-events:all;
+  display:none;   /* shown once AR session starts */
+  align-items:center; justify-content:center;
+  transition:background .15s, opacity .15s;
+}
+#uiToggleBtn.visible { display:flex; }
+#uiToggleBtn.ui-off { background:rgba(232,79,43,.25); border-color:rgba(232,79,43,.4); }
+
+/* When UI is hidden — collapse all panels except hudHint and step card */
+#xrOverlay.ui-hidden #gpsPanel,
+#xrOverlay.ui-hidden #gpsMap,
+#xrOverlay.ui-hidden #wpLabels,
+#xrOverlay.ui-hidden .slider-row,
+#xrOverlay.ui-hidden #normalBtns,
+#xrOverlay.ui-hidden #traceBtns,
+#xrOverlay.ui-hidden #surveyBtns,
+#xrOverlay.ui-hidden #measureBtns,
+#xrOverlay.ui-hidden #cornerBadge,
+#xrOverlay.ui-hidden #snapIndicator,
+#xrOverlay.ui-hidden #driftBadge,
+#xrOverlay.ui-hidden #statusBar,
+#xrOverlay.ui-hidden #stepBar      { display:none !important; }
+
 /* Progress bar — thin strip at very top of AR screen */
 #stepBar {
   display:none; position:absolute; top:0; left:0; right:0; z-index:200;
@@ -683,6 +712,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 
     <!-- Step progress bar (always visible once AR starts) -->
   <div id="stepBar"><div id="stepBarFill" style="width:0%"></div></div>
+
+  <!-- UI toggle — top right, always accessible -->
+  <button id="uiToggleBtn" title="Hide/show UI">&#x2630;</button>
 
   <!-- Full-screen step cards -->
   <div id="stepCard" class="show">
@@ -1529,13 +1561,13 @@ function stepAnchorEnter(){
 }
 
 function enterAnchorMode(){
-  /* Called when user taps "Place Anchors →" — collapses card to strip */
   el('stepCard').className='show anchor-mode';
   el('hud').style.display='';
+  el('normalBtns').style.display='none';   /* hide crowded normal buttons */
   el('scStatus').style.display='flex';
   el('scDot').className='sc-dot yellow';
   el('scStatusMain').textContent='0 columns anchored';
-  el('scStatusSub').textContent='hold reticle on column base';
+  el('scStatusSub').textContent='tap on a column base to anchor';
   el('scBtn').disabled=true;
   el('scBtn').textContent='Anchors Done →';
   el('scAnchorBtns').style.display='flex';
@@ -1711,7 +1743,7 @@ el('nextPg').addEventListener('click',function(){if(pdfDoc&&currentPage<pdfDoc.n
 el('launchBtn').addEventListener('click',function(){
   if(!pdfCanvas)return;
   hide('landing'); show('arScreen');
-  /* Start WebXR first, then immediately enter wizard step 0 */
+  el('uiToggleBtn').classList.add('visible');   /* show UI toggle once in AR */
   if(navigator.xr){
     navigator.xr.isSessionSupported('immersive-ar')
       .then(function(ok){ ok?startWebXR():noXR(); }).catch(noXR);
@@ -1719,6 +1751,16 @@ el('launchBtn').addEventListener('click',function(){
   goStep(0);
 });
 function noXR(){el('hudHint').textContent='WebXR not supported \u2014 requires Android Chrome or compatible AR browser';}
+
+/* UI toggle — hide/show all panels except hudHint and step card */
+var uiVisible = true;
+el('uiToggleBtn').addEventListener('click',function(){
+  uiVisible = !uiVisible;
+  el('xrOverlay').classList.toggle('ui-hidden', !uiVisible);
+  this.classList.toggle('ui-off', !uiVisible);
+  this.textContent = uiVisible ? '\u2630' : '\u2715';
+  this.title = uiVisible ? 'Hide UI' : 'Show UI';
+});
 
 /* ═══════════════════════════════
    HUD CONTROLS
@@ -1774,6 +1816,11 @@ el('lockBtn').addEventListener('click',function(){
 el('exitBtn').addEventListener('click',function(){
   if(xrSession){try{xrSession.end();}catch(e){}xrSession=null;}
   if(gpsEnabled)stopGPS();
+  /* Reset UI toggle */
+  uiVisible=true;
+  el('xrOverlay').classList.remove('ui-hidden');
+  el('uiToggleBtn').classList.remove('visible','ui-off');
+  el('uiToggleBtn').textContent='\u2630';
   hide('arScreen'); show('landing','flex'); doReset();
 });
 
