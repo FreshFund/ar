@@ -607,8 +607,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
    (Place, Orient, Scan, Survey) so the full screen is never blocked. ── */
 #stepCard.peek-mode {
   justify-content:flex-end;
-  padding-bottom:28px;
-  background:linear-gradient(to top, rgba(4,5,15,.94) 0%, transparent 55%) !important;
+  padding-bottom:170px;
+  background:linear-gradient(to top, rgba(4,5,15,.94) 0%, transparent 60%) !important;
   pointer-events:none;   /* pass ALL touches through transparent top half */
 }
 /* Re-enable pointer events only on visible bottom content */
@@ -626,7 +626,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 /* Anchor mode strip — collapses card to bottom, shows status + done btn */
 #stepCard.anchor-mode {
   justify-content:flex-end;
-  padding-bottom:28px;
+  padding-bottom:170px;
   background:linear-gradient(to top, rgba(4,5,15,.92) 0%, rgba(4,5,15,.0) 60%) !important;
   pointer-events:none;
 }
@@ -875,7 +875,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
       </div>
       <div class="btn-row" id="normalBtns">
         <button class="hud-btn" id="alignBtn">&#x1F9ED; Align N</button>
-        <button class="hud-btn" id="lockBtn">&#x1F513; Unlock</button>
+        <button class="hud-btn g" id="lockBtn">&#x1F512; Locked</button>
         <button class="hud-btn b" id="traceBtn">&#x25CE; Anchor</button>
         <button class="hud-btn y" id="measureBtn">&#x1F4CF; Measure</button>
         <button class="hud-btn b" id="dropPinBtn" style="display:none;">&#x1F4CD; Pin</button>
@@ -1314,7 +1314,7 @@ function goStep(n){
      view is never fully blocked. The user sees the tip for ~0 ms then
      the card slides to a bottom strip (they can still see tips via the strip). */
   if(n === 4){
-    el('stepCard').className = 'show anchor-mode';
+    el('stepCard').className = 'show';
   } else if(s.peekMode){
     /* Show full card briefly so user reads the tips, then auto-collapse */
     el('stepCard').className = 'show';
@@ -1337,6 +1337,7 @@ function goStep(n){
 
 function dismissCard(){
   el('stepCard').className = '';
+  el('hud').style.display = '';
 }
 
 /* Collapse card to peek strip (gradient footer) without fully hiding it.
@@ -1613,7 +1614,8 @@ function onPlanPlaced(){
    ───────────────────────────────────────────────────────────────── */
 function stepOrientEnter(){
   xfLocked=false;
-  el('lockBtn').textContent='\uD83D\uDD13 Unlock';
+  el('hud').style.display='';
+  el('lockBtn').textContent='\uD83D\uDD13 Lock';
   el('lockBtn').className='hud-btn';
   el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when columns align';
 }
@@ -1806,7 +1808,7 @@ el('resetBtn').addEventListener('click', wizardReset);
 /* lockBtn — on step 5 (orient), locking advances to step 6 (pick) */
 el('lockBtn').addEventListener('click',function(){
   xfLocked=!xfLocked;
-  this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Unlock';
+  this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Lock';
   this.className=xfLocked?'hud-btn g':'hud-btn';
   el('hudHint').textContent=xfLocked?'Drawing locked \u2714':'Drag to reposition';
   if(xfLocked && currentStep===5){
@@ -1895,7 +1897,7 @@ function doReset(){
   hide('snapIndicator'); hide('driftBadge'); hide('planeBadge');
   hide('statusBar'); hide('pickOverlay');
   el('hudHint').textContent='Point camera at the ground';
-  el('lockBtn').textContent='\uD83D\uDD13 Unlock'; el('lockBtn').className='hud-btn';
+  el('lockBtn').textContent='\uD83D\uDD12 Locked'; el('lockBtn').className='hud-btn g';
 }
 
 /* ═══════════════════════════════
