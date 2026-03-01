@@ -2303,7 +2303,7 @@ el('zoomReset').addEventListener('click',function(){ resetVP(); });
   });
   window.addEventListener('mouseup',function(){
     mouseDragging=false;
-    el('pickViewport').style.cursor=pickMode==='ruler'?'crosshair':'crosshair';
+    el('pickViewport').style.cursor=pickMode==='ruler'?'crosshair':'grab';
   });
 })();
 
@@ -3637,13 +3637,11 @@ function startWebXR(){
     /* Update hold ring arc each frame */
     function updateHoldRing(frame){
       if(!holdTimer||!holdStartPos||!traceMode){ holdRing.visible=false; return; }
-      holdProgress=Math.min(1,(Date.now()-(Date.now()-HOLD_MS)-0)/HOLD_MS);
-      /* Simpler: derive from time elapsed since selectstart */
-      /* We'll track startTime on the holdStartPos object */
+      
       if(!holdStartPos._t) holdStartPos._t=Date.now();
       var elapsed=Date.now()-holdStartPos._t;
-      var frac=Math.min(1,elapsed/HOLD_MS);
-      var nPts=Math.max(2,Math.round(frac*64));
+      holdProgress=Math.min(1,elapsed/HOLD_MS);
+      var nPts=Math.max(2,Math.round(holdProgress*64));
       var pts2=[];
       for(var hi=0;hi<=nPts;hi++) pts2.push(holdRingPts[Math.min(hi,63)]);
       holdRingGeo.setFromPoints(pts2);
@@ -3651,7 +3649,7 @@ function startWebXR(){
       holdRing.position.set(holdStartPos.x,holdStartPos.y,holdStartPos.z);
       holdRing.visible=true;
       /* Flash green when complete */
-      holdRingMat.color.setHex(frac>=1?0xffffff:0x2be87a);
+      holdRingMat.color.setHex(holdProgress>=1?0xffffff:0x2be87a);
     }
 
     /* Touch pan / pinch */
