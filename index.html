@@ -2146,6 +2146,7 @@ var vpScale=1, vpOx=0, vpOy=0;
 var vpDragStart=null, vpDragOrigin=null;
 var vpPinchDist0=null, vpPinchScale0=null, vpPinchMid=null;
 var pickMode='anchor'; /* 'anchor' | 'ruler' */
+var pickHoldTimer=null, pickHoldPos=null;  /* shared so closePickOverlay can always cancel */
 
 /* Ruler state (shared with ruler drawing on the canvas) */
 var rulerP1=null, rulerP2=null;
@@ -2303,7 +2304,7 @@ el('zoomReset').addEventListener('click',function(){ resetVP(); });
   });
   window.addEventListener('mouseup',function(){
     mouseDragging=false;
-    el('pickViewport').style.cursor=pickMode==='ruler'?'crosshair':'crosshair';
+    el('pickViewport').style.cursor=pickMode==='ruler'?'crosshair':'grab';
   });
 })();
 
@@ -2454,7 +2455,12 @@ function updateMeasureLabel(worldA, worldB){
 }
 
 el('measureBtn').addEventListener('click',function(){
-  if(!wxrPlaced&&!wxrFloorFound){el('hudHint').textContent='Place the plan first';return;}
+  if(!wxrPlaced){
+    el('hudHint').textContent=wxrFloorFound
+      ?'Place the plan before measuring'
+      :'Point camera at the ground first';
+    return;
+  }
   enterMeasureMode();
 });
 el('measureClearBtn').addEventListener('click',function(){
@@ -2865,8 +2871,6 @@ function openPickOverlay(){
 
   /* Hold-to-place on PDF canvas — press and hold 500ms to commit a column pick */
   var PICK_HOLD_MS = 500;
-  var pickHoldTimer=null, pickHoldPos=null;
-  var pickHoldIndicator=null;  /* a small SVG ring shown during hold */
 
   function getOrCreateHoldIndicator(){
     var svg=el('pickViewport').querySelector('#holdIndicatorSvg');
@@ -2907,6 +2911,7 @@ function openPickOverlay(){
   }
 
   function commitPickAt(vpx,vpy){
+    if(!el('pickOverlay').classList.contains('show')) return;
     if(pickMode!=='anchor') return;
     if(uvPicks.length>=corners.length) return;
     var cx=(vpx-vpOx)/vpScale;
@@ -2973,11 +2978,19 @@ function openPickOverlay(){
   };
   vp.onmousedown=function(e){
     if(e.target.closest('.zoom-btn')) return;
+    vp._mouseStart={x:e.clientX,y:e.clientY};
     var r=vp.getBoundingClientRect();
     startPickHold(e.clientX-r.left,e.clientY-r.top);
   };
-  vp.onmouseup=function(){ hidePickHold(); };
-  vp.onmouseleave=function(){ hidePickHold(); };
+  vp.onmousemove=function(e){
+    var ms=vp._mouseStart;
+    if(ms&&pickHoldTimer){
+      var dx=e.clientX-ms.x, dy=e.clientY-ms.y;
+      if(Math.sqrt(dx*dx+dy*dy)>8) hidePickHold(); /* cancel hold while panning */
+    }
+  };
+  vp.onmouseup=function(){ hidePickHold(); vp._mouseStart=null; };
+  vp.onmouseleave=function(){ hidePickHold(); vp._mouseStart=null; };
 }
 
 el('pickUndoBtn').addEventListener('click',function(){
@@ -3011,7 +3024,11 @@ el('pickConfirmBtn').addEventListener('click',function(){
 });
 function closePickOverlay(){
   var vp=el('pickViewport');
-  vp.onclick=null; vp.ontouchstart=null; vp.ontouchend=null;
+  vp.onclick=null; vp.ontouchstart=null; vp.ontouchend=null; vp.onmousemove=null; vp.onmousedown=null; vp.onmouseup=null; vp.onmouseleave=null; vp._mouseStart=null;
+  if(pickHoldTimer){ clearInterval(pickHoldTimer); pickHoldTimer=null; }
+  pickHoldPos=null;
+  var holdSvg=vp.querySelector('#holdIndicatorSvg');
+  if(holdSvg) holdSvg.style.display='none';
   el('pickOverlay').classList.remove('show');
   rulerMode=false; rulerP1=null; rulerP2=null;
 }
@@ -3462,6 +3479,7 @@ function startWebXR(){
     /* Hold-to-place state for anchor mode */
     var holdTimer=null, holdStartPos=null, holdProgress=0;
     var HOLD_MS=600;  /* ms to hold before anchor commits */
+    var suppressSelectUntil=0; /* ignore follow-up select after selectend */
 
     /* Reticle hold-ring overlay — drawn in xrFrame */
     var holdRingMat=new THREE.LineBasicMaterial({color:0x2be87a,linewidth:2});
@@ -3555,6 +3573,7 @@ function startWebXR(){
 
     /* SELECT end — commit immediately if held long enough, else cancel */
     session.addEventListener('selectend',function(){
+      suppressSelectUntil=Date.now()+220;
       if(!holdStartPos){ holdRing.visible=false; return; }
       var held = Date.now() - (holdStartPos._t||0);
       if(held >= HOLD_MS * 0.8){
@@ -3605,10 +3624,11 @@ function startWebXR(){
         return;
       }
 
-      /* ANCHOR MODE — instant tap places an anchor; hold also works via selectend */
+      /* ANCHOR MODE — use hold-to-place where selectstart/selectend are available.
+         Fallback to instant commit on runtimes that only emit select. */
       if(traceMode){
+        if(Date.now()<suppressSelectUntil) return;
         var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
-        /* Cancel any pending hold timer to avoid double-commit */
         if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
         holdStartPos=null; holdProgress=0; holdRing.visible=false;
         commitAnchor(fp.x,fp.y,fp.z,!!currentSnap);
@@ -3632,13 +3652,11 @@ function startWebXR(){
     /* Update hold ring arc each frame */
     function updateHoldRing(frame){
       if(!holdTimer||!holdStartPos||!traceMode){ holdRing.visible=false; return; }
-      holdProgress=Math.min(1,(Date.now()-(Date.now()-HOLD_MS)-0)/HOLD_MS);
-      /* Simpler: derive from time elapsed since selectstart */
-      /* We'll track startTime on the holdStartPos object */
+      
       if(!holdStartPos._t) holdStartPos._t=Date.now();
       var elapsed=Date.now()-holdStartPos._t;
-      var frac=Math.min(1,elapsed/HOLD_MS);
-      var nPts=Math.max(2,Math.round(frac*64));
+      holdProgress=Math.min(1,elapsed/HOLD_MS);
+      var nPts=Math.max(2,Math.round(holdProgress*64));
       var pts2=[];
       for(var hi=0;hi<=nPts;hi++) pts2.push(holdRingPts[Math.min(hi,63)]);
       holdRingGeo.setFromPoints(pts2);
@@ -3646,7 +3664,7 @@ function startWebXR(){
       holdRing.position.set(holdStartPos.x,holdStartPos.y,holdStartPos.z);
       holdRing.visible=true;
       /* Flash green when complete */
-      holdRingMat.color.setHex(frac>=1?0xffffff:0x2be87a);
+      holdRingMat.color.setHex(holdProgress>=1?0xffffff:0x2be87a);
     }
 
     /* Touch pan / pinch */
