@@ -3557,6 +3557,7 @@ function startWebXR(){
     session.addEventListener('selectstart',function(){
       if(!reticle.visible)return;
       if(!traceMode) return;
+      if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }  /* avoid stacked timers */
 
       holdStartPos = currentSnap
         ? {x:currentSnap.x, y:currentSnap.y, z:currentSnap.z, wasSnapped:true, _t:Date.now()}
