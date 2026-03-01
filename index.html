@@ -2978,11 +2978,19 @@ function openPickOverlay(){
   };
   vp.onmousedown=function(e){
     if(e.target.closest('.zoom-btn')) return;
+    vp._mouseStart={x:e.clientX,y:e.clientY};
     var r=vp.getBoundingClientRect();
     startPickHold(e.clientX-r.left,e.clientY-r.top);
   };
-  vp.onmouseup=function(){ hidePickHold(); };
-  vp.onmouseleave=function(){ hidePickHold(); };
+  vp.onmousemove=function(e){
+    var ms=vp._mouseStart;
+    if(ms&&pickHoldTimer){
+      var dx=e.clientX-ms.x, dy=e.clientY-ms.y;
+      if(Math.sqrt(dx*dx+dy*dy)>8) hidePickHold(); /* cancel hold while panning */
+    }
+  };
+  vp.onmouseup=function(){ hidePickHold(); vp._mouseStart=null; };
+  vp.onmouseleave=function(){ hidePickHold(); vp._mouseStart=null; };
 }
 
 el('pickUndoBtn').addEventListener('click',function(){
@@ -3016,7 +3024,7 @@ el('pickConfirmBtn').addEventListener('click',function(){
 });
 function closePickOverlay(){
   var vp=el('pickViewport');
-  vp.onclick=null; vp.ontouchstart=null; vp.ontouchend=null;
+  vp.onclick=null; vp.ontouchstart=null; vp.ontouchend=null; vp.onmousemove=null; vp.onmousedown=null; vp.onmouseup=null; vp.onmouseleave=null; vp._mouseStart=null;
   el('pickOverlay').classList.remove('show');
   rulerMode=false; rulerP1=null; rulerP2=null;
 }
