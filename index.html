@@ -3024,7 +3024,7 @@ el('pickConfirmBtn').addEventListener('click',function(){
 });
 function closePickOverlay(){
   var vp=el('pickViewport');
-  vp.onclick=null; vp.ontouchstart=null; vp.ontouchend=null; vp.onmousemove=null; vp.onmousedown=null; vp.onmouseup=null; vp.onmouseleave=null; vp._mouseStart=null;
+  vp.onclick=null; vp.ontouchstart=null; vp.ontouchmove=null; vp.ontouchend=null; vp.onmousemove=null; vp.onmousedown=null; vp.onmouseup=null; vp.onmouseleave=null; vp._mouseStart=null; vp._tapStart=null;
   if(pickHoldTimer){ clearInterval(pickHoldTimer); pickHoldTimer=null; }
   pickHoldPos=null;
   var holdSvg=vp.querySelector('#holdIndicatorSvg');
