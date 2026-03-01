@@ -2454,7 +2454,12 @@ function updateMeasureLabel(worldA, worldB){
 }
 
 el('measureBtn').addEventListener('click',function(){
-  if(!wxrPlaced&&!wxrFloorFound){el('hudHint').textContent='Place the plan first';return;}
+  if(!wxrPlaced){
+    el('hudHint').textContent=wxrFloorFound
+      ?'Place the plan before measuring'
+      :'Point camera at the ground first';
+    return;
+  }
   enterMeasureMode();
 });
 el('measureClearBtn').addEventListener('click',function(){
