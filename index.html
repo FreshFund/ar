@@ -3467,6 +3467,7 @@ function startWebXR(){
     /* Hold-to-place state for anchor mode */
     var holdTimer=null, holdStartPos=null, holdProgress=0;
     var HOLD_MS=600;  /* ms to hold before anchor commits */
+    var suppressSelectUntil=0; /* ignore follow-up select after selectend */
 
     /* Reticle hold-ring overlay — drawn in xrFrame */
     var holdRingMat=new THREE.LineBasicMaterial({color:0x2be87a,linewidth:2});
@@ -3560,6 +3561,7 @@ function startWebXR(){
 
     /* SELECT end — commit immediately if held long enough, else cancel */
     session.addEventListener('selectend',function(){
+      suppressSelectUntil=Date.now()+220;
       if(!holdStartPos){ holdRing.visible=false; return; }
       var held = Date.now() - (holdStartPos._t||0);
       if(held >= HOLD_MS * 0.8){
@@ -3610,10 +3612,11 @@ function startWebXR(){
         return;
       }
 
-      /* ANCHOR MODE — instant tap places an anchor; hold also works via selectend */
+      /* ANCHOR MODE — use hold-to-place where selectstart/selectend are available.
+         Fallback to instant commit on runtimes that only emit select. */
       if(traceMode){
+        if(Date.now()<suppressSelectUntil) return;
         var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
-        /* Cancel any pending hold timer to avoid double-commit */
         if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
         holdStartPos=null; holdProgress=0; holdRing.visible=false;
         commitAnchor(fp.x,fp.y,fp.z,!!currentSnap);
