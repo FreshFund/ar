@@ -195,18 +195,37 @@ input[type=range] { -webkit-appearance:none; width:96px; height:2px; background:
 input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer; }
 .btn-row { display:flex; gap:6px; pointer-events:all; flex-wrap:wrap; justify-content:center; }
 .hud-btn {
-  background:rgba(8,8,16,.82); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-  border:1px solid rgba(255,255,255,.14); color:#fff;
-  padding:9px 13px; font-family:var(--mono); font-size:10px;
-  letter-spacing:.11em; text-transform:uppercase; cursor:pointer;
-  border-radius:2px; transition:background .15s, border-color .15s, color .15s;
+  background:rgba(8,8,16,.85); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,.18); color:#fff;
+  padding:11px 16px; font-family:var(--mono); font-size:11px; min-height:44px;
+  letter-spacing:.1em; text-transform:uppercase; cursor:pointer;
+  border-radius:4px; transition:background .15s, border-color .15s, color .15s;
+  -webkit-user-select:none; user-select:none;
 }
 .hud-btn:active { transform:scale(.95); }
 .hud-btn:hover  { background:rgba(232,79,43,.18); border-color:var(--accent); }
 .hud-btn.g  { background:rgba(43,232,122,.16); border-color:var(--green); color:var(--green); }
 .hud-btn.b  { background:rgba(77,166,255,.16); border-color:var(--blue); color:var(--blue); }
 .hud-btn.y  { background:rgba(240,208,96,.16); border-color:var(--yellow); color:var(--yellow); }
-.hud-btn.r  { border-color:rgba(232,79,43,.4); }
+.hud-btn.r  { border-color:rgba(232,79,43,.5); color:rgba(232,79,43,.8); }
+.hud-btn:disabled { opacity:.35; cursor:not-allowed; }
+
+/* ── ACTION BAR — top-centre, replaces bottom buttons during active modes ── */
+/* Keeps bottom of screen clear so WebXR tap-to-place events reach the floor */
+#actionBar {
+  position:absolute; top:52px; left:50%; transform:translateX(-50%);
+  display:none; flex-direction:row; align-items:center; gap:8px;
+  z-index:320; pointer-events:none; white-space:nowrap;
+}
+#actionBar.show { display:flex; }
+#actionBar .hud-btn { pointer-events:all; font-size:12px; padding:12px 20px; min-height:48px; }
+#actionBarStatus {
+  font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+  color:rgba(255,255,255,.9); background:rgba(0,0,0,.78);
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  padding:7px 16px; border-radius:100px; border:1px solid rgba(255,255,255,.15);
+  pointer-events:none; white-space:nowrap;
+}
 
 /* Badges — inside xrOverlay */
 #scanRing { display:none; position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); pointer-events:none; }
@@ -239,7 +258,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   background:rgba(240,208,96,.08); border:1px solid var(--yellow); color:var(--yellow);
 }
 #toast {
-  display:none; position:absolute; top:54px; left:50%; transform:translateX(-50%);
+  display:none; position:absolute; top:110px; left:50%; transform:translateX(-50%);
   background:rgba(0,0,0,.86); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
   border:1px solid rgba(255,255,255,.1); padding:9px 22px;
   font-size:11px; letter-spacing:.11em; color:#fff; border-radius:100px; white-space:nowrap;
@@ -602,44 +621,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   font-size:10px; letter-spacing:.18em; padding:10px 24px;
 }
 
-/* ── Peek / collapsible mode — card collapses to bottom strip.
-   Used for steps where the action happens in the camera view
-   (Place, Orient, Scan, Survey) so the full screen is never blocked. ── */
-#stepCard.peek-mode {
-  justify-content:flex-end;
-  padding-bottom:170px;
-  background:linear-gradient(to top, rgba(4,5,15,.94) 0%, transparent 60%) !important;
-  pointer-events:none;   /* pass ALL touches through transparent top half */
-}
-/* Re-enable pointer events only on visible bottom content */
-#stepCard.peek-mode .sc-step,
-#stepCard.peek-mode .sc-status { pointer-events:all; }
-
-#stepCard.peek-mode .sc-icon,
-#stepCard.peek-mode .sc-title,
-#stepCard.peek-mode .sc-sub,
-#stepCard.peek-mode .sc-dots,
-#stepCard.peek-mode #scTips,
-#stepCard.peek-mode .sc-btn,
-#stepCard.peek-mode #scDismiss { display:none !important; }
-
-/* Anchor mode strip — collapses card to bottom, shows status + done btn */
-#stepCard.anchor-mode {
-  justify-content:flex-end;
-  padding-bottom:170px;
-  background:linear-gradient(to top, rgba(4,5,15,.92) 0%, rgba(4,5,15,.0) 60%) !important;
-  pointer-events:none;
-}
-#stepCard.anchor-mode .sc-step,
-#stepCard.anchor-mode .sc-status,
-#stepCard.anchor-mode .sc-btn,
-#stepCard.anchor-mode #scAnchorBtns { pointer-events:all; }
-#stepCard.anchor-mode .sc-icon,
-#stepCard.anchor-mode .sc-title,
-#stepCard.anchor-mode .sc-sub,
-#stepCard.anchor-mode .sc-dots,
-#stepCard.anchor-mode #scTips,
-#stepCard.anchor-mode #scDismiss    { display:none !important; }
+/* peek-mode / anchor-mode: card is fully dismissed during active floor-interaction.
+   These classes are kept as no-ops so legacy references don't crash. */
+#stepCard.peek-mode { display:none !important; }
+#stepCard.anchor-mode { display:none !important; }
 
 /* Step-dots nav */
 .sc-dots {
@@ -750,6 +735,11 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
       <div class="sc-dot-s" data-s="6"></div>
       <div class="sc-dot-s" data-s="7"></div>
     </div>
+  </div>
+
+  <!-- ── ACTION BAR — top-centre during anchor/survey modes ── -->
+  <div id="actionBar">
+    <span id="actionBarStatus"></span>
   </div>
 
   <!-- ── GPS / COMPASS PANEL (top-left) ── -->
@@ -951,6 +941,7 @@ function delaunay(pts) {
 var pdfDoc=null, currentPage=1, pdfCanvas=null;
 var xfOpacity=0.82, xfRotY=0.0, xfScaleM=1.0, xfLocked=true;
 var traceMode=false, MAX_CORNERS=10;
+var surveyActive=false;   /* true after "Start Surveying" tapped — allows floor-tap pins */
 var corners=[];   // {worldPos:{x,y,z}, anchor:XRAnchor|null}
 var uvPicks=[];   // {u,v}  — plan UV coords for each column
 var boundMesh=null, solveCount=0;
@@ -1304,25 +1295,13 @@ function goStep(n){
     d.className = 'sc-dot-s' + (i===n?' active':i<n?' done':'');
   });
 
-  /* ── HUD visibility ──
-     Hide by default when showing full info card.
-     Each step's enter function or enterSurveyMode/peekCard reveals it. */
+  /* ── HUD hidden while full info card is showing.
+     Step enter functions reveal HUD when needed. ── */
   el('hud').style.display = 'none';
+  hideActionBar();
 
-  /* ── Card class & initial peek state ──
-     Peek-mode steps collapse immediately after rendering so the camera
-     view is never fully blocked. The user sees the tip for ~0 ms then
-     the card slides to a bottom strip (they can still see tips via the strip). */
-  if(n === 4){
-    el('stepCard').className = 'show';
-  } else if(s.peekMode){
-    /* Show full card briefly so user reads the tips, then auto-collapse */
-    el('stepCard').className = 'show';
-    /* Re-show dismiss for peek steps so user can manually collapse too */
-    dismiss.className='show';
-  } else {
-    el('stepCard').className = 'show';
-  }
+  /* All steps just show the full card */
+  el('stepCard').className = 'show';
 
   /* ── Step-specific enter hooks ── */
   if(n===0) stepSensorsEnter();
@@ -1340,49 +1319,38 @@ function dismissCard(){
   el('hud').style.display = '';
 }
 
-/* Collapse card to peek strip (gradient footer) without fully hiding it.
-   Also reveals the HUD — peek steps always need HUD controls accessible. */
-function peekCard(){
-  el('stepCard').className = 'show peek-mode';
-  el('hud').style.display = '';
-}
+/* peekCard kept as alias for dismissCard — peek-mode strips removed */
+function peekCard(){ dismissCard(); }
 
 /* ── scBtn click routing ── */
 el('scBtn').addEventListener('click', function(){
   if(currentStep===0){
-    goStep(1);                          /* sensors → GPS survey          */
+    goStep(1);
   } else if(currentStep===1){
-    enterSurveyMode();                  /* collapse card, show survey HUD */
+    enterSurveyMode();
   } else if(currentStep===2){
     if(el('scBtn').dataset.surfaceReady==='1'){
-      goStep(3);                        /* surface found → anchors       */
+      goStep(3);
     } else {
-      peekCard();
-      el('hudHint').textContent='Sweep camera across floor and walls';
+      dismissCard();
+      el('hud').style.display='';
+      showBtns('normal'); updateNormalBtnsForStep(2);
+      el('hudHint').textContent='Sweep camera across floor and walls to map surfaces';
     }
   } else if(currentStep===3){
-    var inStrip = el('stepCard').className.indexOf('anchor-mode')!==-1;
-    if(inStrip){
-      /* "Anchors Done" — advance to Place step */
-      if(corners.length>=2){
-        traceMode=false;
-        hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
-        showBtns('normal');
-        goStep(4);
-      }
-    } else {
-      enterAnchorMode();                /* collapse info card, start anchoring */
-    }
+    enterAnchorMode();
   } else if(currentStep===4){
-    peekCard();                         /* "Got it" → collapse, tap floor */
-    el('hudHint').textContent='Point camera at ground \u2022 tap to place drawing';
+    dismissCard();
+    el('hudHint').textContent='Point camera at floor \u2022 tap reticle to place drawing';
   } else if(currentStep===5){
-    peekCard();                         /* "Got it" → collapse, align freely */
+    dismissCard();
+    el('hud').style.display='';
+    showBtns('normal'); updateNormalBtnsForStep(5);
     el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when columns align';
   } else if(currentStep===6){
-    dismissCard(); openPickOverlay();   /* open picker */
+    dismissCard(); openPickOverlay();
   } else if(currentStep===7){
-    dismissCard();                      /* close bound card */
+    dismissCard();
   }
 });
 
@@ -1434,37 +1402,63 @@ function stepGpsSurveyEnter(){
 }
 
 function enterSurveyMode(){
-  /* Collapse card, swap HUD to survey buttons */
-  peekCard();
+  surveyActive=true;
+  dismissCard();
   el('hud').style.display='';
-  showBtns('survey');
-  el('hudHint').textContent='Walk to a site point \u2022 tap Drop Pin \u2022 need 3+';
+  showBtns(null); hideSlider();
+  showActionBar('0 pts surveyed', [
+    {id:'ab-sv-undo', label:'\u21B6 Undo', cls:'', action: function(){
+      if(waypoints.length===0) return;
+      var wp=waypoints.pop();
+      if(wp.dot && scene) scene.remove(wp.dot);
+      if(wp.labelEl) wp.labelEl.remove();
+      renderMiniMap(); updateGpsSurveyCard();
+    }},
+    {id:'ab-sv-pin', label:'\uD83D\uDCCD Pin', cls:'b', action: function(){
+      if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to pin'; return; }
+      var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
+      dropSurveyPin(rx,ry,rz);
+    }},
+    {id:'ab-sv-done', label:'\u2713 Done', cls:'g', disabled:true, action: function(){
+      if(waypoints.length<3){ el('hudHint').textContent='Need at least 3 survey points'; return; }
+      surveyActive=false;
+      hideActionBar(); showSlider();
+      showBtns('normal'); updateNormalBtnsForStep(currentStep);
+      goStep(2);
+    }}
+  ]);
+  el('hudHint').textContent='Walk to site point \u2022 tap floor to drop pin \u2022 need 3+';
 }
 
 function updateGpsSurveyCard(){
   if(currentStep!==1)return;
   var n=waypoints.length;
-  /* Status dot in peek strip */
-  el('scDot').className='sc-dot'+(n===0?'':n<3?' yellow':' green');
-  el('scStatusMain').textContent=n+' survey point'+(n!==1?'s':'')+' dropped';
-  el('scStatusSub').textContent=n<3?(3-n)+' more needed — spread across site':'ready — tap Done or add more';
-  /* Done button in the survey HUD row */
-  var doneBtn=el('surveyDoneBtn');
-  doneBtn.disabled=n<3;
-  doneBtn.style.opacity=n>=3?'1':'0.4';
+  var status=n+' point'+(n!==1?'s':'')+' surveyed';
+  if(n<3) status+=' \u2022 '+(3-n)+' more needed';
+  else status+=' \u2022 tap Done or add more';
+  el('actionBarStatus').textContent=status;
+  el('hudHint').textContent=status;
+  var abDone=document.getElementById('ab-sv-done');
+  if(abDone){ abDone.disabled=n<3; abDone.style.opacity=n>=3?'1':'0.4'; }
 }
 
-el('surveyUndoBtn').addEventListener('click',function(){
-  if(waypoints.length===0) return;
-  var wp=waypoints.pop();
-  if(wp.dot) scene.remove(wp.dot);
-  if(wp.labelEl) wp.labelEl.remove();
-  el('hudHint').textContent=waypoints.length+' point'+(waypoints.length!==1?'s':'')+' \u2014 '+(waypoints.length<3?(3-waypoints.length)+' more needed':'tap Done when ready');
-  renderMiniMap();
-  updateGpsSurveyCard();
+/* surveyUndoBtn and surveyDoneBtn are now wired via the actionBar in enterSurveyMode.
+   Keep these listeners as no-ops so the HTML button elements don't error. */
+el('surveyUndoBtn').addEventListener('click',function(){});
+
+el('surveyPinBtn').addEventListener('click',function(){
+  if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
+  var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
+  dropSurveyPin(rx,ry,rz);
 });
-/* Shared function — drop a survey pin at a given XR world position.
-   Called from both the Pin button and the select tap-to-pin handler.  */
+
+el('surveyDoneBtn').addEventListener('click',function(){
+  if(waypoints.length<3){
+    el('hudHint').textContent='Need at least 3 survey points'; return;
+  }
+  showBtns('normal');
+  goStep(2);   /* survey complete → scan */
+});
 function dropSurveyPin(rx,ry,rz){
   if(gpsLat==null){ el('hudHint').textContent='No GPS fix yet \u2014 wait for signal'; return; }
   if(gpsAcc>30){ el('hudHint').textContent='GPS \u00b1'+Math.round(gpsAcc)+'m \u2014 move to open sky'; return; }
@@ -1508,10 +1502,10 @@ var scanPlaneCount=0;
 var SCAN_PLANE_GATE=3;
 
 function stepScanEnter(){
-  el('scDot').className='sc-dot yellow';
-  el('scStatusMain').textContent='Scanning…';
-  el('scStatusSub').textContent='Sweep camera slowly across the floor';
-  el('hud').style.display='none';
+  el('hud').style.display='';
+  showBtns('normal'); updateNormalBtnsForStep(2);
+  hideSlider();
+  el('hudHint').textContent='Sweep camera slowly across floor and up the walls';
 }
 
 function updateScanCard(){
@@ -1526,27 +1520,17 @@ function updateScanCard(){
     }
   });
   if(!anySurface){
-    el('scDot').className='sc-dot';
-    el('scStatusMain').textContent='Scanning…';
-    el('scStatusSub').textContent='Sweep camera slowly across the floor';
-    el('scBtn').textContent='Start Scanning →';
-    el('scBtn').disabled=false;
+    el('hudHint').textContent='Sweep camera slowly across floor and walls';
     return;
   }
-  var dotCls=planeCount===0?' yellow':planeCount<SCAN_PLANE_GATE?' yellow':' green';
-  el('scDot').className='sc-dot'+dotCls;
   if(planeCount>0){
-    el('scStatusMain').textContent=planeCount+' surface'+(planeCount!==1?'s':'')+' mapped';
-    el('scStatusSub').textContent=floors+' floor'+(floors!==1?'s':'')+' · '+walls+' wall'+(walls!==1?'s':'');
+    el('hudHint').textContent=planeCount+' surface'+(planeCount!==1?'s':'')+' mapped \u2022 '+floors+' floor \u00b7 '+walls+' wall \u2014 tap Next when ready';
   } else {
-    el('scStatusMain').textContent='Floor surface detected';
-    el('scStatusSub').textContent='Tilt up to scan walls and column faces';
+    el('hudHint').textContent='Floor detected \u2022 tilt up to scan walls and column faces';
   }
-  el('scBtn').textContent='Anchor Columns →';
+  el('scBtn').textContent='Anchor Columns \u2192';
   el('scBtn').disabled=false;
   el('scBtn').dataset.surfaceReady='1';
-  /* Auto-advance if already in peek strip */
-  if(el('stepCard').className.indexOf('peek-mode')!==-1) goStep(3);
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -1554,42 +1538,33 @@ function updateScanCard(){
    Anchor-mode strip. Minimum 2 (ideally 4+).
    ───────────────────────────────────────────────────────────────── */
 function stepAnchorEnter(){
-  /* Don't start trace mode yet — wait for "Place Anchors" button.
-     Status row and anchor buttons are set up here but hidden until
-     the card collapses to the anchor strip.                        */
   el('scAnchorBtns').style.display='none';
-  el('hudHint').textContent='Read the tips, then tap Place Anchors';
+  el('scBtn').textContent='Place Anchors \u2192';
+  el('scBtn').disabled=false;
 }
 
 function enterAnchorMode(){
-  el('stepCard').className='show anchor-mode';
-  el('hud').style.display='';
-  el('normalBtns').style.display='none';   /* hide crowded normal buttons */
-  el('scStatus').style.display='flex';
-  el('scDot').className='sc-dot yellow';
-  el('scStatusMain').textContent='0 columns anchored';
-  el('scStatusSub').textContent='tap on a column base to anchor';
-  el('scBtn').disabled=true;
-  el('scBtn').textContent='Anchors Done →';
-  el('scAnchorBtns').style.display='flex';
+  /* enterTraceMode handles card dismiss + actionBar + HUD setup */
   enterTraceMode();
+  /* Override status to reflect wizard step 3 context */
+  updateAnchorCard();
 }
 
+/* scAnchorUndo / Restart now wired via actionBar in enterTraceMode */
 el('scAnchorUndo').addEventListener('click',undoCorner);
 el('scAnchorRestart').addEventListener('click',function(){
   corners=[]; uvPicks=[]; clearWireVisuals();
   updateCornerBadge();
-  el('hudHint').textContent='Walk to each column base \u2022 hold to anchor';
+  el('hudHint').textContent='Walk to each column base \u2022 tap floor to anchor';
 });
 
 function updateAnchorCard(){
   if(currentStep!==3)return;
   var n=corners.length;
-  el('scDot').className='sc-dot'+(n>=2?' green':' yellow');
-  el('scStatusMain').textContent=n+' column'+(n!==1?'s':'')+' anchored';
-  el('scStatusSub').textContent=n<2?(2-n)+' more needed':n<4?'good — add more for accuracy':'tap Done';
-  el('scBtn').disabled=n<2;
-  if(n>=2) el('scBtn').textContent='Anchors Done →';
+  /* Card is dismissed in anchor mode — update hudHint instead */
+  if(n>=2){
+    el('hudHint').textContent=n+' anchors placed \u2714 \u2022 tap Done or add more';
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -1601,7 +1576,9 @@ function stepPlaceEnter(){
   el('stepCard').style.background='';
   el('scAnchorBtns').style.display='none';
   el('hud').style.display='';
-  el('hudHint').textContent='Point camera at the floor and tap to place drawing';
+  showBtns('normal'); updateNormalBtnsForStep(4);
+  hideSlider();
+  el('hudHint').textContent='Point camera at floor \u2022 tap reticle to place drawing';
 }
 
 function onPlanPlaced(){
@@ -1615,6 +1592,8 @@ function onPlanPlaced(){
 function stepOrientEnter(){
   xfLocked=false;
   el('hud').style.display='';
+  showSlider();
+  showBtns('normal'); updateNormalBtnsForStep(5);
   el('lockBtn').textContent='\uD83D\uDD13 Lock';
   el('lockBtn').className='hud-btn';
   el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when columns align';
@@ -1629,6 +1608,8 @@ function stepPickEnter(){
   el('stepCard').style.background='';
   el('scAnchorBtns').style.display='none';
   el('hud').style.display='';
+  showBtns('normal'); updateNormalBtnsForStep(6);
+  showSlider();
 }
 
 function onPlanBound(){ goStep(7); }
@@ -1641,10 +1622,12 @@ var readyToastFired=false;
 
 function stepBoundEnter(){
   el('hud').style.display='';
+  showSlider();
   el('stepCard').style.background='';
   el('scDot').className='sc-dot green';
   el('scStatusMain').textContent=corners.length+' column anchors';
   el('scStatusSub').textContent='all sensors active · plan rigid-locked';
+  showBtns('normal'); updateNormalBtnsForStep(7);
   readyToastFired=false;
 }
 
@@ -1671,13 +1654,17 @@ function wizardReset(){
   scanPlaneCount=0;
   readyToastFired=false;
   wxrFloorFound=false;
+  surveyActive=false;
+  hideActionBar();
   el('scBtn').dataset.surfaceReady='';
   el('stepBar').style.display='none';
   el('stepBarFill').style.width='0%';
   el('stepCard').style.background='';
   el('stepCard').classList.remove('anchor-mode');
   el('stepCard').className='';
-  showBtns('normal');   /* ensure survey/trace btns hidden on reset */
+  showBtns('normal');
+  showSlider();
+  updateNormalBtnsForStep(-1);
 }
 
 
@@ -1686,14 +1673,57 @@ function show(id,d){ el(id).style.display=d||'block'; }
 function hide(id){ el(id).style.display='none'; }
 function showBtns(which){
   el('normalBtns').style.display  = which==='normal'?'flex':'none';
-  el('traceBtns').style.display   = which==='trace'?'flex':'none';
+  el('traceBtns').style.display   = 'none'; /* trace btns now always in actionBar */
   el('measureBtns').style.display = which==='measure'?'flex':'none';
-  el('surveyBtns').style.display  = which==='survey'?'flex':'none';
+  el('surveyBtns').style.display  = 'none'; /* survey btns now always in actionBar */
 }
 function showToast(msg,dur){
   el('toast').textContent=msg; show('toast');
   clearTimeout(showToast._t);
   showToast._t=setTimeout(function(){hide('toast');},dur||2600);
+}
+
+/* ── Action bar helpers ─────────────────────────────────────────────────────
+   During anchor/survey/scan modes the full bottom of screen must be free for
+   WebXR floor-tap events.  We park action buttons in a top bar instead.     */
+function showActionBar(statusText, btns){
+  var bar=el('actionBar');
+  /* Remove old dynamic buttons (keep #actionBarStatus span) */
+  Array.prototype.slice.call(bar.children).forEach(function(c){
+    if(c.id!=='actionBarStatus') bar.removeChild(c);
+  });
+  el('actionBarStatus').textContent=statusText;
+  btns.forEach(function(b){
+    var btn=document.createElement('button');
+    btn.className='hud-btn'+(b.cls?' '+b.cls:'');
+    btn.id=b.id||'';
+    btn.textContent=b.label;
+    if(b.disabled){ btn.disabled=true; btn.style.opacity='0.4'; }
+    btn.addEventListener('click', b.action);
+    bar.appendChild(btn);
+  });
+  bar.classList.add('show');
+}
+function hideActionBar(){
+  var bar=el('actionBar');
+  bar.classList.remove('show');
+  Array.prototype.slice.call(bar.children).forEach(function(c){
+    if(c.id!=='actionBarStatus') bar.removeChild(c);
+  });
+  el('actionBarStatus').textContent='';
+}
+function hideSlider(){ var r=el('hud').querySelector('.slider-row'); if(r)r.style.display='none'; }
+function showSlider(){ var r=el('hud').querySelector('.slider-row'); if(r)r.style.display=''; }
+/* Show only the subset of normalBtns that make sense at this step */
+function updateNormalBtnsForStep(step){
+  el('alignBtn').style.display    = (step>=5||step===-1)?'':'none';
+  el('lockBtn').style.display     = (step>=5||step===-1)?'':'none';
+  el('traceBtn').style.display    = (step>=7||step===-1)?'':'none';
+  el('measureBtn').style.display  = (step>=7||step===-1)?'':'none';
+  el('gpsToggleBtn').style.display= (step===0||step>=7||step===-1)?'':'none';
+  el('dropPinBtn').style.display  = 'none'; /* controlled by GPS only */
+  el('resetBtn').style.display    = '';
+  el('exitBtn').style.display     = '';
 }
 
 /* ═══════════════════════════════
@@ -1794,15 +1824,8 @@ el('traceBtn').addEventListener('click',function(){
   if(!wxrFloorFound&&!wxrPlaced){el('hudHint').textContent='Point camera at the ground first';return;}
   enterTraceMode();
 });
-el('traceUndoBtn').addEventListener('click',undoCorner);
-el('traceDoneBtn').addEventListener('click',function(){
-  if(corners.length<2){el('hudHint').textContent='Need at least 2 column anchors';return;}
-  showBtns('normal');
-  hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
-  traceMode=false;
-  if(currentStep===3){ goStep(4); }    /* anchors done → place step */
-  else { openPickOverlay(); }           /* already past wizard, open directly */
-});el('traceCancelBtn').addEventListener('click',cancelTrace);
+el('traceDoneBtn').addEventListener('click',traceDoneFn);
+el('traceCancelBtn').addEventListener('click',cancelTrace);
 el('resetBtn').addEventListener('click', wizardReset);
 
 /* lockBtn — on step 5 (orient), locking advances to step 6 (pick) */
@@ -1831,15 +1854,37 @@ el('exitBtn').addEventListener('click',function(){
 ═══════════════════════════════ */
 function enterTraceMode(){
   traceMode=true; corners=[];
-  showBtns('trace'); hide('scanRing'); show('snapReticle'); show('cornerBadge');
-  el('traceDoneBtn').style.opacity='0.4';
+  /* Dismiss card and move buttons to TOP so bottom is clear for WebXR floor taps */
+  dismissCard();
+  el('hud').style.display='';
+  showBtns(null);   /* hide all bottom btn-rows */
+  hideSlider();
+  showActionBar('0 anchored', [
+    {id:'ab-undo',   label:'\u21B6 Undo',   cls:'',  action: undoCorner},
+    {id:'ab-done',   label:'\u2713 Done',   cls:'g', disabled:true, action: traceDoneFn},
+    {id:'ab-cancel', label:'\u2715 Cancel', cls:'r', action: cancelTrace}
+  ]);
+  hide('scanRing'); show('snapReticle');
+  hide('cornerBadge'); /* actionBar status shows the count instead */
   updateCornerBadge();
-  el('hudHint').textContent='Walk to each column base and tap to anchor';
-  el('hudHint').textContent='Walk to column base • reticle snaps to structure';
+  el('hudHint').textContent='Tap floor at each column base to anchor';
+}
+function traceDoneFn(){
+  if(corners.length<2){el('hudHint').textContent='Need at least 2 column anchors';return;}
+  traceMode=false;
+  hideActionBar(); showSlider();
+  hide('snapReticle'); hide('snapIndicator');
+  showBtns('normal');
+  updateNormalBtnsForStep(currentStep);
+  if(currentStep===3){ goStep(4); }
+  else { openPickOverlay(); }
 }
 function cancelTrace(){
   traceMode=false; corners=[]; clearWireVisuals();
-  showBtns('normal'); hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
+  hideActionBar(); showSlider();
+  hide('snapReticle'); hide('snapIndicator');
+  showBtns('normal');
+  updateNormalBtnsForStep(currentStep);
   el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap Anchor to bind to columns':'Point camera at the ground';
 }
 function undoCorner(){
@@ -1852,10 +1897,17 @@ function undoCorner(){
 }
 function updateCornerBadge(){
   var n=corners.length;
-  el('cornerBadge').textContent=n+' column'+(n!==1?'s':'')+' anchored'+
-    (n<2?' \u2014 need '+(2-n)+' more':n<4?' \u2014 add more for accuracy':' \u2014 tap Done when ready');
+  var msg=n+' column'+(n!==1?'s':'')+' anchored';
+  if(n<2) msg+=' \u2014 need '+(2-n)+' more';
+  else if(n<4) msg+=' \u2014 add more for accuracy';
+  else msg+=' \u2014 tap Done';
+  el('cornerBadge').textContent=msg;
+  /* Update actionBar status + Done button */
+  el('actionBarStatus').textContent=msg;
+  var abDone=document.getElementById('ab-done');
+  if(abDone){ abDone.disabled=n<2; abDone.style.opacity=n>=2?'1':'0.4'; }
   el('traceDoneBtn').style.opacity=n>=2?'1':'0.4';
-  updateAnchorCard();   /* keep wizard step-3 anchor card in sync */
+  updateAnchorCard();
 }
 function addCornerVisual(pos,idx){
   var col=CORNER_COLORS[idx%CORNER_COLORS.length];
@@ -1877,7 +1929,7 @@ function clearWireVisuals(){
   wireDots.forEach(function(d){scene.remove(d);}); wireDots=[];
 }
 function doReset(){
-  traceMode=false; corners=[]; uvPicks=[];
+  traceMode=false; corners=[]; uvPicks=[]; surveyActive=false;
   wxrPlaced=false; xfLocked=true; xfRotY=0; xfScaleM=1;
   currentSnap=null; solveCount=0;
   measureMode=false; measurePt1=null; measurePt2=null;
@@ -1892,7 +1944,8 @@ function doReset(){
   else if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   if(planeGroup)planeGroup.visible=false;
   clearWireVisuals(); clearPlaneWires();
-  showBtns('normal');
+  hideActionBar(); showSlider();
+  showBtns('normal'); updateNormalBtnsForStep(-1);
   show('scanRing'); hide('snapReticle'); hide('cornerBadge');
   hide('snapIndicator'); hide('driftBadge'); hide('planeBadge');
   hide('statusBar'); hide('pickOverlay');
@@ -2303,7 +2356,7 @@ el('zoomReset').addEventListener('click',function(){ resetVP(); });
   });
   window.addEventListener('mouseup',function(){
     mouseDragging=false;
-    el('pickViewport').style.cursor=pickMode==='ruler'?'crosshair':'grab';
+    el('pickViewport').style.cursor=pickMode==='ruler'?'crosshair':'crosshair';
   });
 })();
 
@@ -2401,16 +2454,16 @@ el('rulerConfirmBtn').addEventListener('click',function(){
 function enterMeasureMode(){
   measureMode=true; measurePt1=null; measurePt2=null;
   clearMeasureVisuals();
-  el('normalBtns').style.display='none';
-  el('measureBtns').style.display='flex';
+  showBtns('measure');
+  hideSlider();
   hide('measureLabel');
   el('hudHint').textContent='Tap floor for point 1\u2026';
 }
 function exitMeasureMode(){
   measureMode=false; measurePt1=null; measurePt2=null;
   clearMeasureVisuals();
-  el('normalBtns').style.display='flex';
-  el('measureBtns').style.display='none';
+  showBtns('normal');
+  showSlider();
   hide('measureLabel');
   el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap to measure':'Point camera at the ground';
 }
@@ -2454,12 +2507,7 @@ function updateMeasureLabel(worldA, worldB){
 }
 
 el('measureBtn').addEventListener('click',function(){
-  if(!wxrPlaced){
-    el('hudHint').textContent=wxrFloorFound
-      ?'Place the plan before measuring'
-      :'Point camera at the ground first';
-    return;
-  }
+  if(!wxrPlaced&&!wxrFloorFound){el('hudHint').textContent='Place the plan first';return;}
   enterMeasureMode();
 });
 el('measureClearBtn').addEventListener('click',function(){
@@ -2978,19 +3026,11 @@ function openPickOverlay(){
   };
   vp.onmousedown=function(e){
     if(e.target.closest('.zoom-btn')) return;
-    vp._mouseStart={x:e.clientX,y:e.clientY};
     var r=vp.getBoundingClientRect();
     startPickHold(e.clientX-r.left,e.clientY-r.top);
   };
-  vp.onmousemove=function(e){
-    var ms=vp._mouseStart;
-    if(ms&&pickHoldTimer){
-      var dx=e.clientX-ms.x, dy=e.clientY-ms.y;
-      if(Math.sqrt(dx*dx+dy*dy)>8) hidePickHold(); /* cancel hold while panning */
-    }
-  };
-  vp.onmouseup=function(){ hidePickHold(); vp._mouseStart=null; };
-  vp.onmouseleave=function(){ hidePickHold(); vp._mouseStart=null; };
+  vp.onmouseup=function(){ hidePickHold(); };
+  vp.onmouseleave=function(){ hidePickHold(); };
 }
 
 el('pickUndoBtn').addEventListener('click',function(){
@@ -3024,7 +3064,7 @@ el('pickConfirmBtn').addEventListener('click',function(){
 });
 function closePickOverlay(){
   var vp=el('pickViewport');
-  vp.onclick=null; vp.ontouchstart=null; vp.ontouchend=null; vp.onmousemove=null; vp.onmousedown=null; vp.onmouseup=null; vp.onmouseleave=null; vp._mouseStart=null;
+  vp.onclick=null; vp.ontouchstart=null; vp.ontouchend=null;
   el('pickOverlay').classList.remove('show');
   rulerMode=false; rulerP1=null; rulerP2=null;
 }
@@ -3475,7 +3515,6 @@ function startWebXR(){
     /* Hold-to-place state for anchor mode */
     var holdTimer=null, holdStartPos=null, holdProgress=0;
     var HOLD_MS=600;  /* ms to hold before anchor commits */
-    var suppressSelectUntil=0; /* ignore follow-up select after selectend */
 
     /* Reticle hold-ring overlay — drawn in xrFrame */
     var holdRingMat=new THREE.LineBasicMaterial({color:0x2be87a,linewidth:2});
@@ -3569,7 +3608,6 @@ function startWebXR(){
 
     /* SELECT end — commit immediately if held long enough, else cancel */
     session.addEventListener('selectend',function(){
-      suppressSelectUntil=Date.now()+220;
       if(!holdStartPos){ holdRing.visible=false; return; }
       var held = Date.now() - (holdStartPos._t||0);
       if(held >= HOLD_MS * 0.8){
@@ -3591,10 +3629,9 @@ function startWebXR(){
       var ry=reticle.visible?reticle.matrix.elements[13]:0;
       var rz=reticle.visible?reticle.matrix.elements[14]:0;
 
-      /* SURVEY MODE — tap drops a GPS pin, but only once surveying has started
-         (card collapsed to peek strip). Ignore taps on the full info card.    */
+      /* SURVEY MODE — tap drops a GPS pin, but only once surveying has started */
       if(currentStep===1){
-        if(el('stepCard').className.indexOf('peek-mode')===-1) return; /* full card still showing */
+        if(!surveyActive) return;   /* info card still showing */
         dropSurveyPin(rx,ry,rz);
         return;
       }
@@ -3620,11 +3657,10 @@ function startWebXR(){
         return;
       }
 
-      /* ANCHOR MODE — use hold-to-place where selectstart/selectend are available.
-         Fallback to instant commit on runtimes that only emit select. */
+      /* ANCHOR MODE — instant tap places an anchor; hold also works via selectend */
       if(traceMode){
-        if(Date.now()<suppressSelectUntil) return;
         var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
+        /* Cancel any pending hold timer to avoid double-commit */
         if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
         holdStartPos=null; holdProgress=0; holdRing.visible=false;
         commitAnchor(fp.x,fp.y,fp.z,!!currentSnap);
@@ -3648,11 +3684,13 @@ function startWebXR(){
     /* Update hold ring arc each frame */
     function updateHoldRing(frame){
       if(!holdTimer||!holdStartPos||!traceMode){ holdRing.visible=false; return; }
-      
+      holdProgress=Math.min(1,(Date.now()-(Date.now()-HOLD_MS)-0)/HOLD_MS);
+      /* Simpler: derive from time elapsed since selectstart */
+      /* We'll track startTime on the holdStartPos object */
       if(!holdStartPos._t) holdStartPos._t=Date.now();
       var elapsed=Date.now()-holdStartPos._t;
-      holdProgress=Math.min(1,elapsed/HOLD_MS);
-      var nPts=Math.max(2,Math.round(holdProgress*64));
+      var frac=Math.min(1,elapsed/HOLD_MS);
+      var nPts=Math.max(2,Math.round(frac*64));
       var pts2=[];
       for(var hi=0;hi<=nPts;hi++) pts2.push(holdRingPts[Math.min(hi,63)]);
       holdRingGeo.setFromPoints(pts2);
@@ -3660,7 +3698,7 @@ function startWebXR(){
       holdRing.position.set(holdStartPos.x,holdStartPos.y,holdStartPos.z);
       holdRing.visible=true;
       /* Flash green when complete */
-      holdRingMat.color.setHex(holdProgress>=1?0xffffff:0x2be87a);
+      holdRingMat.color.setHex(frac>=1?0xffffff:0x2be87a);
     }
 
     /* Touch pan / pinch */
