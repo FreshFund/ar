@@ -1405,59 +1405,42 @@ function enterSurveyMode(){
   surveyActive=true;
   dismissCard();
   el('hud').style.display='';
-  showBtns(null); hideSlider();
-  showActionBar('0 pts surveyed', [
-    {id:'ab-sv-undo', label:'\u21B6 Undo', cls:'', action: function(){
-      if(waypoints.length===0) return;
-      var wp=waypoints.pop();
-      if(wp.dot && scene) scene.remove(wp.dot);
-      if(wp.labelEl) wp.labelEl.remove();
-      renderMiniMap(); updateGpsSurveyCard();
-    }},
-    {id:'ab-sv-pin', label:'\uD83D\uDCCD Pin', cls:'b', action: function(){
-      if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to pin'; return; }
-      var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
-      dropSurveyPin(rx,ry,rz);
-    }},
-    {id:'ab-sv-done', label:'\u2713 Done', cls:'g', disabled:true, action: function(){
-      if(waypoints.length<3){ el('hudHint').textContent='Need at least 3 survey points'; return; }
-      surveyActive=false;
-      hideActionBar(); showSlider();
-      showBtns('normal'); updateNormalBtnsForStep(currentStep);
-      goStep(2);
-    }}
-  ]);
-  el('hudHint').textContent='Walk to site point \u2022 tap floor to drop pin \u2022 need 3+';
+  showBtns('survey');
+  hideSlider();
+  el('surveyDoneBtn').disabled=true;
+  el('surveyDoneBtn').style.opacity='0.4';
+  el('hudHint').textContent='Walk to site point \u2022 tap PIN or floor \u2022 need 3+';
 }
 
 function updateGpsSurveyCard(){
   if(currentStep!==1)return;
   var n=waypoints.length;
-  var status=n+' point'+(n!==1?'s':'')+' surveyed';
+  var status=n+' pt'+(n!==1?'s':'')+' surveyed';
   if(n<3) status+=' \u2022 '+(3-n)+' more needed';
-  else status+=' \u2022 tap Done or add more';
-  el('actionBarStatus').textContent=status;
+  else status+=' \u2714 tap Done';
   el('hudHint').textContent=status;
-  var abDone=document.getElementById('ab-sv-done');
-  if(abDone){ abDone.disabled=n<3; abDone.style.opacity=n>=3?'1':'0.4'; }
+  el('surveyDoneBtn').disabled=n<3;
+  el('surveyDoneBtn').style.opacity=n>=3?'1':'0.4';
 }
 
-/* surveyUndoBtn and surveyDoneBtn are now wired via the actionBar in enterSurveyMode.
-   Keep these listeners as no-ops so the HTML button elements don't error. */
-el('surveyUndoBtn').addEventListener('click',function(){});
-
+/* Survey button listeners */
+el('surveyUndoBtn').addEventListener('click',function(){
+  if(waypoints.length===0)return;
+  var wp=waypoints.pop();
+  if(wp.dot&&scene)scene.remove(wp.dot);
+  if(wp.labelEl)wp.labelEl.remove();
+  renderMiniMap(); updateGpsSurveyCard();
+});
 el('surveyPinBtn').addEventListener('click',function(){
-  if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
+  if(!reticle||!reticle.visible){el('hudHint').textContent='Point camera at ground to pin';return;}
   var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
   dropSurveyPin(rx,ry,rz);
 });
-
 el('surveyDoneBtn').addEventListener('click',function(){
-  if(waypoints.length<3){
-    el('hudHint').textContent='Need at least 3 survey points'; return;
-  }
-  showBtns('normal');
-  goStep(2);   /* survey complete → scan */
+  if(waypoints.length<3){el('hudHint').textContent='Need at least 3 survey points';return;}
+  surveyActive=false;
+  showBtns('normal'); showSlider(); updateNormalBtnsForStep(currentStep);
+  goStep(2);
 });
 function dropSurveyPin(rx,ry,rz){
   if(gpsLat==null){ el('hudHint').textContent='No GPS fix yet \u2014 wait for signal'; return; }
@@ -1481,19 +1464,6 @@ function dropSurveyPin(rx,ry,rz){
   if(paired.length>=2) runDriftAnalysis(paired);
 }
 
-el('surveyPinBtn').addEventListener('click',function(){
-  if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
-  var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
-  dropSurveyPin(rx,ry,rz);
-});
-
-el('surveyDoneBtn').addEventListener('click',function(){
-  if(waypoints.length<3){
-    el('hudHint').textContent='Need at least 3 survey points'; return;
-  }
-  showBtns('normal');
-  goStep(2);   /* survey complete → scan */
-});
 
 /* ─────────────────────────────────────────────────────────────────
    Step 2 — SCAN
@@ -1672,10 +1642,10 @@ function el(id){ return document.getElementById(id); }
 function show(id,d){ el(id).style.display=d||'block'; }
 function hide(id){ el(id).style.display='none'; }
 function showBtns(which){
-  el('normalBtns').style.display  = which==='normal'?'flex':'none';
-  el('traceBtns').style.display   = 'none'; /* trace btns now always in actionBar */
+  el('normalBtns').style.display  = which==='normal' ?'flex':'none';
+  el('traceBtns').style.display   = which==='trace'  ?'flex':'none';
   el('measureBtns').style.display = which==='measure'?'flex':'none';
-  el('surveyBtns').style.display  = 'none'; /* survey btns now always in actionBar */
+  el('surveyBtns').style.display  = which==='survey' ?'flex':'none';
 }
 function showToast(msg,dur){
   el('toast').textContent=msg; show('toast');
@@ -1824,6 +1794,7 @@ el('traceBtn').addEventListener('click',function(){
   if(!wxrFloorFound&&!wxrPlaced){el('hudHint').textContent='Point camera at the ground first';return;}
   enterTraceMode();
 });
+el('traceUndoBtn').addEventListener('click',undoCorner);
 el('traceDoneBtn').addEventListener('click',traceDoneFn);
 el('traceCancelBtn').addEventListener('click',cancelTrace);
 el('resetBtn').addEventListener('click', wizardReset);
@@ -1854,38 +1825,28 @@ el('exitBtn').addEventListener('click',function(){
 ═══════════════════════════════ */
 function enterTraceMode(){
   traceMode=true; corners=[];
-  /* Dismiss card and move buttons to TOP so bottom is clear for WebXR floor taps */
   dismissCard();
   el('hud').style.display='';
-  showBtns(null);   /* hide all bottom btn-rows */
+  showBtns('trace');
   hideSlider();
-  showActionBar('0 anchored', [
-    {id:'ab-undo',   label:'\u21B6 Undo',   cls:'',  action: undoCorner},
-    {id:'ab-done',   label:'\u2713 Done',   cls:'g', disabled:true, action: traceDoneFn},
-    {id:'ab-cancel', label:'\u2715 Cancel', cls:'r', action: cancelTrace}
-  ]);
-  hide('scanRing'); show('snapReticle');
-  hide('cornerBadge'); /* actionBar status shows the count instead */
+  el('traceDoneBtn').style.opacity='0.4';
+  hide('scanRing'); show('snapReticle'); show('cornerBadge');
   updateCornerBadge();
   el('hudHint').textContent='Tap floor at each column base to anchor';
 }
 function traceDoneFn(){
   if(corners.length<2){el('hudHint').textContent='Need at least 2 column anchors';return;}
   traceMode=false;
-  hideActionBar(); showSlider();
-  hide('snapReticle'); hide('snapIndicator');
-  showBtns('normal');
-  updateNormalBtnsForStep(currentStep);
+  showSlider(); showBtns('normal'); updateNormalBtnsForStep(currentStep);
+  hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
   if(currentStep===3){ goStep(4); }
   else { openPickOverlay(); }
 }
 function cancelTrace(){
   traceMode=false; corners=[]; clearWireVisuals();
-  hideActionBar(); showSlider();
-  hide('snapReticle'); hide('snapIndicator');
-  showBtns('normal');
-  updateNormalBtnsForStep(currentStep);
-  el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap Anchor to bind to columns':'Point camera at the ground';
+  showSlider(); showBtns('normal'); updateNormalBtnsForStep(currentStep);
+  hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
+  el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 tap Anchor to bind to columns':'Point camera at the ground';
 }
 function undoCorner(){
   if(corners.length===0)return;
@@ -1902,11 +1863,9 @@ function updateCornerBadge(){
   else if(n<4) msg+=' \u2014 add more for accuracy';
   else msg+=' \u2014 tap Done';
   el('cornerBadge').textContent=msg;
-  /* Update actionBar status + Done button */
-  el('actionBarStatus').textContent=msg;
-  var abDone=document.getElementById('ab-done');
-  if(abDone){ abDone.disabled=n<2; abDone.style.opacity=n>=2?'1':'0.4'; }
+  el('hudHint').textContent=msg;
   el('traceDoneBtn').style.opacity=n>=2?'1':'0.4';
+  el('traceDoneBtn').disabled=n<2;
   updateAnchorCard();
 }
 function addCornerVisual(pos,idx){
@@ -1944,8 +1903,7 @@ function doReset(){
   else if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   if(planeGroup)planeGroup.visible=false;
   clearWireVisuals(); clearPlaneWires();
-  hideActionBar(); showSlider();
-  showBtns('normal'); updateNormalBtnsForStep(-1);
+  showBtns('normal'); showSlider(); updateNormalBtnsForStep(-1);
   show('scanRing'); hide('snapReticle'); hide('cornerBadge');
   hide('snapIndicator'); hide('driftBadge'); hide('planeBadge');
   hide('statusBar'); hide('pickOverlay');
