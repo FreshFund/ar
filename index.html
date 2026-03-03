@@ -1333,7 +1333,8 @@ function goStep(n){
   /* ── HUD hidden while full info card is showing.
      Step enter functions reveal HUD when needed. ── */
   el('hud').style.display = 'none';
-  hideActionBar();
+  el('traceBar').classList.remove('show');
+  el('surveyBar').classList.remove('show');
 
   /* All steps just show the full card */
   el('stepCard').className = 'show';
@@ -1352,6 +1353,7 @@ function goStep(n){
 function dismissCard(){
   el('stepCard').className = '';
   el('hud').style.display = '';
+  /* Caller is responsible for calling showBtns() + updateNormalBtnsForStep() */
 }
 
 /* peekCard kept as alias for dismissCard — peek-mode strips removed */
@@ -1361,28 +1363,39 @@ function peekCard(){ dismissCard(); }
 el('scBtn').addEventListener('click', function(){
   if(currentStep===0){
     goStep(1);
+
   } else if(currentStep===1){
     enterSurveyMode();
+
   } else if(currentStep===2){
-    if(el('scBtn').dataset.surfaceReady==='1'){
-      goStep(3);
-    }
-    /* Else: user tapped before any surface detected — do nothing.
-       The card stays visible; updateScanCard() will enable the button when ready. */
+    /* Always dismiss card so user can sweep camera.
+       updateScanCard() auto-advances when a surface is found. */
+    dismissCard();
+    showBtns('normal'); updateNormalBtnsForStep(2); hideSlider();
+    el('hudHint').textContent='Sweep camera slowly across floor and up the walls';
+
   } else if(currentStep===3){
     enterAnchorMode();
+
   } else if(currentStep===4){
     dismissCard();
+    showBtns('normal'); updateNormalBtnsForStep(4); hideSlider();
     el('hudHint').textContent='Point camera at floor \u2022 tap reticle to place drawing';
+
   } else if(currentStep===5){
     dismissCard();
-    el('hud').style.display='';
-    showBtns('normal'); updateNormalBtnsForStep(5);
+    xfLocked=false;
+    el('lockBtn').textContent='\uD83D\uDD13 Lock'; el('lockBtn').className='hud-btn';
+    showBtns('normal'); updateNormalBtnsForStep(5); showSlider();
     el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when columns align';
+
   } else if(currentStep===6){
     dismissCard(); openPickOverlay();
+
   } else if(currentStep===7){
     dismissCard();
+    showBtns('normal'); updateNormalBtnsForStep(7); showSlider();
+    el('hudHint').textContent='Plan locked \u2022 all sensors active';
   }
 });
 
@@ -1436,10 +1449,8 @@ function stepGpsSurveyEnter(){
 function enterSurveyMode(){
   surveyActive=true;
   dismissCard();
-  el('hud').style.display='';
-  showBtns('normal'); updateNormalBtnsForStep(currentStep);
-  hideSlider();
-  /* Show survey bar at TOP so the floor area is free for tap-to-pin */
+  /* Only show Reset + Exit in the bottom HUD — surveyBar at top handles all survey actions */
+  showBtns('normal'); updateNormalBtnsForStep(1); hideSlider();
   el('surveyBar').classList.add('show');
   el('svDone').disabled=true; el('svDone').style.opacity='0.4';
   el('hudHint').textContent='Walk to site point \u2022 tap PIN or floor \u2022 need 3+';
@@ -1540,6 +1551,30 @@ function updateScanCard(){
   var planeCount=planeWires.size;
   scanPlaneCount=planeCount;
   var anySurface=planeCount>0||wxrFloorFound;
+
+  /* Update status row inside card (card may still be showing) */
+  if(el('stepCard').className.indexOf('show')!==-1){
+    var floors=0,walls=0;
+    planeWires.forEach(function(wire,plane){
+      if(typeof plane==='object'&&plane.orientation){
+        if(plane.orientation==='vertical')walls++; else floors++;
+      }
+    });
+    if(anySurface){
+      var summary=planeCount>0
+        ?(planeCount+' surface'+(planeCount!==1?'s':'')+' \u2022 '+floors+' floor \u00b7 '+walls+' wall')
+        :'Floor detected';
+      el('scStatusMain').textContent=summary;
+      el('scStatusSub').textContent='ready \u2022 tap Anchor Columns';
+      el('scBtn').textContent='Anchor Columns \u2192';
+      el('scBtn').disabled=false;
+      el('scBtn').dataset.surfaceReady='1';
+      el('scDot').className='sc-dot green';
+    }
+    return; /* card still up — don't update hudHint */
+  }
+
+  /* Card already dismissed (user tapped Start Scanning) — update hudHint */
   var floors=0,walls=0;
   planeWires.forEach(function(wire,plane){
     if(typeof plane==='object'&&plane.orientation){
@@ -1547,20 +1582,16 @@ function updateScanCard(){
     }
   });
   if(!anySurface){
-    /* Card is still showing — update status row and hint */
-    el('scStatusMain').textContent='Scanning…';
-    el('scStatusSub').textContent='Sweep camera slowly across floor';
-    return;
+    el('hudHint').textContent='Sweep camera slowly across floor and up the walls';
+  } else {
+    var summary=planeCount>0
+      ?(planeCount+' surface'+(planeCount!==1?'s':'')+' \u2022 '+floors+' floor \u00b7 '+walls+' wall \u2022 advancing\u2026')
+      :'Floor detected \u2022 advancing\u2026';
+    el('hudHint').textContent=summary;
+    el('scBtn').dataset.surfaceReady='1';
+    /* Auto-advance to anchor step */
+    goStep(3);
   }
-  var summary=planeCount>0
-    ?(planeCount+' surface'+(planeCount!==1?'s':'')+' \u2022 '+floors+' floor \u00b7 '+walls+' wall')
-    :'Floor detected';
-  el('scStatusMain').textContent=summary;
-  el('scStatusSub').textContent='tap the button to continue';
-  el('scBtn').textContent='Anchor Columns \u2192';
-  el('scBtn').disabled=false;
-  el('scBtn').dataset.surfaceReady='1';
-  el('scDot').className='sc-dot green';
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -1602,13 +1633,8 @@ function updateAnchorCard(){
    Auto-dismissed when floor tap fires onPlanPlaced.
    ───────────────────────────────────────────────────────────────── */
 function stepPlaceEnter(){
-  el('stepCard').classList.remove('anchor-mode');
-  el('stepCard').style.background='';
-  el('scAnchorBtns').style.display='none';
-  el('hud').style.display='';
-  showBtns('normal'); updateNormalBtnsForStep(4);
-  hideSlider();
-  el('hudHint').textContent='Point camera at floor \u2022 tap reticle to place drawing';
+  /* Card is still showing — HUD is revealed when user taps "Got it →" via scBtn */
+  xfLocked=false;
 }
 
 function onPlanPlaced(){
@@ -1620,13 +1646,8 @@ function onPlanPlaced(){
    Starts unlocked. Tapping Lock → advances to Pick.
    ───────────────────────────────────────────────────────────────── */
 function stepOrientEnter(){
+  /* Card still showing. HUD + lock state configured by scBtn handler on dismiss. */
   xfLocked=false;
-  el('hud').style.display='';
-  showSlider();
-  showBtns('normal'); updateNormalBtnsForStep(5);
-  el('lockBtn').textContent='\uD83D\uDD13 Lock';
-  el('lockBtn').className='hud-btn';
-  el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when columns align';
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -1634,12 +1655,7 @@ function stepOrientEnter(){
    Button opens picker overlay.
    ───────────────────────────────────────────────────────────────── */
 function stepPickEnter(){
-  el('stepCard').classList.remove('anchor-mode');
-  el('stepCard').style.background='';
-  el('scAnchorBtns').style.display='none';
-  el('hud').style.display='';
-  showBtns('normal'); updateNormalBtnsForStep(6);
-  showSlider();
+  /* Card showing. scBtn "Open Plan Picker →" opens picker overlay. */
 }
 
 function onPlanBound(){ goStep(7); }
@@ -1651,13 +1667,10 @@ function onPlanBound(){ goStep(7); }
 var readyToastFired=false;
 
 function stepBoundEnter(){
-  el('hud').style.display='';
-  showSlider();
-  el('stepCard').style.background='';
+  /* Card shows bound summary. User taps "Close" to dismiss and get full HUD. */
   el('scDot').className='sc-dot green';
   el('scStatusMain').textContent=corners.length+' column anchors';
   el('scStatusSub').textContent='all sensors active · plan rigid-locked';
-  showBtns('normal'); updateNormalBtnsForStep(7);
   readyToastFired=false;
 }
 
@@ -1685,12 +1698,11 @@ function wizardReset(){
   readyToastFired=false;
   wxrFloorFound=false;
   surveyActive=false;
-  hideActionBar();
+  el('traceBar').classList.remove('show');
+  el('surveyBar').classList.remove('show');
   el('scBtn').dataset.surfaceReady='';
   el('stepBar').style.display='none';
   el('stepBarFill').style.width='0%';
-  el('stepCard').style.background='';
-  el('stepCard').classList.remove('anchor-mode');
   el('stepCard').className='';
   showBtns('normal');
   showSlider();
@@ -1745,14 +1757,21 @@ function hideActionBar(){
 }
 function hideSlider(){ var r=el('hud').querySelector('.slider-row'); if(r)r.style.display='none'; }
 function showSlider(){ var r=el('hud').querySelector('.slider-row'); if(r)r.style.display=''; }
-/* Show only the subset of normalBtns that make sense at this step */
+/* Show only the buttons that make sense for each step/mode */
 function updateNormalBtnsForStep(step){
+  /* Align N — only after plan placed and orientation needed */
   el('alignBtn').style.display    = (step>=5||step===-1)?'':'none';
+  /* Lock — only when plan is placed */
   el('lockBtn').style.display     = (step>=5||step===-1)?'':'none';
+  /* Anchor — only post-wizard or in free mode */
   el('traceBtn').style.display    = (step>=7||step===-1)?'':'none';
+  /* Measure — only post-wizard */
   el('measureBtn').style.display  = (step>=7||step===-1)?'':'none';
+  /* GPS toggle — post-wizard or free mode */
   el('gpsToggleBtn').style.display= (step===0||step>=7||step===-1)?'':'none';
-  el('dropPinBtn').style.display  = 'none'; /* controlled by GPS only */
+  /* Drop pin — controlled only by GPS subsystem */
+  el('dropPinBtn').style.display  = 'none';
+  /* Reset + Exit always visible when HUD is showing */
   el('resetBtn').style.display    = '';
   el('exitBtn').style.display     = '';
 }
@@ -1887,10 +1906,8 @@ el('exitBtn').addEventListener('click',function(){
 function enterTraceMode(){
   traceMode=true; corners=[];
   dismissCard();
-  el('hud').style.display='';
-  showBtns('normal'); updateNormalBtnsForStep(currentStep);
-  hideSlider();
-  /* Show action bar at TOP so the floor area stays clear for WebXR taps */
+  /* Only Reset + Exit in bottom HUD — traceBar at top handles all anchor actions */
+  showBtns('normal'); updateNormalBtnsForStep(3); hideSlider();
   el('traceBar').classList.add('show');
   el('tbDone').disabled=true; el('tbDone').style.opacity='0.4';
   hide('scanRing'); show('snapReticle'); show('cornerBadge');
