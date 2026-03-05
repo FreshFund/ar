@@ -200,7 +200,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   padding:9px 13px; font-family:var(--mono); font-size:10px;
   letter-spacing:.11em; text-transform:uppercase; cursor:pointer;
   border-radius:2px; transition:background .15s, border-color .15s, color .15s;
-  touch-action:manipulation; user-select:none;
 }
 .hud-btn:active { transform:scale(.95); }
 .hud-btn:hover  { background:rgba(232,79,43,.18); border-color:var(--accent); }
@@ -360,7 +359,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   padding:9px 14px; font-family:var(--mono); font-size:9px; letter-spacing:.18em;
   text-transform:uppercase; cursor:pointer; border-radius:3px;
   transition:background .15s, border-color .15s;
-  touch-action:manipulation; user-select:none;
 }
 .pick-btn:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.3); }
 .pick-btn.confirm {
@@ -591,7 +589,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   text-transform:uppercase; padding:14px 32px; border-radius:3px;
   cursor:pointer; transition:background .15s, transform .1s;
   min-width:200px; text-align:center;
-  touch-action:manipulation; user-select:none;
 }
 .sc-btn:hover { background:#c83d1e; }
 .sc-btn:active { transform:scale(.97); }
@@ -993,8 +990,15 @@ var gpsBearingRef=null;   // {heading:deg, confidence:0-1} from GPS pairs
 
 /* Plane re-snap throttle */
 var reSnapFrameCounter=0;
-var RESNAP_INTERVAL=45;   // frames between re-snap attempts
-var RESNAP_THRESHOLD=0.15; // metres — max allowed silent correction
+var RESNAP_INTERVAL=20;    // frames between re-snap attempts
+var RESNAP_THRESHOLD=0.08; // metres (tighter)
+var PLAN_POS_SMOOTH=0.35;
+var PLAN_ROT_SMOOTH=0.20;
+var PLAN_SCALE_SMOOTH=0.12;
+var ANCHOR_POS_SMOOTH=0.40;
+var FORCE_RESOLVE_INTERVAL=30;
+var forceResolveCounter=0;
+var lastSolvedOrigin=null;
 
 /* Per-constraint quality — fed to status panel */
 var constraintQuality={
@@ -1369,6 +1373,7 @@ el('scBtn').addEventListener('click', function(){
       if(corners.length>=2){
         traceMode=false;
         hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
+        showBtns('normal');
         goStep(4);
       }
     } else {
@@ -1435,13 +1440,11 @@ function stepGpsSurveyEnter(){
 }
 
 function enterSurveyMode(){
+  /* Collapse card, swap HUD to survey buttons */
   peekCard();
   el('hud').style.display='';
-  el('normalBtns').style.display='none';
-  el('traceBtns').style.display='none';
-  el('measureBtns').style.display='none';
-  el('surveyBtns').style.display='flex';
-  el('hudHint').textContent='Walk to a site point \u2022 hold to drop pin \u2022 need 3+';
+  showBtns('survey');
+  el('hudHint').textContent='Walk to a site point \u2022 tap Drop Pin \u2022 need 3+';
 }
 
 function updateGpsSurveyCard(){
@@ -1490,27 +1493,17 @@ function dropSurveyPin(rx,ry,rz){
   if(paired.length>=2) runDriftAnalysis(paired);
 }
 
-function makeHoldBtn(btnEl,holdMs,onCommit,toastMsg){
-  var t=null;
-  function done(){ if(t){clearTimeout(t);t=null;} btnEl.style.outline=''; }
-  function go(e){ if(e.cancelable)e.preventDefault();
-    showToast(toastMsg,holdMs+800); btnEl.style.outline='2px solid var(--green)';
-    t=setTimeout(function(){done();onCommit();},holdMs); }
-  btnEl.addEventListener('touchstart',go,{passive:false});
-  btnEl.addEventListener('mousedown',go);
-  ['touchend','touchcancel','mouseup','mouseleave'].forEach(function(ev){btnEl.addEventListener(ev,done);});
-}
-makeHoldBtn(el('surveyPinBtn'),600,function(){
+el('surveyPinBtn').addEventListener('click',function(){
   if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
   var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
   dropSurveyPin(rx,ry,rz);
-},'\uD83D\uDCCD Hold to Drop Pin');
+});
 
 el('surveyDoneBtn').addEventListener('click',function(){
   if(waypoints.length<3){
     el('hudHint').textContent='Need at least 3 survey points'; return;
   }
-  el('hud').style.display='none';
+  showBtns('normal');
   goStep(2);   /* survey complete → scan */
 });
 
@@ -1577,10 +1570,7 @@ function stepAnchorEnter(){
 function enterAnchorMode(){
   el('stepCard').className='show anchor-mode';
   el('hud').style.display='';
-  el('normalBtns').style.display='none';
-  el('traceBtns').style.display='none';
-  el('measureBtns').style.display='none';
-  el('surveyBtns').style.display='none';
+  el('normalBtns').style.display='none';   /* hide crowded normal buttons */
   el('scStatus').style.display='flex';
   el('scDot').className='sc-dot yellow';
   el('scStatusMain').textContent='0 columns anchored';
@@ -1617,7 +1607,6 @@ function stepPlaceEnter(){
   el('stepCard').style.background='';
   el('scAnchorBtns').style.display='none';
   el('hud').style.display='';
-  setHUD([]);
   el('hudHint').textContent='Point camera at the floor and tap to place drawing';
 }
 
@@ -1631,11 +1620,9 @@ function onPlanPlaced(){
    ───────────────────────────────────────────────────────────────── */
 function stepOrientEnter(){
   xfLocked=false;
-  el('lockBtn').textContent='\uD83D\uDD12 Lock';
+  el('lockBtn').textContent='\uD83D\uDD13 Unlock';
   el('lockBtn').className='hud-btn';
-  el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when aligned';
-  el('hud').style.display='';
-  setHUD(['alignBtn','lockBtn']);
+  el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when columns align';
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -1646,7 +1633,7 @@ function stepPickEnter(){
   el('stepCard').classList.remove('anchor-mode');
   el('stepCard').style.background='';
   el('scAnchorBtns').style.display='none';
-  el('hud').style.display='none';
+  el('hud').style.display='';
 }
 
 function onPlanBound(){ goStep(7); }
@@ -1660,7 +1647,6 @@ var readyToastFired=false;
 function stepBoundEnter(){
   el('hud').style.display='';
   el('stepCard').style.background='';
-  setHUD(['alignBtn','lockBtn','measureBtn','exitBtn']);
   el('scDot').className='sc-dot green';
   el('scStatusMain').textContent=corners.length+' column anchors';
   el('scStatusSub').textContent='all sensors active · plan rigid-locked';
@@ -1696,10 +1682,7 @@ function wizardReset(){
   el('stepCard').style.background='';
   el('stepCard').classList.remove('anchor-mode');
   el('stepCard').className='';
-  el('normalBtns').style.display='none';
-  el('traceBtns').style.display='none';
-  el('measureBtns').style.display='none';
-  el('surveyBtns').style.display='none';
+  showBtns('normal');   /* ensure survey/trace btns hidden on reset */
 }
 
 
@@ -1711,15 +1694,6 @@ function showBtns(which){
   el('traceBtns').style.display   = which==='trace'?'flex':'none';
   el('measureBtns').style.display = which==='measure'?'flex':'none';
   el('surveyBtns').style.display  = which==='survey'?'flex':'none';
-}
-function setHUD(ids){
-  var ALL=['alignBtn','lockBtn','traceBtn','measureBtn','dropPinBtn','gpsToggleBtn','resetBtn','exitBtn'];
-  ALL.forEach(function(id){ el(id).style.display='none'; });
-  (ids||[]).forEach(function(id){ el(id).style.display=''; });
-  el('normalBtns').style.display=(ids&&ids.length)?'flex':'none';
-  el('traceBtns').style.display='none';
-  el('measureBtns').style.display='none';
-  el('surveyBtns').style.display='none';
 }
 function showToast(msg,dur){
   el('toast').textContent=msg; show('toast');
@@ -1804,21 +1778,18 @@ el('opacitySlider').addEventListener('input',function(){
   if(boundMesh)boundMesh.material.opacity=xfOpacity;
 });
 el('rotCW') && el('rotCW').addEventListener && void 0; // removed
-el('alignBtn').addEventListener('click',function(){
+function applyNorthAlignment(){
   if(!wxrPlaced){ el('hudHint').textContent='Place the plan first'; return; }
   var h=fusedHeading!=null?fusedHeading:compassHeading;
   if(h==null){ el('hudHint').textContent='Enable GPS for compass heading'; return; }
-  /* Re-capture the offset so plan-top NOW aligns to North */
   xrNorthOffset=h;
-  /* planYaw stays as-is; the heading constraint loop will now hold it
-     at the current orientation as the "North" reference.
-     For immediate snap: apply the inverse of heading delta from reference. */
-  if(xrNorthOffset!=null){
-    planYaw=xfRotY;
-    if(planRigidGroup) planRigidGroup.rotation.y=planYaw;
-  }
+  /* One-shot: snap plan to current North reading. No continuous nudge. */
+  planYaw=xfRotY;
+  if(planRigidGroup) planRigidGroup.rotation.y=planYaw;
   el('hudHint').textContent='True North locked \u2014 '+Math.round(h)+'\u00b0 \u2714';
-});
+  showToast('\uD83E\uDDED Aligned to '+Math.round(h)+'\u00b0 \u2014 drag to fine-tune', 3000);
+}
+el('alignBtn').addEventListener('click', applyNorthAlignment);
 function applyFree(){if(planeGroup&&wxrPlaced)planeGroup.rotation.y=xfRotY;}
 
 el('traceBtn').addEventListener('click',function(){
@@ -1828,6 +1799,7 @@ el('traceBtn').addEventListener('click',function(){
 el('traceUndoBtn').addEventListener('click',undoCorner);
 el('traceDoneBtn').addEventListener('click',function(){
   if(corners.length<2){el('hudHint').textContent='Need at least 2 column anchors';return;}
+  showBtns('normal');
   hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
   traceMode=false;
   if(currentStep===3){ goStep(4); }    /* anchors done → place step */
@@ -1838,7 +1810,7 @@ el('resetBtn').addEventListener('click', wizardReset);
 /* lockBtn — on step 5 (orient), locking advances to step 6 (pick) */
 el('lockBtn').addEventListener('click',function(){
   xfLocked=!xfLocked;
-  this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD12 Lock';
+  this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Unlock';
   this.className=xfLocked?'hud-btn g':'hud-btn';
   el('hudHint').textContent=xfLocked?'Drawing locked \u2714':'Drag to reposition';
   if(xfLocked && currentStep===5){
@@ -1861,22 +1833,16 @@ el('exitBtn').addEventListener('click',function(){
 ═══════════════════════════════ */
 function enterTraceMode(){
   traceMode=true; corners=[];
-  el('normalBtns').style.display='none';
-  el('traceBtns').style.display='flex';
-  el('measureBtns').style.display='none';
-  el('surveyBtns').style.display='none';
-  hide('scanRing'); show('snapReticle'); show('cornerBadge');
+  showBtns('trace'); hide('scanRing'); show('snapReticle'); show('cornerBadge');
   el('traceDoneBtn').style.opacity='0.4';
   updateCornerBadge();
-  el('hudHint').textContent='Hold reticle on column base to anchor';
-  showToast('\u23F3 Hold to Drop Anchor', 3000);
+  el('hudHint').textContent='Walk to each column base and tap to anchor';
+  el('hudHint').textContent='Walk to column base • reticle snaps to structure';
 }
 function cancelTrace(){
   traceMode=false; corners=[]; clearWireVisuals();
-  hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
-  el('normalBtns').style.display='none';
-  el('traceBtns').style.display='none';
-  el('hudHint').textContent=wxrPlaced?'Drawing placed':'Point camera at the ground';
+  showBtns('normal'); hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
+  el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap Anchor to bind to columns':'Point camera at the ground';
 }
 function undoCorner(){
   if(corners.length===0)return;
@@ -1920,6 +1886,7 @@ function doReset(){
   metersPerUV=null; rulerP1=null; rulerP2=null;
   planBound=false; planYaw=0; planScale=1; planOrigin.set(0,0,0);
   fusedHeading=null; headingLocked=false; lastAlpha=null; lastGyroTime=null; xrNorthOffset=null;
+  lastSolvedOrigin=null; forceResolveCounter=0;
   gpsBearingFixes=[]; gpsBearingRef=null; reSnapFrameCounter=0;
   constraintQuality={xrAnchor:0,compass:0,gpsBearing:0,planeSnap:0};
   clearMeasureVisuals(); hide('measureLabel');
@@ -1928,15 +1895,12 @@ function doReset(){
   else if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   if(planeGroup)planeGroup.visible=false;
   clearWireVisuals(); clearPlaneWires();
-  el('normalBtns').style.display='none';
-  el('traceBtns').style.display='none';
-  el('measureBtns').style.display='none';
-  el('surveyBtns').style.display='none';
+  showBtns('normal');
   show('scanRing'); hide('snapReticle'); hide('cornerBadge');
   hide('snapIndicator'); hide('driftBadge'); hide('planeBadge');
   hide('statusBar'); hide('pickOverlay');
   el('hudHint').textContent='Point camera at the ground';
-  el('lockBtn').textContent='\uD83D\uDD12 Lock'; el('lockBtn').className='hud-btn';
+  el('lockBtn').textContent='\uD83D\uDD13 Unlock'; el('lockBtn').className='hud-btn';
 }
 
 /* ═══════════════════════════════
@@ -2448,7 +2412,7 @@ function enterMeasureMode(){
 function exitMeasureMode(){
   measureMode=false; measurePt1=null; measurePt2=null;
   clearMeasureVisuals();
-  setHUD(['alignBtn','lockBtn','measureBtn','exitBtn']);
+  el('normalBtns').style.display='flex';
   el('measureBtns').style.display='none';
   hide('measureLabel');
   el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap to measure':'Point camera at the ground';
@@ -2634,7 +2598,7 @@ el('gpsToggleBtn').addEventListener('click',function(){
 });
 
 /* ── Drop Pin ── */
-makeHoldBtn(el('dropPinBtn'),600,function(){
+el('dropPinBtn').addEventListener('click',function(){
   if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
   if(gpsLat==null){ el('gpsCoordsText').textContent='No GPS fix yet — wait for signal'; return; }
   if(gpsAcc>25){ el('gpsAccText').textContent='Accuracy \u00b1'+Math.round(gpsAcc)+'m \u2014 move to open sky'; return; }
@@ -2675,7 +2639,7 @@ makeHoldBtn(el('dropPinBtn'),600,function(){
   /* Immediately run analysis if we have enough */
   var paired=waypoints.filter(function(w){return w.gps&&w.world;});
   if(paired.length>=2) runDriftAnalysis(paired);
-},'\uD83D\uDCCD Hold to Drop Pin');
+});
 
 /* ── Drift Analysis ──────────────────────────────────────────────
    For each pair of waypoints we compare:
@@ -3029,11 +2993,18 @@ el('pickUndoBtn').addEventListener('click',function(){
   el('pickSub').textContent=uvPicks.length<N?'Hold on column '+(uvPicks.length+1):'Hold on column '+N;
   el('pickConfirmBtn').disabled=true;
 });
-
+el('pickClearBtn').addEventListener('click',function(){
+  uvPicks=[];
+  el('pickViewport').querySelectorAll('.pdot').forEach(function(d){d.remove();});
+  var N=corners.length;
+  el('pickInfo').textContent='0 / '+N;
+  el('pickSub').textContent='Hold on column 1';
+  el('pickConfirmBtn').disabled=true;
+});
 el('pickCancelBtn').addEventListener('click',function(){
   closePickOverlay();
-  el('hud').style.display='none';
-  goStep(6);  /* back to identify card */
+  showBtns('normal');
+  el('hudHint').textContent='Tap Anchor to retry';
 });
 el('pickConfirmBtn').addEventListener('click',function(){
   if(uvPicks.length!==corners.length)return;
@@ -3148,7 +3119,7 @@ var planRigidGroup=null;   /* THREE.Group positioned by Kabsch each frame */
 
 function buildBoundMesh(){
   if(corners.length<2||uvPicks.length!==corners.length){
-    el('hudHint').textContent='Need at least 2 column anchors'; return;
+    el('hudHint').textContent='Need at least 2 column anchors'; showBtns('normal'); return;
   }
   if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   if(planRigidGroup&&scene){scene.remove(planRigidGroup);planRigidGroup=null;}
@@ -3193,6 +3164,8 @@ function buildBoundMesh(){
 
   show('statusBar'); show('cornerBadge');
   el('cornerBadge').textContent='\u2714 Locked \u2022 '+corners.length+' column anchors';
+  showBtns('normal');
+  el('hudHint').textContent='Plan structure-locked \u2714 \u2022 All sensors active';
   el('hudHint').textContent='Plan rigid-locked to '+corners.length+' columns ✔';
 }
 
@@ -3207,15 +3180,24 @@ function applyRigidTransform(tx,tz,yaw,scale){
 }
 
 /* Run Kabsch → update plan transform → update status panel */
+function lerpAngle(a,b,t){
+  var d=b-a; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI; return a+d*t;
+}
 function reSolvePlan(){
   var t0=performance.now();
   var sol=kabschSolve(corners,uvPicks);
   if(!sol) return false;
-  planOrigin.set(sol.tx,0,sol.tz);
-  planYaw=sol.yaw;
-  planScale=sol.scale;
   planBound=true;
-  applyRigidTransform(sol.tx,sol.tz,sol.yaw,sol.scale);
+  if(lastSolvedOrigin===null){
+    planOrigin.set(sol.tx,0,sol.tz); planYaw=sol.yaw; planScale=sol.scale;
+  } else {
+    planOrigin.x+=(sol.tx-planOrigin.x)*PLAN_POS_SMOOTH;
+    planOrigin.z+=(sol.tz-planOrigin.z)*PLAN_POS_SMOOTH;
+    planYaw=lerpAngle(planYaw,sol.yaw,PLAN_ROT_SMOOTH);
+    planScale+=(sol.scale-planScale)*PLAN_SCALE_SMOOTH;
+  }
+  lastSolvedOrigin={x:planOrigin.x,z:planOrigin.z};
+  applyRigidTransform(planOrigin.x,planOrigin.z,planYaw,planScale);
   solveCount++;
   var ms=(performance.now()-t0).toFixed(1);
   var resStr=sol.residualM<0.005?'\u2714':sol.residualM<0.05?'\u26A0':'!';
@@ -3245,11 +3227,19 @@ function updateAnchors(frame,refSpace){
       var ap=frame.getPose(c.anchor.anchorSpace,refSpace);
       if(!ap)return;
       var nx=ap.transform.position.x,ny=ap.transform.position.y,nz=ap.transform.position.z;
-      if(Math.abs(nx-c.worldPos.x)+Math.abs(ny-c.worldPos.y)+Math.abs(nz-c.worldPos.z)>0.0005){
-        c.worldPos={x:nx,y:ny,z:nz}; moved=true;
+      var ddx=nx-c.worldPos.x,ddy=ny-c.worldPos.y,ddz=nz-c.worldPos.z;
+      var dist=Math.sqrt(ddx*ddx+ddy*ddy+ddz*ddz);
+      if(dist>0.0005){
+        var alpha=dist>0.03?1.0:ANCHOR_POS_SMOOTH;
+        c.worldPos.x+=ddx*alpha; c.worldPos.y+=ddy*alpha; c.worldPos.z+=ddz*alpha;
+        moved=true;
       }
     }catch(e){}
   });
+
+  /* 1b. Forced periodic re-solve even when anchors are quiet */
+  forceResolveCounter++;
+  if(forceResolveCounter>=FORCE_RESOLVE_INTERVAL){forceResolveCounter=0;moved=true;}
 
   /* 2. Periodic plane-vertex re-snap (vertices + edge midpoints via upgraded snap fn) */
   reSnapFrameCounter++;
@@ -3289,25 +3279,9 @@ function updateAnchors(frame,refSpace){
         faces North. Derived from (fusedHeading - xrNorthOffset) which
         gives the XR-space rotation the plan needs to compensate for
         device heading drift since placement.                            */
-  if(planBound&&headingLocked&&fusedHeading!=null&&xrNorthOffset!=null){
-    var headingDelta=fusedHeading-xrNorthOffset;
-    while(headingDelta>180)headingDelta-=360; while(headingDelta<-180)headingDelta+=360;
-
-    /* targetYaw that would keep plan-top pointing North */
-    var targetYaw = -headingDelta * Math.PI / 180;
-
-    /* How far are we from where we should be? */
-    var diff = targetYaw - planYaw;
-    while(diff>Math.PI)diff-=2*Math.PI; while(diff<-Math.PI)diff+=2*Math.PI;
-
-    /* Only apply if there's a real difference (> 0.1° ≈ 0.00175 rad)
-       and blend gently so it doesn't snap harshly                       */
-    if(Math.abs(diff) > 0.00175){
-      planYaw += diff * 0.015;   /* exponential approach — ~1.5% per frame */
-      if(planRigidGroup) planRigidGroup.rotation.y = planYaw;
-      moved = true;
-    }
-  }
+  /* 3. Compass heading is EXPLICIT-ONLY via applyNorthAlignment().
+     Per-frame nudging caused indoor rotation drift from unreliable
+     magnetometer near metal structure. Kabsch handles rotation. */
 
   return moved;
 }
