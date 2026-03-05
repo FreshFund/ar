@@ -304,7 +304,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   background:rgba(4,5,15,.88); border:1px solid rgba(255,255,255,.18);
   color:var(--paper); font-size:18px; line-height:1; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
-  touch-action:manipulation; -webkit-touch-callout:none; user-select:none;
+  touch-action:manipulation; user-select:none;
 }
 .zoom-btn:active { background:rgba(255,255,255,.12); }
 #pickZoomLabel {
@@ -847,7 +847,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
         <!-- Anchor-pick status (shown in Anchor tab) -->
         <div id="pickAnchorStatus">
           <span id="pickInfo">0 picked</span>
-          <span id="pickSub">Hold on column 1</span>
+          <span id="pickSub">Tap each column in order</span>
         </div>
 
         <!-- Ruler controls (shown in Scale tab) -->
@@ -857,10 +857,11 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
           <button id="rulerConfirmBtn" disabled>Set</button>
         </div>
 
-        <!-- Action buttons — kept minimal -->
+        <!-- Action buttons -->
         <div class="pick-btns">
           <button class="pick-btn" id="pickUndoBtn">↶ Undo</button>
-          <button class="pick-btn" id="pickCancelBtn">← Back</button>
+          <button class="pick-btn" id="pickClearBtn">✕ Clear All</button>
+          <button class="pick-btn" id="pickCancelBtn">Cancel</button>
           <button class="pick-btn confirm" id="pickConfirmBtn" disabled>Bind Plan →</button>
         </div>
 
@@ -1489,32 +1490,34 @@ function dropSurveyPin(rx,ry,rz){
   if(paired.length>=2) runDriftAnalysis(paired);
 }
 
-/* ── Hold-to-Drop helper ── */
-function makeHoldBtn(btnEl, holdMs, onCommit, toastMsg) {
-  var timer = null;
-  function cancel() { if(timer){clearTimeout(timer);timer=null;} btnEl.style.outline=''; }
-  function start(e) {
-    e.preventDefault();
-    showToast(toastMsg, holdMs + 800);
-    btnEl.style.outline = '2px solid var(--green)';
-    timer = setTimeout(function() { timer=null; btnEl.style.outline=''; onCommit(); }, holdMs);
+/* Hold-to-drop helper */
+function makeHoldBtn(btnEl,holdMs,onCommit,toastMsg){
+  var timer=null;
+  function cancel(){ if(timer){clearTimeout(timer);timer=null;} btnEl.style.outline=''; }
+  function start(e){
+    if(e.cancelable) e.preventDefault();
+    showToast(toastMsg, holdMs+800);
+    btnEl.style.outline='2px solid var(--green)';
+    timer=setTimeout(function(){timer=null;btnEl.style.outline='';onCommit();},holdMs);
   }
-  btnEl.addEventListener('touchstart', start, {passive:false});
-  btnEl.addEventListener('mousedown', start);
-  ['touchend','touchcancel','mouseup','mouseleave'].forEach(function(ev){ btnEl.addEventListener(ev, cancel); });
+  btnEl.addEventListener('touchstart',start,{passive:false});
+  btnEl.addEventListener('mousedown',start);
+  ['touchend','touchcancel','mouseup','mouseleave'].forEach(function(ev){btnEl.addEventListener(ev,cancel);});
 }
 
-makeHoldBtn(el('surveyPinBtn'), 600, function() {
+makeHoldBtn(el('surveyPinBtn'),600,function(){
   if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
   var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
   dropSurveyPin(rx,ry,rz);
-}, '📍 Hold to Drop Pin');
+},'\uD83D\uDCCD Hold to Drop Pin');
 
 el('surveyDoneBtn').addEventListener('click',function(){
   if(waypoints.length<3){
     el('hudHint').textContent='Need at least 3 survey points'; return;
   }
   showBtns('normal');
+  el('dropPinBtn').style.display='none';  /* survey done - pin hidden */
+  el('traceBtn').style.display='';        /* anchor button visible now */
   goStep(2);   /* survey complete → scan */
 });
 
@@ -1581,7 +1584,8 @@ function stepAnchorEnter(){
 function enterAnchorMode(){
   el('stepCard').className='show anchor-mode';
   el('hud').style.display='';
-  el('normalBtns').style.display='none';   /* hide crowded normal buttons */
+  el('normalBtns').style.display='none';
+  el('traceBtns').style.display='none';  /* anchor-mode strip handles Undo/Restart/Done */
   el('scStatus').style.display='flex';
   el('scDot').className='sc-dot yellow';
   el('scStatusMain').textContent='0 columns anchored';
@@ -1619,6 +1623,8 @@ function stepPlaceEnter(){
   el('scAnchorBtns').style.display='none';
   el('hud').style.display='';
   el('hudHint').textContent='Point camera at the floor and tap to place drawing';
+  showBtns('normal');
+  configNormalBtns({alignBtn:false,lockBtn:false,traceBtn:false,measureBtn:false,dropPinBtn:false,gpsToggleBtn:false,resetBtn:false,exitBtn:true});
 }
 
 function onPlanPlaced(){
@@ -1631,9 +1637,12 @@ function onPlanPlaced(){
    ───────────────────────────────────────────────────────────────── */
 function stepOrientEnter(){
   xfLocked=false;
-  el('lockBtn').textContent='\uD83D\uDD13 Unlock';
+  el('lockBtn').textContent='\uD83D\uDD12 Lock';
   el('lockBtn').className='hud-btn';
   el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when columns align';
+  /* Show only Align N + Lock + Exit */
+  showBtns('normal');
+  configNormalBtns({alignBtn:true,lockBtn:true,traceBtn:false,measureBtn:false,dropPinBtn:false,gpsToggleBtn:false,resetBtn:false,exitBtn:true});
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -1644,7 +1653,7 @@ function stepPickEnter(){
   el('stepCard').classList.remove('anchor-mode');
   el('stepCard').style.background='';
   el('scAnchorBtns').style.display='none';
-  el('hud').style.display='';
+  el('hud').style.display='none';  /* card handles everything; HUD hidden */
 }
 
 function onPlanBound(){ goStep(7); }
@@ -1658,6 +1667,8 @@ var readyToastFired=false;
 function stepBoundEnter(){
   el('hud').style.display='';
   el('stepCard').style.background='';
+  showBtns('normal');
+  configNormalBtns({alignBtn:true,lockBtn:true,traceBtn:false,measureBtn:true,dropPinBtn:false,gpsToggleBtn:false,resetBtn:true,exitBtn:true});
   el('scDot').className='sc-dot green';
   el('scStatusMain').textContent=corners.length+' column anchors';
   el('scStatusSub').textContent='all sensors active · plan rigid-locked';
@@ -1705,6 +1716,11 @@ function showBtns(which){
   el('traceBtns').style.display   = which==='trace'?'flex':'none';
   el('measureBtns').style.display = which==='measure'?'flex':'none';
   el('surveyBtns').style.display  = which==='survey'?'flex':'none';
+}
+function configNormalBtns(cfg){
+  ['alignBtn','lockBtn','traceBtn','measureBtn','dropPinBtn','gpsToggleBtn','resetBtn','exitBtn'].forEach(function(id){
+    if(id in cfg) el(id).style.display = cfg[id] ? '' : 'none';
+  });
 }
 function showToast(msg,dur){
   el('toast').textContent=msg; show('toast');
@@ -1824,7 +1840,7 @@ el('resetBtn').addEventListener('click', wizardReset);
 /* lockBtn — on step 5 (orient), locking advances to step 6 (pick) */
 el('lockBtn').addEventListener('click',function(){
   xfLocked=!xfLocked;
-  this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Unlock';
+  this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD12 Lock';
   this.className=xfLocked?'hud-btn g':'hud-btn';
   el('hudHint').textContent=xfLocked?'Drawing locked \u2714':'Drag to reposition';
   if(xfLocked && currentStep===5){
@@ -1850,7 +1866,7 @@ function enterTraceMode(){
   showBtns('trace'); hide('scanRing'); show('snapReticle'); show('cornerBadge');
   el('traceDoneBtn').style.opacity='0.4';
   updateCornerBadge();
-  el('hudHint').textContent='Walk to column base \u2022 reticle snaps to structure';
+  el('hudHint').textContent='Walk to column base • reticle snaps to structure';
   showToast('\u23F3 Hold to Drop Anchor', 3000);
 }
 function cancelTrace(){
@@ -2526,6 +2542,7 @@ function startGPS(){
   el('dropPinBtn').style.display='';
   el('gpsToggleBtn').className='hud-btn g';
   el('gpsToggleBtn').textContent='\uD83D\uDEF0 GPS On';
+  el('gpsToggleBtn').style.display='none';  /* auto-hidden once GPS is active */
   gpsWatchId=navigator.geolocation.watchPosition(
     onGpsFix, onGpsErr,
     {enableHighAccuracy:true, maximumAge:2000, timeout:10000}
@@ -2611,7 +2628,8 @@ el('gpsToggleBtn').addEventListener('click',function(){
 });
 
 /* ── Drop Pin ── */
-makeHoldBtn(el('dropPinBtn'), 600, function() {
+/* dropPinBtn uses hold-to-drop */
+makeHoldBtn(el('dropPinBtn'),600,function(){
   if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
   if(gpsLat==null){ el('gpsCoordsText').textContent='No GPS fix yet — wait for signal'; return; }
   if(gpsAcc>25){ el('gpsAccText').textContent='Accuracy \u00b1'+Math.round(gpsAcc)+'m \u2014 move to open sky'; return; }
@@ -2632,7 +2650,7 @@ makeHoldBtn(el('dropPinBtn'), 600, function() {
   /* DOM label */
   var lbl=document.createElement('div');
   lbl.className='wp-label';
-  lbl.textContent='WP'+(idx+1)+' \u00b1'+Math.round(gpsAcc)+'m';
+  lbl.textContent='WP'+(idx+1)+' ±'+Math.round(gpsAcc)+'m';
   lbl.style.background='#'+col.toString(16).padStart(6,'0');
   lbl.style.color=col>0x888888?'#04050f':'#ffffff';
   el('wpLabels').appendChild(lbl);
@@ -2652,7 +2670,7 @@ makeHoldBtn(el('dropPinBtn'), 600, function() {
   /* Immediately run analysis if we have enough */
   var paired=waypoints.filter(function(w){return w.gps&&w.world;});
   if(paired.length>=2) runDriftAnalysis(paired);
-}, '📍 Hold to Drop Pin');
+}, '\uD83D\uDCCD Hold to Drop Pin');
 
 /* ── Drift Analysis ──────────────────────────────────────────────
    For each pair of waypoints we compare:
@@ -3006,7 +3024,14 @@ el('pickUndoBtn').addEventListener('click',function(){
   el('pickSub').textContent=uvPicks.length<N?'Hold on column '+(uvPicks.length+1):'Hold on column '+N;
   el('pickConfirmBtn').disabled=true;
 });
-/* pickClearBtn removed — undo one-by-one instead */
+el('pickClearBtn').addEventListener('click',function(){
+  uvPicks=[];
+  el('pickViewport').querySelectorAll('.pdot').forEach(function(d){d.remove();});
+  var N=corners.length;
+  el('pickInfo').textContent='0 / '+N;
+  el('pickSub').textContent='Hold on column 1';
+  el('pickConfirmBtn').disabled=true;
+});
 el('pickCancelBtn').addEventListener('click',function(){
   closePickOverlay();
   showBtns('normal');
@@ -3662,7 +3687,7 @@ function startWebXR(){
     var tMap={},panRC=new THREE.Raycaster(),panTgt=new THREE.Vector3();
     window.addEventListener('touchstart',function(e){for(var i=0;i<e.changedTouches.length;i++){var t=e.changedTouches[i];tMap[t.identifier]={x:t.clientX,y:t.clientY};}},{passive:true});
     window.addEventListener('touchmove',function(e){
-      if(!wxrPlaced||traceMode||boundMesh||el('pickOverlay').classList.contains('show'))return;
+      if(!wxrPlaced||traceMode||boundMesh)return;
       for(var i=0;i<e.changedTouches.length;i++){var t=e.changedTouches[i];tMap[t.identifier]={x:t.clientX,y:t.clientY};}
       var pts=Object.values(tMap);
       if(pts.length===1&&!xfLocked){
