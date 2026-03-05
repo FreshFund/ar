@@ -3030,11 +3030,6 @@ el('pickUndoBtn').addEventListener('click',function(){
   el('pickConfirmBtn').disabled=true;
 });
 
-  var N=corners.length;
-  el('pickInfo').textContent='0 / '+N;
-  el('pickSub').textContent='Hold on column 1';
-  el('pickConfirmBtn').disabled=true;
-});
 el('pickCancelBtn').addEventListener('click',function(){
   closePickOverlay();
   el('hud').style.display='none';
