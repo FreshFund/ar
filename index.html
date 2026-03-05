@@ -868,35 +868,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
     <div id="hud">
       <div id="hudHint">Point camera at the ground</div>
       <div id="statusBar"></div>
-      <div class="slider-row">
-        <span class="sl-lbl">Opacity</span>
-        <input type="range" id="opacitySlider" min="20" max="100" value="82">
-        <span class="sl-lbl" id="opacityVal">82%</span>
-      </div>
-      <div class="btn-row" id="normalBtns">
-        <button class="hud-btn" id="alignBtn">&#x1F9ED; Align N</button>
-        <button class="hud-btn" id="lockBtn">&#x1F513; Unlock</button>
-        <button class="hud-btn b" id="traceBtn">&#x25CE; Anchor</button>
-        <button class="hud-btn y" id="measureBtn">&#x1F4CF; Measure</button>
-        <button class="hud-btn b" id="dropPinBtn" style="display:none;">&#x1F4CD; Pin</button>
-        <button class="hud-btn" id="gpsToggleBtn">&#x1F6F0; GPS</button>
-        <button class="hud-btn" id="resetBtn">Reset</button>
-        <button class="hud-btn r" id="exitBtn">&#x2715; Exit</button>
-      </div>
-      <div class="btn-row" id="measureBtns" style="display:none;">
-        <button class="hud-btn" id="measureClearBtn">&#x21B6; Clear</button>
-        <button class="hud-btn r" id="measureExitBtn">&#x2715; Done</button>
-      </div>
-      <div class="btn-row" id="traceBtns" style="display:none;">
-        <button class="hud-btn" id="traceUndoBtn">&#x21B6; Undo</button>
-        <button class="hud-btn g" id="traceDoneBtn">&#x2713; Done</button>
-        <button class="hud-btn r" id="traceCancelBtn">&#x2715; Cancel</button>
-      </div>
-      <div class="btn-row" id="surveyBtns" style="display:none;">
-        <button class="hud-btn" id="surveyUndoBtn">&#x21B6; Undo</button>
-        <button class="hud-btn b" id="surveyPinBtn">&#x1F4CD; Pin</button>
-        <button class="hud-btn g" id="surveyDoneBtn" style="opacity:0.4;" disabled>&#x2713; Done</button>
-      </div>
     </div>
 
   </div><!-- end #xrOverlay -->
@@ -990,15 +961,8 @@ var gpsBearingRef=null;   // {heading:deg, confidence:0-1} from GPS pairs
 
 /* Plane re-snap throttle */
 var reSnapFrameCounter=0;
-var RESNAP_INTERVAL=20;    // frames between re-snap attempts
-var RESNAP_THRESHOLD=0.08; // metres (tighter)
-var PLAN_POS_SMOOTH=0.35;
-var PLAN_ROT_SMOOTH=0.20;
-var PLAN_SCALE_SMOOTH=0.12;
-var ANCHOR_POS_SMOOTH=0.40;
-var FORCE_RESOLVE_INTERVAL=30;
-var forceResolveCounter=0;
-var lastSolvedOrigin=null;
+var RESNAP_INTERVAL=45;   // frames between re-snap attempts
+var RESNAP_THRESHOLD=0.15; // metres — max allowed silent correction
 
 /* Per-constraint quality — fed to status panel */
 var constraintQuality={
@@ -1008,7 +972,98 @@ var constraintQuality={
   planeSnap: 0
 };
 
+/* ════════════════════════════════════════════════════════════════
+   SCENE MESH API  (mesh-detection)
+   Detects and visualises room geometry as colour-coded wireframes.
+   Semantic labels (Scene Understanding) tint each surface:
+     floor=green  wall=blue  ceiling=amber  table/other=cyan
+   Falls back gracefully on devices without mesh-detection.
+   ════════════════════════════════════════════════════════════════ */
+var meshWires   = new Map();  /* XRMesh → THREE.LineSegments */
+var meshChanged = new Map();  /* XRMesh → lastChangedTime    */
+
+var MESH_COLOURS = {
+  floor:    0x00ff88,
+  wall:     0x4da6ff,
+  ceiling:  0xffaa00,
+  table:    0xff88ff,
+  door:     0xffff44,
+  window:   0x88ffff,
+  couch:    0xff8844,
+  _default: 0x00ffee
+};
+
+function updateSceneMeshes(frame, refSpace){
+  if(!frame.detectedMeshes) return;
+  var seen = new Set();
+  var meshCount = 0, floorSeen = false, wallSeen = false;
+  frame.detectedMeshes.forEach(function(mesh){
+    seen.add(mesh); meshCount++;
+    var label  = mesh.semanticLabel || '_default';
+    if(label==='floor')   floorSeen = true;
+    if(label==='wall')    wallSeen  = true;
+    var pose = frame.getPose(mesh.meshSpace, refSpace);
+    if(!pose) return;
+    var m4 = new THREE.Matrix4().fromArray(pose.transform.matrix);
+    /* Rebuild wireframe only when geometry changes */
+    if(!meshWires.has(mesh) || meshChanged.get(mesh) !== mesh.lastChangedTime){
+      meshChanged.set(mesh, mesh.lastChangedTime);
+      var old = meshWires.get(mesh);
+      if(old){ scene.remove(old); old.geometry.dispose(); }
+      var verts = mesh.vertices;
+      var idx   = mesh.indices;
+      if(!verts || !idx || verts.length < 9){ meshWires.delete(mesh); return; }
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position',
+        new THREE.BufferAttribute(new Float32Array(verts), 3));
+      geo.setIndex(
+        new THREE.BufferAttribute(new Uint32Array(idx), 1));
+      var colour = MESH_COLOURS[label] || MESH_COLOURS._default;
+      var wireGeo = new THREE.WireframeGeometry(geo);
+      var seg = new THREE.LineSegments(wireGeo,
+        new THREE.LineBasicMaterial({
+          color: colour, transparent: true,
+          opacity: 0.28, depthWrite: false
+        }));
+      seg.matrixAutoUpdate = false;
+      scene.add(seg);
+      meshWires.set(mesh, seg);
+    }
+    /* Update pose every frame */
+    var seg2 = meshWires.get(mesh);
+    if(seg2){ seg2.matrix.copy(m4); seg2.matrixWorldNeedsUpdate = true; }
+  });
+  /* Remove stale meshes */
+  meshWires.forEach(function(seg, mesh){
+    if(!seen.has(mesh)){
+      scene.remove(seg); seg.geometry.dispose();
+      meshWires.delete(mesh); meshChanged.delete(mesh);
+    }
+  });
+  /* Assisted Space Setup: update scan-step status with mesh intelligence */
+  if(currentStep === 2){
+    var planeFloor = planeWires && planeWires.size > 0;
+    var hasFloor   = floorSeen || planeFloor;
+    var hasWall    = wallSeen  || meshCount > 2;
+    if(meshCount > 0 || hasFloor){
+      var parts = [];
+      if(hasFloor) parts.push('floor ✓');
+      if(hasWall)  parts.push('walls ✓');
+      parts.push(meshCount + ' surface' + (meshCount !== 1 ? 's' : ''));
+      el('scStatusSub').textContent = parts.join(' · ');
+    }
+  }
+}
+
+function clearSceneMeshes(){
+  meshWires.forEach(function(seg){
+    if(scene){ scene.remove(seg); } seg.geometry.dispose();
+  });
+  meshWires.clear(); meshChanged.clear();
+}
+
 /* Scale ruler */
+
 var metersPerUV=null;    // set by ruler: metres / UV unit distance
 var rulerMode=false;     // true while user is dragging ruler line on pickCanvas
 var rulerP1=null, rulerP2=null;   // {x,y} in pickCanvas coords (normalised 0-1)
@@ -1049,7 +1104,8 @@ var CORNER_COLORS=[0xe84f2b,0x2be87a,0x4da6ff,0xf0d060,0xe030f0,0x30e0f0,0xf0903
    7  BOUND        — Rigid-body solve + live quality → READY toast
    ═══════════════════════════════════════════════════════════════ */
 var currentStep = -1;
-var GPS_ACC_GATE = 15;   /* metres — required to pass step 0 */
+var GPS_ACC_GATE = 15;
+var surveyActive = false;   /* metres — required to pass step 0 */
 
 var STEPS = [
 
@@ -1107,10 +1163,10 @@ var STEPS = [
   /* ── 2  SCAN ─────────────────────────────────────────────────────
      Sweep camera to build surface mesh. Auto-advances on detection. */
   {
-    pill:'Step 3 · Scan',
+    pill:'Step 3 · Scan Room',
     icon:'🔍',
-    title:'Scan the Environment',
-    sub:'Sweep your camera slowly across the floor and up the walls. Column faces detected now become precision snap targets when anchoring.',
+    title:'Scan Room Geometry',
+    sub:'Slowly sweep the floor first, then tilt up to scan walls and columns. Cyan wireframes appear as surfaces are detected — the Next button unlocks when enough is found.',
     btnLabel:'Start Scanning →',
     btnDisabled:false,
     hasStatus:true,
@@ -1185,7 +1241,7 @@ var STEPS = [
     icon:'🔄',
     title:'Align the Drawing',
     sub:'The drawing is unlocked. Pinch to scale, two-finger rotate, single-finger drag. Align the drawn columns over the real column bases, then Lock.',
-    btnLabel:'Got it — I\'ll align →',
+    btnLabel:'Lock & Continue →',
     btnDisabled:false,
     hasStatus:false,
     hasSecondary:false,
@@ -1320,12 +1376,8 @@ function goStep(n){
      Peek-mode steps collapse immediately after rendering so the camera
      view is never fully blocked. The user sees the tip for ~0 ms then
      the card slides to a bottom strip (they can still see tips via the strip). */
-  if(n === 4){
-    el('stepCard').className = 'show anchor-mode';
-  } else if(s.peekMode){
-    /* Show full card briefly so user reads the tips, then auto-collapse */
+  if(s.peekMode){
     el('stepCard').className = 'show';
-    /* Re-show dismiss for peek steps so user can manually collapse too */
     dismiss.className='show';
   } else {
     el('stepCard').className = 'show';
@@ -1358,7 +1410,9 @@ el('scBtn').addEventListener('click', function(){
   if(currentStep===0){
     goStep(1);                          /* sensors → GPS survey          */
   } else if(currentStep===1){
-    enterSurveyMode();                  /* collapse card, show survey HUD */
+    if(!surveyActive){ surveyActive=true; enterSurveyMode(); }
+    else if(waypoints.length>=3){ surveyActive=false; goStep(2); }
+    else { el('hudHint').textContent='Need '+(3-waypoints.length)+' more pin'+(3-waypoints.length!==1?'s':''); }
   } else if(currentStep===2){
     if(el('scBtn').dataset.surfaceReady==='1'){
       goStep(3);                        /* surface found → anchors       */
@@ -1383,8 +1437,10 @@ el('scBtn').addEventListener('click', function(){
     peekCard();                         /* "Got it" → collapse, tap floor */
     el('hudHint').textContent='Point camera at ground \u2022 tap to place drawing';
   } else if(currentStep===5){
-    peekCard();                         /* "Got it" → collapse, align freely */
-    el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when columns align';
+    xfLocked=true;
+    if(planRigidGroup) planRigidGroup.rotation.y=planYaw;
+    el('hudHint').textContent='Drawing locked \u2714';
+    goStep(6);
   } else if(currentStep===6){
     dismissCard(); openPickOverlay();   /* open picker */
   } else if(currentStep===7){
@@ -1440,11 +1496,11 @@ function stepGpsSurveyEnter(){
 }
 
 function enterSurveyMode(){
-  /* Collapse card, swap HUD to survey buttons */
   peekCard();
   el('hud').style.display='';
-  showBtns('survey');
-  el('hudHint').textContent='Walk to a site point \u2022 tap Drop Pin \u2022 need 3+';
+  el('scBtn').disabled=true;
+  el('scBtn').textContent='Drop 3 pins to continue';
+  el('hudHint').textContent='Tap floor at 3+ spread-out points to drop GPS pins';
 }
 
 function updateGpsSurveyCard(){
@@ -1454,21 +1510,13 @@ function updateGpsSurveyCard(){
   el('scDot').className='sc-dot'+(n===0?'':n<3?' yellow':' green');
   el('scStatusMain').textContent=n+' survey point'+(n!==1?'s':'')+' dropped';
   el('scStatusSub').textContent=n<3?(3-n)+' more needed — spread across site':'ready — tap Done or add more';
-  /* Done button in the survey HUD row */
-  var doneBtn=el('surveyDoneBtn');
-  doneBtn.disabled=n<3;
-  doneBtn.style.opacity=n>=3?'1':'0.4';
+  /* Drive scBtn directly */
+  var scB=el('scBtn');
+  if(n>=3){ scB.disabled=false; scB.textContent='Done Surveying →'; }
+  else { scB.disabled=true; scB.textContent='Drop '+(3-n)+' more pin'+(3-n!==1?'s':'')+' to continue'; }
 }
 
-el('surveyUndoBtn').addEventListener('click',function(){
-  if(waypoints.length===0) return;
-  var wp=waypoints.pop();
-  if(wp.dot) scene.remove(wp.dot);
-  if(wp.labelEl) wp.labelEl.remove();
-  el('hudHint').textContent=waypoints.length+' point'+(waypoints.length!==1?'s':'')+' \u2014 '+(waypoints.length<3?(3-waypoints.length)+' more needed':'tap Done when ready');
-  renderMiniMap();
-  updateGpsSurveyCard();
-});
+/* surveyUndoBtn removed */
 /* Shared function — drop a survey pin at a given XR world position.
    Called from both the Pin button and the select tap-to-pin handler.  */
 function dropSurveyPin(rx,ry,rz){
@@ -1493,19 +1541,9 @@ function dropSurveyPin(rx,ry,rz){
   if(paired.length>=2) runDriftAnalysis(paired);
 }
 
-el('surveyPinBtn').addEventListener('click',function(){
-  if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
-  var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
-  dropSurveyPin(rx,ry,rz);
-});
+/* surveyPinBtn removed — tap on floor in survey step triggers dropSurveyPin */
 
-el('surveyDoneBtn').addEventListener('click',function(){
-  if(waypoints.length<3){
-    el('hudHint').textContent='Need at least 3 survey points'; return;
-  }
-  showBtns('normal');
-  goStep(2);   /* survey complete → scan */
-});
+/* surveyDoneBtn removed — handled by scBtn */
 
 /* ─────────────────────────────────────────────────────────────────
    Step 2 — SCAN
@@ -1516,8 +1554,12 @@ var SCAN_PLANE_GATE=3;
 function stepScanEnter(){
   el('scDot').className='sc-dot yellow';
   el('scStatusMain').textContent='Scanning…';
-  el('scStatusSub').textContent='Sweep camera slowly across the floor';
-  el('hud').style.display='none';
+  el('scStatusSub').textContent='Phase 1: sweep floor • Phase 2: tilt up to scan walls';
+  el('hud').style.display='';
+  el('scBtn').disabled=true;
+  el('scBtn').dataset.surfaceReady='';
+  el('scBtn').textContent='Sweep camera to detect surfaces';
+  el('hudHint').textContent='Phase 1 — sweep camera slowly across the floor';
 }
 
 function updateScanCard(){
@@ -1551,6 +1593,7 @@ function updateScanCard(){
   el('scBtn').textContent='Anchor Columns →';
   el('scBtn').disabled=false;
   el('scBtn').dataset.surfaceReady='1';
+  showToast('🧩 Surfaces detected — tilt up to scan walls too', 4000);
   /* Auto-advance if already in peek strip */
   if(el('stepCard').className.indexOf('peek-mode')!==-1) goStep(3);
 }
@@ -1570,7 +1613,6 @@ function stepAnchorEnter(){
 function enterAnchorMode(){
   el('stepCard').className='show anchor-mode';
   el('hud').style.display='';
-  el('normalBtns').style.display='none';   /* hide crowded normal buttons */
   el('scStatus').style.display='flex';
   el('scDot').className='sc-dot yellow';
   el('scStatusMain').textContent='0 columns anchored';
@@ -1607,7 +1649,8 @@ function stepPlaceEnter(){
   el('stepCard').style.background='';
   el('scAnchorBtns').style.display='none';
   el('hud').style.display='';
-  el('hudHint').textContent='Point camera at the floor and tap to place drawing';
+  peekCard();
+  el('hudHint').textContent='Point camera at floor • tap to place drawing';
 }
 
 function onPlanPlaced(){
@@ -1620,9 +1663,8 @@ function onPlanPlaced(){
    ───────────────────────────────────────────────────────────────── */
 function stepOrientEnter(){
   xfLocked=false;
-  el('lockBtn').textContent='\uD83D\uDD13 Unlock';
-  el('lockBtn').className='hud-btn';
-  el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag \u2022 tap Lock when columns align';
+  el('scBtn').textContent='Lock & Continue \u2192'; el('scBtn').disabled=false;
+  el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag to align columns, then Lock';
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -1682,19 +1724,13 @@ function wizardReset(){
   el('stepCard').style.background='';
   el('stepCard').classList.remove('anchor-mode');
   el('stepCard').className='';
-  showBtns('normal');   /* ensure survey/trace btns hidden on reset */
 }
 
 
 function el(id){ return document.getElementById(id); }
 function show(id,d){ el(id).style.display=d||'block'; }
 function hide(id){ el(id).style.display='none'; }
-function showBtns(which){
-  el('normalBtns').style.display  = which==='normal'?'flex':'none';
-  el('traceBtns').style.display   = which==='trace'?'flex':'none';
-  el('measureBtns').style.display = which==='measure'?'flex':'none';
-  el('surveyBtns').style.display  = which==='survey'?'flex':'none';
-}
+function showBtns(which){ /* button rows removed */ }
 function showToast(msg,dur){
   el('toast').textContent=msg; show('toast');
   clearTimeout(showToast._t);
@@ -1772,77 +1808,33 @@ el('uiToggleBtn').addEventListener('click',function(){
 /* ═══════════════════════════════
    HUD CONTROLS
 ═══════════════════════════════ */
-el('opacitySlider').addEventListener('input',function(){
-  xfOpacity=parseFloat(this.value)/100; el('opacityVal').textContent=this.value+'%';
-  if(planeMesh)planeMesh.material.opacity=xfOpacity;
-  if(boundMesh)boundMesh.material.opacity=xfOpacity;
-});
-el('rotCW') && el('rotCW').addEventListener && void 0; // removed
-function applyNorthAlignment(){
-  if(!wxrPlaced){ el('hudHint').textContent='Place the plan first'; return; }
-  var h=fusedHeading!=null?fusedHeading:compassHeading;
-  if(h==null){ el('hudHint').textContent='Enable GPS for compass heading'; return; }
-  xrNorthOffset=h;
-  /* One-shot: snap plan to current North reading. No continuous nudge. */
-  planYaw=xfRotY;
-  if(planRigidGroup) planRigidGroup.rotation.y=planYaw;
-  el('hudHint').textContent='True North locked \u2014 '+Math.round(h)+'\u00b0 \u2714';
-  showToast('\uD83E\uDDED Aligned to '+Math.round(h)+'\u00b0 \u2014 drag to fine-tune', 3000);
-}
-el('alignBtn').addEventListener('click', applyNorthAlignment);
+/* opacitySlider removed */
+/* alignBtn removed */
 function applyFree(){if(planeGroup&&wxrPlaced)planeGroup.rotation.y=xfRotY;}
 
-el('traceBtn').addEventListener('click',function(){
-  if(!wxrFloorFound&&!wxrPlaced){el('hudHint').textContent='Point camera at the ground first';return;}
-  enterTraceMode();
-});
-el('traceUndoBtn').addEventListener('click',undoCorner);
-el('traceDoneBtn').addEventListener('click',function(){
-  if(corners.length<2){el('hudHint').textContent='Need at least 2 column anchors';return;}
-  showBtns('normal');
-  hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
-  traceMode=false;
-  if(currentStep===3){ goStep(4); }    /* anchors done → place step */
-  else { openPickOverlay(); }           /* already past wizard, open directly */
-});el('traceCancelBtn').addEventListener('click',cancelTrace);
-el('resetBtn').addEventListener('click', wizardReset);
+/* traceBtn removed */
+/* traceUndoBtn/traceDoneBtn/traceCancelBtn removed */
+/* resetBtn removed */
 
-/* lockBtn — on step 5 (orient), locking advances to step 6 (pick) */
-el('lockBtn').addEventListener('click',function(){
-  xfLocked=!xfLocked;
-  this.textContent=xfLocked?'\uD83D\uDD12 Locked':'\uD83D\uDD13 Unlock';
-  this.className=xfLocked?'hud-btn g':'hud-btn';
-  el('hudHint').textContent=xfLocked?'Drawing locked \u2714':'Drag to reposition';
-  if(xfLocked && currentStep===5){
-    goStep(6);
-  }
-});
-el('exitBtn').addEventListener('click',function(){
-  if(xrSession){try{xrSession.end();}catch(e){}xrSession=null;}
-  if(gpsEnabled)stopGPS();
-  /* Reset UI toggle */
-  uiVisible=true;
-  el('xrOverlay').classList.remove('ui-hidden');
-  el('uiToggleBtn').classList.remove('visible','ui-off');
-  el('uiToggleBtn').textContent='\u2630';
-  hide('arScreen'); show('landing','flex'); doReset();
-});
+/* lockBtn removed */
+/* exitBtn removed */
 
 /* ═══════════════════════════════
    ANCHOR MODE (column anchoring)
 ═══════════════════════════════ */
 function enterTraceMode(){
   traceMode=true; corners=[];
-  showBtns('trace'); hide('scanRing'); show('snapReticle'); show('cornerBadge');
-  el('traceDoneBtn').style.opacity='0.4';
+  hide('scanRing'); show('snapReticle'); show('cornerBadge');
+  el('scBtn').disabled=true;
+  el('scBtn').textContent='Tap 2+ column bases first';
   updateCornerBadge();
-  el('hudHint').textContent='Walk to each column base and tap to anchor';
   el('hudHint').textContent='Walk to column base • reticle snaps to structure';
 }
 function cancelTrace(){
   traceMode=false; corners=[]; clearWireVisuals();
-  showBtns('normal'); hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
-  el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap Anchor to bind to columns':'Point camera at the ground';
+  hide('snapReticle'); hide('snapIndicator'); hide('cornerBadge');
+  el('scBtn').textContent='Place Anchors \u2192'; el('scBtn').disabled=false;
+  el('hudHint').textContent='Point camera at the ground';
 }
 function undoCorner(){
   if(corners.length===0)return;
@@ -1856,8 +1848,10 @@ function updateCornerBadge(){
   var n=corners.length;
   el('cornerBadge').textContent=n+' column'+(n!==1?'s':'')+' anchored'+
     (n<2?' \u2014 need '+(2-n)+' more':n<4?' \u2014 add more for accuracy':' \u2014 tap Done when ready');
-  el('traceDoneBtn').style.opacity=n>=2?'1':'0.4';
-  updateAnchorCard();   /* keep wizard step-3 anchor card in sync */
+  var scB2=el('scBtn');
+  if(n>=2){ scB2.disabled=false; scB2.textContent='Anchors Done →'; }
+  else { scB2.disabled=true; scB2.textContent='Tap '+(2-n)+' more column base'+(2-n!==1?'s':''); }
+  updateAnchorCard();
 }
 function addCornerVisual(pos,idx){
   var col=CORNER_COLORS[idx%CORNER_COLORS.length];
@@ -1879,14 +1873,13 @@ function clearWireVisuals(){
   wireDots.forEach(function(d){scene.remove(d);}); wireDots=[];
 }
 function doReset(){
-  traceMode=false; corners=[]; uvPicks=[];
+  traceMode=false; surveyActive=false; corners=[]; uvPicks=[];
   wxrPlaced=false; xfLocked=true; xfRotY=0; xfScaleM=1;
   currentSnap=null; solveCount=0;
   measureMode=false; measurePt1=null; measurePt2=null;
   metersPerUV=null; rulerP1=null; rulerP2=null;
   planBound=false; planYaw=0; planScale=1; planOrigin.set(0,0,0);
   fusedHeading=null; headingLocked=false; lastAlpha=null; lastGyroTime=null; xrNorthOffset=null;
-  lastSolvedOrigin=null; forceResolveCounter=0;
   gpsBearingFixes=[]; gpsBearingRef=null; reSnapFrameCounter=0;
   constraintQuality={xrAnchor:0,compass:0,gpsBearing:0,planeSnap:0};
   clearMeasureVisuals(); hide('measureLabel');
@@ -1894,13 +1887,12 @@ function doReset(){
   if(planRigidGroup&&scene){scene.remove(planRigidGroup);planRigidGroup=null;boundMesh=null;}
   else if(boundMesh&&scene){scene.remove(boundMesh);boundMesh=null;}
   if(planeGroup)planeGroup.visible=false;
-  clearWireVisuals(); clearPlaneWires();
+  clearWireVisuals(); clearPlaneWires(); clearSceneMeshes();
   showBtns('normal');
   show('scanRing'); hide('snapReticle'); hide('cornerBadge');
   hide('snapIndicator'); hide('driftBadge'); hide('planeBadge');
   hide('statusBar'); hide('pickOverlay');
   el('hudHint').textContent='Point camera at the ground';
-  el('lockBtn').textContent='\uD83D\uDD13 Unlock'; el('lockBtn').className='hud-btn';
 }
 
 /* ═══════════════════════════════
@@ -2404,18 +2396,14 @@ el('rulerConfirmBtn').addEventListener('click',function(){
 function enterMeasureMode(){
   measureMode=true; measurePt1=null; measurePt2=null;
   clearMeasureVisuals();
-  el('normalBtns').style.display='none';
-  el('measureBtns').style.display='flex';
   hide('measureLabel');
   el('hudHint').textContent='Tap floor for point 1\u2026';
 }
 function exitMeasureMode(){
   measureMode=false; measurePt1=null; measurePt2=null;
   clearMeasureVisuals();
-  el('normalBtns').style.display='flex';
-  el('measureBtns').style.display='none';
   hide('measureLabel');
-  el('hudHint').textContent=wxrPlaced?'Plan placed \u2022 Tap to measure':'Point camera at the ground';
+  el('hudHint').textContent=wxrPlaced?'Plan placed':'Point camera at the ground';
 }
 function clearMeasureVisuals(){
   if(!scene)return;
@@ -2456,15 +2444,8 @@ function updateMeasureLabel(worldA, worldB){
   show('measureLabel');
 }
 
-el('measureBtn').addEventListener('click',function(){
-  if(!wxrPlaced&&!wxrFloorFound){el('hudHint').textContent='Place the plan first';return;}
-  enterMeasureMode();
-});
-el('measureClearBtn').addEventListener('click',function(){
-  measurePt1=null; measurePt2=null; clearMeasureVisuals(); hide('measureLabel');
-  el('hudHint').textContent='Tap floor for point 1\u2026';
-});
-el('measureExitBtn').addEventListener('click',exitMeasureMode);
+/* measureBtn removed */
+/* measureBtns removed */
 
 /* ═══════════════════════════════════════════════════
    GPS · COMPASS · WAYPOINTS · DRIFT ANALYSIS
@@ -2510,9 +2491,6 @@ function startGPS(){
   if(!navigator.geolocation){ el('gpsCoordsText').textContent='Geolocation not supported'; return; }
   gpsEnabled=true;
   el('gpsPanel').classList.add('show');
-  el('dropPinBtn').style.display='';
-  el('gpsToggleBtn').className='hud-btn g';
-  el('gpsToggleBtn').textContent='\uD83D\uDEF0 GPS On';
   gpsWatchId=navigator.geolocation.watchPosition(
     onGpsFix, onGpsErr,
     {enableHighAccuracy:true, maximumAge:2000, timeout:10000}
@@ -2524,9 +2502,6 @@ function stopGPS(){
   gpsEnabled=false;
   if(gpsWatchId!=null){ navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId=null; }
   el('gpsPanel').classList.remove('show');
-  el('dropPinBtn').style.display='none';
-  el('gpsToggleBtn').className='hud-btn';
-  el('gpsToggleBtn').textContent='\uD83D\uDEF0 GPS';
   hide('gpsMap');
   stopCompass();
 }
@@ -2593,53 +2568,10 @@ function updateCompassBadge(h){
 }
 
 /* ── GPS Toggle button ── */
-el('gpsToggleBtn').addEventListener('click',function(){
-  if(gpsEnabled) stopGPS(); else startGPS();
-});
+/* gpsToggleBtn removed */
 
 /* ── Drop Pin ── */
-el('dropPinBtn').addEventListener('click',function(){
-  if(!reticle||!reticle.visible){ el('hudHint').textContent='Point camera at ground to place pin'; return; }
-  if(gpsLat==null){ el('gpsCoordsText').textContent='No GPS fix yet — wait for signal'; return; }
-  if(gpsAcc>25){ el('gpsAccText').textContent='Accuracy \u00b1'+Math.round(gpsAcc)+'m \u2014 move to open sky'; return; }
-
-  var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
-  var fp=currentSnap?{x:currentSnap.x,y:currentSnap.y,z:currentSnap.z}:{x:rx,y:ry,z:rz};
-  var idx=waypoints.length;
-  var col=WP_COLORS[idx%WP_COLORS.length];
-
-  /* 3D dot */
-  var dot=new THREE.Mesh(
-    new THREE.SphereGeometry(0.045,12,12),
-    new THREE.MeshBasicMaterial({color:col})
-  );
-  dot.position.set(fp.x,fp.y+0.045,fp.z);
-  scene.add(dot);
-
-  /* DOM label */
-  var lbl=document.createElement('div');
-  lbl.className='wp-label';
-  lbl.textContent='WP'+(idx+1)+' ±'+Math.round(gpsAcc)+'m';
-  lbl.style.background='#'+col.toString(16).padStart(6,'0');
-  lbl.style.color=col>0x888888?'#04050f':'#ffffff';
-  el('wpLabels').appendChild(lbl);
-
-  var wp={
-    id:idx+1,
-    gps:{lat:gpsLat,lng:gpsLng,acc:gpsAcc},
-    world:{x:fp.x,y:fp.y,z:fp.z},
-    dot:dot, labelEl:lbl
-  };
-  waypoints.push(wp);
-
-  el('hudHint').textContent='WP'+(idx+1)+' pinned \u2022 GPS \u00b1'+Math.round(gpsAcc)+'m';
-  renderMiniMap();
-  updateGpsSurveyCard();   /* update step-1 survey card live */
-
-  /* Immediately run analysis if we have enough */
-  var paired=waypoints.filter(function(w){return w.gps&&w.world;});
-  if(paired.length>=2) runDriftAnalysis(paired);
-});
+/* dropPinBtn removed */
 
 /* ── Drift Analysis ──────────────────────────────────────────────
    For each pair of waypoints we compare:
@@ -3180,24 +3112,15 @@ function applyRigidTransform(tx,tz,yaw,scale){
 }
 
 /* Run Kabsch → update plan transform → update status panel */
-function lerpAngle(a,b,t){
-  var d=b-a; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI; return a+d*t;
-}
 function reSolvePlan(){
   var t0=performance.now();
   var sol=kabschSolve(corners,uvPicks);
   if(!sol) return false;
+  planOrigin.set(sol.tx,0,sol.tz);
+  planYaw=sol.yaw;
+  planScale=sol.scale;
   planBound=true;
-  if(lastSolvedOrigin===null){
-    planOrigin.set(sol.tx,0,sol.tz); planYaw=sol.yaw; planScale=sol.scale;
-  } else {
-    planOrigin.x+=(sol.tx-planOrigin.x)*PLAN_POS_SMOOTH;
-    planOrigin.z+=(sol.tz-planOrigin.z)*PLAN_POS_SMOOTH;
-    planYaw=lerpAngle(planYaw,sol.yaw,PLAN_ROT_SMOOTH);
-    planScale+=(sol.scale-planScale)*PLAN_SCALE_SMOOTH;
-  }
-  lastSolvedOrigin={x:planOrigin.x,z:planOrigin.z};
-  applyRigidTransform(planOrigin.x,planOrigin.z,planYaw,planScale);
+  applyRigidTransform(sol.tx,sol.tz,sol.yaw,sol.scale);
   solveCount++;
   var ms=(performance.now()-t0).toFixed(1);
   var resStr=sol.residualM<0.005?'\u2714':sol.residualM<0.05?'\u26A0':'!';
@@ -3227,19 +3150,11 @@ function updateAnchors(frame,refSpace){
       var ap=frame.getPose(c.anchor.anchorSpace,refSpace);
       if(!ap)return;
       var nx=ap.transform.position.x,ny=ap.transform.position.y,nz=ap.transform.position.z;
-      var ddx=nx-c.worldPos.x,ddy=ny-c.worldPos.y,ddz=nz-c.worldPos.z;
-      var dist=Math.sqrt(ddx*ddx+ddy*ddy+ddz*ddz);
-      if(dist>0.0005){
-        var alpha=dist>0.03?1.0:ANCHOR_POS_SMOOTH;
-        c.worldPos.x+=ddx*alpha; c.worldPos.y+=ddy*alpha; c.worldPos.z+=ddz*alpha;
-        moved=true;
+      if(Math.abs(nx-c.worldPos.x)+Math.abs(ny-c.worldPos.y)+Math.abs(nz-c.worldPos.z)>0.0005){
+        c.worldPos={x:nx,y:ny,z:nz}; moved=true;
       }
     }catch(e){}
   });
-
-  /* 1b. Forced periodic re-solve even when anchors are quiet */
-  forceResolveCounter++;
-  if(forceResolveCounter>=FORCE_RESOLVE_INTERVAL){forceResolveCounter=0;moved=true;}
 
   /* 2. Periodic plane-vertex re-snap (vertices + edge midpoints via upgraded snap fn) */
   reSnapFrameCounter++;
@@ -3279,9 +3194,25 @@ function updateAnchors(frame,refSpace){
         faces North. Derived from (fusedHeading - xrNorthOffset) which
         gives the XR-space rotation the plan needs to compensate for
         device heading drift since placement.                            */
-  /* 3. Compass heading is EXPLICIT-ONLY via applyNorthAlignment().
-     Per-frame nudging caused indoor rotation drift from unreliable
-     magnetometer near metal structure. Kabsch handles rotation. */
+  if(planBound&&headingLocked&&fusedHeading!=null&&xrNorthOffset!=null){
+    var headingDelta=fusedHeading-xrNorthOffset;
+    while(headingDelta>180)headingDelta-=360; while(headingDelta<-180)headingDelta+=360;
+
+    /* targetYaw that would keep plan-top pointing North */
+    var targetYaw = -headingDelta * Math.PI / 180;
+
+    /* How far are we from where we should be? */
+    var diff = targetYaw - planYaw;
+    while(diff>Math.PI)diff-=2*Math.PI; while(diff<-Math.PI)diff+=2*Math.PI;
+
+    /* Only apply if there's a real difference (> 0.1° ≈ 0.00175 rad)
+       and blend gently so it doesn't snap harshly                       */
+    if(Math.abs(diff) > 0.00175){
+      planYaw += diff * 0.015;   /* exponential approach — ~1.5% per frame */
+      if(planRigidGroup) planRigidGroup.rotation.y = planYaw;
+      moved = true;
+    }
+  }
 
   return moved;
 }
@@ -3449,7 +3380,7 @@ function startWebXR(){
   /* Session */
   navigator.xr.requestSession('immersive-ar',{
     requiredFeatures:['hit-test'],
-    optionalFeatures:['plane-detection','anchors','dom-overlay'],
+    optionalFeatures:['plane-detection','anchors','dom-overlay','mesh-detection','scene-understanding'],
     domOverlay:{root:el('xrOverlay')}   // ← the FULL overlay div, not just #hud
   }).then(function(session){
     xrSession=session;
@@ -3629,7 +3560,7 @@ function startWebXR(){
       floorPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0).applyQuaternion(q).normalize(),new THREE.Vector3(rx,ry,rz));
       if(fusedHeading!=null) xrNorthOffset=fusedHeading;
       applyFree(); hide('scanRing');
-      xfLocked=true; el('lockBtn').textContent='\uD83D\uDD12 Locked'; el('lockBtn').className='hud-btn g';
+      xfLocked=true;
       onPlanPlaced();
     });
 
@@ -3714,9 +3645,10 @@ function xrFrame(frame){
   /* Update hold ring for anchor placement */
   if(typeof updateHoldRing==='function') try{updateHoldRing(frame);}catch(e){}
 
-  /* Update plane wireframes */
+  /* Update plane wireframes + scene meshes (mesh-detection API) */
   if(xrRefSpace){
     try{updatePlaneWireframes(frame,xrRefSpace);}catch(e){}
+    try{updateSceneMeshes(frame,xrRefSpace);}catch(e){}
   }
 
   if(!xrHitTestSrc||!xrRefSpace)return;
