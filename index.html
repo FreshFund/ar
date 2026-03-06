@@ -200,6 +200,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   padding:9px 13px; font-family:var(--mono); font-size:10px;
   letter-spacing:.11em; text-transform:uppercase; cursor:pointer;
   border-radius:2px; transition:background .15s, border-color .15s, color .15s;
+  touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+  user-select:none; -webkit-user-select:none;
 }
 .hud-btn:active { transform:scale(.95); }
 .hud-btn:hover  { background:rgba(232,79,43,.18); border-color:var(--accent); }
@@ -589,6 +591,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
   text-transform:uppercase; padding:14px 32px; border-radius:3px;
   cursor:pointer; transition:background .15s, transform .1s;
   min-width:200px; text-align:center;
+  touch-action:manipulation;   /* kill 300 ms delay on mobile/WebXR */
+  -webkit-tap-highlight-color:transparent;
+  user-select:none; -webkit-user-select:none;
 }
 .sc-btn:hover { background:#c83d1e; }
 .sc-btn:active { transform:scale(.97); }
@@ -1344,6 +1349,7 @@ var STEPS = [
 
 function goStep(n){
   currentStep = n;
+  stepTransitionAt = Date.now();
   var s = STEPS[n];
 
   /* ── Card content ── */
@@ -1433,7 +1439,39 @@ function peekCard(){
 }
 
 /* ── scBtn click routing ── */
-el('scBtn').addEventListener('click', function(){
+/* Use touchend for instant response in WebXR (no 300ms delay).
+   Guard with a flag to prevent double-firing on devices that also send click. */
+(function(){
+  function handleScBtn(e){
+    e.preventDefault();
+    if(el('scBtn').disabled) return;
+    el('scBtn').dispatchEvent(new Event('sc-action'));
+  }
+  el('scBtn').addEventListener('touchend', handleScBtn, {passive:false});
+  el('scBtn').addEventListener('click', function(e){
+    /* Only handle click if touchend didn't already fire (desktop/mouse fallback) */
+    if(e._fromTouch) return;
+    el('scBtn').dispatchEvent(new Event('sc-action'));
+  });
+})();
+(function(){
+  function handleSec(e){
+    e.preventDefault();
+    if(el('scSecondary').disabled) return;
+    el('scSecondary').dispatchEvent(new Event('sec-action'));
+  }
+  el('scSecondary').addEventListener('touchend', handleSec, {passive:false});
+  el('scSecondary').addEventListener('click', function(e){
+    if(e._fromTouch) return;
+    el('scSecondary').dispatchEvent(new Event('sec-action'));
+  });
+})();
+
+/* Track last step-transition time to debounce XR select after button presses */
+var stepTransitionAt = 0;
+var STEP_TRANSITION_GUARD_MS = 700;
+
+el('scBtn').addEventListener('sc-action', function(){
   if(currentStep===0){
     goStep(1);                          /* sensors → GPS survey          */
   } else if(currentStep===1){
@@ -1482,7 +1520,7 @@ el('scBtn').addEventListener('click', function(){
 });
 
 /* ── scSecondary routing ── */
-el('scSecondary').addEventListener('click', function(){
+el('scSecondary').addEventListener('sec-action', function(){
   if(currentStep===7){
     dismissCard(); enterTraceMode();    /* add more anchors */
   }
@@ -3510,15 +3548,11 @@ function updateAnchors(frame,refSpace){
   }
 
   /* 3. Apply true-North heading constraint from fused compass.
-        We only nudge the plan when the heading has changed meaningfully
-        since the last frame — avoids the previous bug where planYaw
-        accumulated a tiny fixed step every frame even when stationary.
-
-        targetYaw: the yaw planRigidGroup should have so that plan-top
-        faces North. Derived from (fusedHeading - xrNorthOffset) which
-        gives the XR-space rotation the plan needs to compensate for
-        device heading drift since placement.                            */
-  if(planBound&&headingLocked&&fusedHeading!=null&&xrNorthOffset!=null){
+        Only active BEFORE the plan is bound to physical anchors.
+        Once planBound=true, the Kabsch solve owns the orientation —
+        running the compass constraint on top causes the plan to visibly
+        rotate whenever the user turns their phone, which is wrong.      */
+  if(!planBound && headingLocked && fusedHeading!=null && xrNorthOffset!=null){
     var headingDelta=fusedHeading-xrNorthOffset;
     while(headingDelta>180)headingDelta-=360; while(headingDelta<-180)headingDelta+=360;
 
@@ -3954,6 +3988,9 @@ function startWebXR(){
       /* INITIAL PLACEMENT — only allowed in Place step (4) or after wizard */
       if(wxrPlaced) return;
       if(currentStep !== 4 && currentStep !== -1) return;
+      /* Debounce: ignore XR select for a moment after the button press that
+         triggered goStep(4), so the same tap doesn't immediately place the plan */
+      if(Date.now() - stepTransitionAt < STEP_TRANSITION_GUARD_MS) return;
       /* Use smoothed hit position for placement if available */
       var px=smoothHitPos?smoothHitPos.x:rx;
       var py=smoothHitPos?smoothHitPos.y:ry;
