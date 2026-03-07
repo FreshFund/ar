@@ -1479,18 +1479,7 @@ el('scBtn').addEventListener('sc-action', function(){
     else if(waypoints.length>=3){ surveyActive=false; goStep(2); }
     else { el('hudHint').textContent='Need '+(3-waypoints.length)+' more pin'+(3-waypoints.length!==1?'s':''); }
   } else if(currentStep===2){
-    if(el('scBtn').dataset.surfaceReady==='1'){
-      goStep(3);                        /* surface found → anchors       */
-    } else if(el('stepCard').className.indexOf('peek-mode')===-1){
-      /* First press — collapse to peek-mode scanning strip */
-      el('stepCard').className='show peek-mode has-action';
-      el('hud').style.display='';
-      el('scBtn').disabled=true;
-      el('scBtn').textContent='Scanning\u2026 sweep the floor';
-      el('hudHint').textContent='Phase 1 \u2014 sweep camera slowly across the floor';
-    } else {
-      el('hudHint').textContent='Keep sweeping \u2014 surfaces not yet detected';
-    }
+    goStep(3);                          /* always advance — btn disabled until ready */
   } else if(currentStep===3){
     var inStrip = el('stepCard').className.indexOf('anchor-mode')!==-1;
     if(inStrip){
@@ -1628,13 +1617,31 @@ var scanPlaneCount=0;
 var SCAN_PLANE_GATE=3;
 
 function stepScanEnter(){
+  /* Always start in peek-mode has-action so the button is visible immediately.
+     The button is enabled once the floor is hit-tested (wxrFloorFound) or
+     planes are detected. It's also always skip-able after 5 seconds. */
+  el('stepCard').className='show peek-mode has-action';
+  el('hud').style.display='';
   el('scDot').className='sc-dot yellow';
   el('scStatusMain').textContent='Scanning…';
-  el('scStatusSub').textContent='Phase 1: sweep floor • Phase 2: tilt up to scan walls';
-  el('scBtn').disabled=false;
+  el('scStatusSub').textContent='Point camera at floor • sweep slowly';
   el('scBtn').dataset.surfaceReady='';
-  el('scBtn').textContent='Start Scanning \u2192';
-  /* HUD hidden until user presses Start Scanning */
+  el('scBtn').textContent='Sweep camera to detect floor…';
+  el('scBtn').disabled=true;
+  el('hudHint').textContent='Sweep camera slowly across the floor';
+  /* Unlock the button after 5 s regardless — user may lack plane detection */
+  clearTimeout(stepScanEnter._fallbackTimer);
+  stepScanEnter._fallbackTimer=setTimeout(function(){
+    if(currentStep!==2)return;
+    el('scBtn').disabled=false;
+    el('scBtn').dataset.surfaceReady='1';
+    el('scBtn').textContent='Anchor Columns \u2192';
+    el('scStatusMain').textContent='Ready';
+    el('scStatusSub').textContent='Tap to continue (scan may be limited)';
+    el('scDot').className='sc-dot yellow';
+  }, 5000);
+  /* Also fire immediately if floor already found from a previous session */
+  if(wxrFloorFound) updateScanCard();
 }
 
 function updateScanCard(){
@@ -1642,43 +1649,35 @@ function updateScanCard(){
   var planeCount=planeWires.size;
   scanPlaneCount=planeCount;
   var anySurface=planeCount>0||wxrFloorFound;
+  /* Ensure card stays in peek-mode has-action */
+  if(el('stepCard').className!=='show peek-mode has-action'){
+    el('stepCard').className='show peek-mode has-action';
+    el('hud').style.display='';
+  }
+  if(!anySurface) return;  /* button unlocks via fallback timer or below */
+  /* Surface found — cancel fallback timer and unlock immediately */
+  clearTimeout(stepScanEnter._fallbackTimer);
+  if(el('scBtn').dataset.surfaceReady==='1') return; /* already unlocked */
   var floors=0,walls=0;
   planeWires.forEach(function(wire,plane){
     if(typeof plane==='object'&&plane.orientation){
       if(plane.orientation==='vertical')walls++; else floors++;
     }
   });
-  /* Ensure peek-mode has-action stays throughout step 2 */
-  if(el('stepCard').className.indexOf('peek-mode')===-1){
-    el('stepCard').className='show peek-mode has-action';
-    el('hud').style.display='';
-  } else if(el('stepCard').className.indexOf('has-action')===-1){
-    el('stepCard').className='show peek-mode has-action';
-  }
-  if(!anySurface){
-    el('scDot').className='sc-dot';
-    el('scStatusMain').textContent='Scanning…';
-    el('scStatusSub').textContent='Sweep camera slowly across the floor';
-    el('scBtn').textContent='Scanning… keep sweeping';
-    el('scBtn').disabled=true;
-    el('scBtn').dataset.surfaceReady='';
-    return;
-  }
-  var dotCls=planeCount===0?' yellow':planeCount<SCAN_PLANE_GATE?' yellow':' green';
+  var dotCls=planeCount>=SCAN_PLANE_GATE?' green':' yellow';
   el('scDot').className='sc-dot'+dotCls;
   if(planeCount>0){
     el('scStatusMain').textContent=planeCount+' surface'+(planeCount!==1?'s':'')+' mapped';
-    el('scStatusSub').textContent=floors+' floor'+(floors!==1?'s':'')+' · '+walls+' wall'+(walls!==1?'s':'');
+    el('scStatusSub').textContent=(floors?floors+' floor'+(floors!==1?'s':''):'floor')
+      +' · '+(walls?walls+' wall'+(walls!==1?'s':''):'sweep up for walls');
   } else {
     el('scStatusMain').textContent='Floor detected';
     el('scStatusSub').textContent='Tilt up to scan walls and columns';
   }
-  if(el('scBtn').dataset.surfaceReady!=='1'){
-    showToast('\uD83E\uDDE9 Surfaces detected — tilt up to scan walls too', 4000);
-  }
   el('scBtn').textContent='Anchor Columns \u2192';
   el('scBtn').disabled=false;
   el('scBtn').dataset.surfaceReady='1';
+  showToast('\uD83E\uDDE9 Floor found \u2014 tap Anchor Columns when ready', 3500);
 }
 
 /* ─────────────────────────────────────────────────────────────────
