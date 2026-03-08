@@ -669,6 +669,48 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
 .sc-dot-s.active { background:var(--accent); }
 .sc-dot-s.done   { background:rgba(232,79,43,.4); }
 
+
+/* ── Recent sessions list ── */
+#recentSection {
+  width:100%; margin-top:20px;
+  animation:fadeUp .7s .42s cubic-bezier(.16,1,.3,1) both;
+}
+.recent-label {
+  font-size:9px; letter-spacing:.28em; text-transform:uppercase;
+  color:rgba(232,228,219,.32); margin-bottom:10px; display:block;
+}
+#recentList {
+  display:flex; flex-direction:column; gap:6px;
+}
+.recent-item {
+  display:flex; align-items:center; gap:12px;
+  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07);
+  border-radius:3px; padding:10px 12px; cursor:pointer;
+  transition:border-color .15s, background .15s;
+  touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+}
+.recent-item:hover, .recent-item:active {
+  border-color:rgba(232,79,43,.45); background:rgba(232,79,43,.07);
+}
+.recent-thumb {
+  width:42px; height:30px; border-radius:2px; object-fit:cover;
+  background:#12121f; flex-shrink:0; display:block;
+}
+.recent-info { flex:1; min-width:0; }
+.recent-name {
+  font-size:11px; color:var(--paper); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; font-family:var(--mono);
+  letter-spacing:.06em; margin-bottom:2px;
+}
+.recent-meta {
+  font-size:9px; color:rgba(232,228,219,.32); letter-spacing:.1em;
+}
+.recent-del {
+  font-size:14px; color:rgba(255,255,255,.2); background:none; border:none;
+  cursor:pointer; padding:4px; line-height:1; flex-shrink:0;
+  touch-action:manipulation;
+}
+.recent-del:hover { color:var(--accent); }
 </style>
 
 <body>
@@ -710,6 +752,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
     </div>
     <div id="errMsg"></div>
     <button id="launchBtn">Launch AR &rarr;</button>
+    <div id="recentSection" style="display:none">
+      <span class="recent-label">Recent floorplans</span>
+      <div id="recentList"></div>
+    </div>
     <p class="note">
       Scan ground &rarr; wireframes on detected surfaces &middot; Tap Anchor &rarr; walk to each column<br>
       (snaps to column edges) &rarr; set scale &rarr; pick columns on PDF &rarr; plan binds live
@@ -1745,8 +1791,11 @@ function onPlanPlaced(){
    ───────────────────────────────────────────────────────────────── */
 function stepOrientEnter(){
   xfLocked=false;
+  /* Peek strip with Lock button visible — user needs to interact with the drawing */
+  el('stepCard').className='show peek-mode has-action';
+  el('hud').style.display='';
   el('scBtn').textContent='Lock & Continue \u2192'; el('scBtn').disabled=false;
-  el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag to align columns, then Lock';
+  el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag to align \u2022 then Lock';
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -1828,14 +1877,168 @@ el('dropZone').addEventListener('dragleave',function(){el('dropZone').classList.
 el('dropZone').addEventListener('drop',function(e){e.preventDefault();el('dropZone').classList.remove('over');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
 el('fileInput').addEventListener('change',function(){if(el('fileInput').files[0])loadFile(el('fileInput').files[0]);});
 
-function loadFile(f){
+/* ═══════════════════════════════════════════════════════════════
+   RECENT SESSIONS  — IndexedDB storage
+   Stores: {id, name, data(ArrayBuffer→base64), thumb(dataURL), pages, ts}
+   Max 6 entries, pruned by oldest first.
+   ═══════════════════════════════════════════════════════════════ */
+var SESSIONS_DB_NAME = 'arfloor_sessions';
+var SESSIONS_DB_VER  = 1;
+var SESSIONS_STORE   = 'pdfs';
+var SESSIONS_MAX     = 6;
+var _sessionsDb      = null;
+
+function sessionsOpen(cb){
+  if(_sessionsDb){ cb(_sessionsDb); return; }
+  try{
+    var req=indexedDB.open(SESSIONS_DB_NAME, SESSIONS_DB_VER);
+    req.onupgradeneeded=function(e){
+      e.target.result.createObjectStore(SESSIONS_STORE, {keyPath:'id',autoIncrement:true});
+    };
+    req.onsuccess=function(e){ _sessionsDb=e.target.result; cb(_sessionsDb); };
+    req.onerror=function(){ /* silently fail */ };
+  }catch(e){}
+}
+
+function sessionsSave(name, arrayBuf, thumbDataURL, numPages){
+  sessionsOpen(function(db){
+    try{
+      /* Base64-encode the buffer for storage */
+      var bytes=new Uint8Array(arrayBuf);
+      var binary=''; for(var i=0;i<bytes.byteLength;i++) binary+=String.fromCharCode(bytes[i]);
+      var b64=btoa(binary);
+      var entry={name:name, data:b64, thumb:thumbDataURL, pages:numPages, ts:Date.now()};
+      var tx=db.transaction(SESSIONS_STORE,'readwrite');
+      var store=tx.objectStore(SESSIONS_STORE);
+      store.add(entry);
+      tx.oncomplete=function(){
+        /* Prune to max */
+        var tx2=db.transaction(SESSIONS_STORE,'readwrite');
+        var store2=tx2.objectStore(SESSIONS_STORE);
+        store2.getAll().onsuccess=function(ev){
+          var all=ev.target.result;
+          all.sort(function(a,b){return a.ts-b.ts;});
+          while(all.length>SESSIONS_MAX){
+            var old=all.shift();
+            store2.delete(old.id);
+          }
+          tx2.oncomplete=function(){ sessionsRender(); };
+        };
+      };
+    }catch(e){}
+  });
+}
+
+function sessionsLoad(id, cb){
+  sessionsOpen(function(db){
+    try{
+      var tx=db.transaction(SESSIONS_STORE,'readonly');
+      tx.objectStore(SESSIONS_STORE).get(id).onsuccess=function(e){
+        var entry=e.target.result;
+        if(!entry){ cb(null); return; }
+        /* Decode base64 back to ArrayBuffer */
+        try{
+          var binary=atob(entry.data);
+          var bytes=new Uint8Array(binary.length);
+          for(var i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+          cb(bytes.buffer, entry.name, entry.pages);
+        }catch(err){ cb(null); }
+      };
+    }catch(e){ cb(null); }
+  });
+}
+
+function sessionsDelete(id){
+  sessionsOpen(function(db){
+    try{
+      var tx=db.transaction(SESSIONS_STORE,'readwrite');
+      tx.objectStore(SESSIONS_STORE).delete(id);
+      tx.oncomplete=sessionsRender;
+    }catch(e){}
+  });
+}
+
+function sessionsRender(){
+  sessionsOpen(function(db){
+    try{
+      var tx=db.transaction(SESSIONS_STORE,'readonly');
+      tx.objectStore(SESSIONS_STORE).getAll().onsuccess=function(ev){
+        var all=ev.target.result;
+        all.sort(function(a,b){return b.ts-a.ts;});  /* newest first */
+        var list=el('recentList');
+        list.innerHTML='';
+        if(all.length===0){ el('recentSection').style.display='none'; return; }
+        el('recentSection').style.display='';
+        all.forEach(function(entry){
+          var item=document.createElement('div');
+          item.className='recent-item';
+          var ago=formatAgo(entry.ts);
+          item.innerHTML=
+            '<img class="recent-thumb" src="'+entry.thumb+'" alt="">'
+            +'<div class="recent-info">'
+              +'<div class="recent-name">'+escHTML(entry.name)+'</div>'
+              +'<div class="recent-meta">'+entry.pages+' page'+(entry.pages!==1?'s':'')+' &middot; '+ago+'</div>'
+            +'</div>'
+            +'<button class="recent-del" title="Remove" data-id="'+entry.id+'">&#x2715;</button>';
+          item.querySelector('.recent-del').addEventListener('click',function(e){
+            e.stopPropagation();
+            sessionsDelete(parseInt(this.dataset.id));
+          });
+          item.addEventListener('click',function(){
+            sessionsLoad(entry.id, function(buf, name, pages){
+              if(!buf){ showErr('Could not load saved PDF'); return; }
+              loadFromBuffer(buf, name, pages);
+            });
+          });
+          list.appendChild(item);
+        });
+      };
+    }catch(e){}
+  });
+}
+
+function escHTML(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function formatAgo(ts){
+  var s=Math.round((Date.now()-ts)/1000);
+  if(s<60) return 'just now';
+  if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';
+}
+
+/* Load PDF from an ArrayBuffer (used for both File picker and session restore) */
+function loadFromBuffer(buf, name, knownPages){
   hide('errMsg'); el('launchBtn').classList.remove('show');
+  el('dropZone').querySelector('.drop-label').textContent = name || 'Loading…';
+  pdfjsLib.getDocument({data:buf}).promise
+    .then(function(doc){
+      pdfDoc=doc; currentPage=1;
+      renderPage(1);
+      el('pageNav').style.display=doc.numPages>1?'flex':'none';
+      /* Save to sessions with thumbnail (generated after renderPage resolves) */
+      if(name){
+        /* Wait for pdfCanvas to be set by renderPage, then save */
+        var attempts=0;
+        var waitForCanvas=setInterval(function(){
+          attempts++;
+          if(pdfCanvas||attempts>40){
+            clearInterval(waitForCanvas);
+            var thumb=pdfCanvas?el('pdfThumb').toDataURL('image/jpeg',0.5):'';
+            sessionsSave(name, buf, thumb, doc.numPages);
+          }
+        },100);
+      }
+    })
+    .catch(function(e){ showErr('PDF error: '+e.message); });
+}
+
+/* Render the sessions list on page load */
+sessionsRender();
+
+
+function loadFile(f){
   var reader=new FileReader();
-  reader.onload=function(ev){
-    pdfjsLib.getDocument({data:ev.target.result}).promise
-      .then(function(doc){pdfDoc=doc;currentPage=1;renderPage(1);el('pageNav').style.display=doc.numPages>1?'flex':'none';})
-      .catch(function(e){showErr('PDF error: '+e.message);});
-  };
+  reader.onload=function(ev){ loadFromBuffer(ev.target.result, f.name); };
   reader.onerror=function(){showErr('Read error.');};
   reader.readAsArrayBuffer(f);
 }
