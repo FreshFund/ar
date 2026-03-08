@@ -151,6 +151,13 @@ html,body { height:100%; overflow:hidden; background:var(--ink); color:var(--pap
 
 #xrOverlay { position:fixed; inset:0; z-index:300; pointer-events:none; }
 
+/* ── Bound tools row (floor + export) — anchored to very bottom, below hint ── */
+#boundTools {
+  /* Override hud padding-bottom: pull these buttons back to bottom safe zone */
+  margin-bottom: -56px !important;
+  padding-bottom: 0;
+}
+
 /* ── Progress bar — 2px at top ── */
 #stepBar {
   display:none; position:absolute; top:0; left:0; right:0; z-index:400;
@@ -224,22 +231,25 @@ html,body { height:100%; overflow:hidden; background:var(--ink); color:var(--pap
   backdrop-filter:blur(12px); pointer-events:none;
 }
 #planeBadge { display:none !important; }
+/* ── Confidence quality pill — top right, coloured by quality ── */
 #driftBadge {
-  display:none; position:absolute; top:14px; right:14px;
+  display:none; position:absolute; top:14px; right:52px; /* left of UI toggle */
   font-size:9px; letter-spacing:.14em; text-transform:uppercase; white-space:nowrap;
-  padding:4px 10px; border-radius:var(--r);
-  background:var(--glass); backdrop-filter:blur(12px);
-  border:1px solid var(--border); color:rgba(232,228,219,.5);
-  pointer-events:none;
+  padding:5px 12px; border-radius:var(--r);
+  background:rgba(4,5,15,.88); backdrop-filter:blur(16px);
+  border:1px solid rgba(255,255,255,.1); color:rgba(232,228,219,.6);
+  pointer-events:none; transition:border-color .4s, color .4s;
 }
 #driftBadge.show { display:block; }
 
-/* ── Toast ── */
+/* ── Toast — sits 60px above the bottom peek-strip buttons ── */
 #toast {
-  display:none; position:absolute; top:52px; left:50%; transform:translateX(-50%);
-  background:var(--glass); backdrop-filter:blur(16px);
-  border:1px solid var(--border); padding:7px 20px;
-  font-size:9px; letter-spacing:.14em; color:rgba(232,228,219,.75);
+  display:none; position:absolute;
+  /* 96px = safe-area 36px + 60px clearance above peek buttons */
+  bottom:116px; left:50%; transform:translateX(-50%);
+  background:rgba(4,5,15,.92); backdrop-filter:blur(18px);
+  border:1px solid rgba(255,255,255,.1); padding:7px 20px;
+  font-size:9px; letter-spacing:.14em; color:rgba(232,228,219,.8);
   border-radius:var(--r); white-space:nowrap; pointer-events:none; z-index:10;
 }
 
@@ -253,7 +263,9 @@ html,body { height:100%; overflow:hidden; background:var(--ink); color:var(--pap
 
 /* ── HUD — bottom ── */
 #hud {
-  position:absolute; bottom:0; left:0; right:0; padding:10px 18px 36px;
+  position:absolute; bottom:0; left:0; right:0;
+  /* Extra bottom padding (96px) lifts hints clear of the ~60px peek-strip button zone */
+  padding:10px 18px 96px;
   display:flex; flex-direction:column; align-items:center; gap:7px;
   pointer-events:none; z-index:190;
 }
@@ -588,6 +600,123 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
 #xrOverlay.ui-hidden #statusBar,
 #xrOverlay.ui-hidden #stepBar { display:none !important; }
 
+
+/* ── Floor selector pill ── */
+#floorBtn {
+  background:var(--glass); backdrop-filter:blur(14px);
+  border:1px solid var(--border); color:rgba(255,255,255,.65);
+  padding:7px 12px; font-family:var(--mono); font-size:9px;
+  letter-spacing:.16em; text-transform:uppercase; cursor:pointer;
+  border-radius:4px; pointer-events:all; white-space:nowrap;
+  touch-action:manipulation;
+  display:none;
+}
+#floorBtn.show { display:block; }
+
+/* ── Floor dropdown ── */
+#floorDropdown {
+  display:none; position:absolute; bottom:56px; left:0;
+  min-width:160px; background:rgba(4,5,15,.96);
+  backdrop-filter:blur(20px); border:1px solid var(--border);
+  border-radius:6px; overflow:hidden; z-index:500; pointer-events:all;
+}
+#floorDropdown.show { display:block; }
+.floor-item {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px; font-size:9px; letter-spacing:.14em; text-transform:uppercase;
+  color:rgba(255,255,255,.55); cursor:pointer; border-bottom:1px solid rgba(255,255,255,.05);
+  touch-action:manipulation;
+}
+.floor-item:last-child { border-bottom:none; }
+.floor-item:active, .floor-item.active { color:var(--paper); background:rgba(255,255,255,.06); }
+.floor-item.active::after { content:'●'; color:var(--accent); font-size:7px; }
+.floor-add {
+  color:rgba(43,232,122,.65); padding:10px 14px; font-size:9px;
+  letter-spacing:.14em; text-transform:uppercase; cursor:pointer;
+  touch-action:manipulation;
+}
+.floor-add:active { background:rgba(43,232,122,.08); }
+
+/* ── Export button ── */
+#exportBtn {
+  background:var(--glass); backdrop-filter:blur(14px);
+  border:1px solid var(--border); color:rgba(255,255,255,.55);
+  padding:7px 12px; font-family:var(--mono); font-size:9px;
+  letter-spacing:.16em; text-transform:uppercase; cursor:pointer;
+  border-radius:4px; pointer-events:all; white-space:nowrap;
+  touch-action:manipulation;
+  display:none;
+}
+#exportBtn.show { display:block; }
+
+/* ── Restore session banner ── */
+#restoreBanner {
+  display:none; position:absolute; top:16px; left:50%; transform:translateX(-50%);
+  background:rgba(43,232,122,.1); backdrop-filter:blur(16px);
+  border:1px solid rgba(43,232,122,.3); border-radius:6px;
+  padding:10px 16px; pointer-events:all; z-index:500;
+  min-width:220px; text-align:center;
+}
+#restoreBanner.show { display:block; }
+.restore-title { font-size:9px; letter-spacing:.22em; text-transform:uppercase; color:var(--green); margin-bottom:6px; }
+.restore-btns { display:flex; gap:8px; justify-content:center; margin-top:8px; }
+.restore-btn {
+  background:none; border:1px solid rgba(255,255,255,.2); color:var(--paper);
+  font-family:var(--mono); font-size:8px; letter-spacing:.18em; text-transform:uppercase;
+  padding:6px 14px; border-radius:3px; cursor:pointer; touch-action:manipulation;
+}
+.restore-btn.ok { border-color:rgba(43,232,122,.4); color:var(--green); }
+
+
+/* ── Confidence DOM ring — 2D overlay at screen center, mirrors 3D ring colour ──
+   Draws as a circular border around the reticle area on-screen.
+   JS sets data-quality="good|partial|weak" on #confidenceRing               */
+#confidenceRing {
+  display:none; position:absolute;
+  left:50%; top:40%; transform:translate(-50%,-50%);
+  width:60px; height:60px; border-radius:50%;
+  border:2px solid transparent;
+  pointer-events:none; z-index:20;
+  transition:border-color .5s, opacity .5s;
+  /* slow breathe */
+  animation:ringBreath 2.8s ease-in-out infinite;
+}
+#confidenceRing.show { display:block; }
+#confidenceRing[data-quality="good"] {
+  border-color:rgba(43,232,122,.65);
+  box-shadow:0 0 12px rgba(43,232,122,.2), inset 0 0 8px rgba(43,232,122,.08);
+}
+#confidenceRing[data-quality="partial"] {
+  border-color:rgba(240,208,96,.55);
+  box-shadow:0 0 10px rgba(240,208,96,.18), inset 0 0 6px rgba(240,208,96,.06);
+}
+#confidenceRing[data-quality="weak"] {
+  border-color:rgba(232,79,43,.5);
+  box-shadow:0 0 8px rgba(232,79,43,.15), inset 0 0 5px rgba(232,79,43,.06);
+}
+@keyframes ringBreath {
+  0%,100% { transform:translate(-50%,-50%) scale(1);   opacity:.7; }
+  50%      { transform:translate(-50%,-50%) scale(1.06); opacity:1; }
+}
+
+/* ── Add Floor input ── */
+#floorAddInput {
+  background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,.2);
+  color:var(--paper); font-family:var(--mono); font-size:9px; letter-spacing:.12em;
+  padding:4px 0; outline:none; width:100%; margin-top:4px;
+}
+#floorAddInput::placeholder { color:rgba(255,255,255,.25); }
+.floor-add-row {
+  padding:8px 14px 10px; display:flex; flex-direction:column; gap:6px;
+  border-top:1px solid rgba(255,255,255,.05);
+}
+.floor-add-confirm {
+  background:rgba(43,232,122,.1); border:1px solid rgba(43,232,122,.3); color:var(--green);
+  font-family:var(--mono); font-size:8px; letter-spacing:.2em; text-transform:uppercase;
+  padding:5px 12px; border-radius:3px; cursor:pointer; align-self:flex-end;
+  touch-action:manipulation;
+}
+
 </style>
 
 <body>
@@ -703,6 +832,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
     <!-- Waypoint label container -->
     <div id="wpLabels" style="position:absolute;inset:0;pointer-events:none;"></div>
 
+    <!-- Confidence ring — 2D CSS overlay at screen reticle position -->
+    <div id="confidenceRing" data-quality="weak"></div>
+
     <!-- Scan / snap reticles -->
     <div id="scanRing">
       <svg width="180" height="180" viewBox="0 0 180 180" fill="none">
@@ -783,6 +915,36 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
     <div id="hud">
       <div id="hudHint">Point camera at the ground</div>
       <div id="statusBar"></div>
+      <!-- Floor selector + Export row (shown once plan is bound) -->
+      <div class="btn-row" id="boundTools" style="display:none">
+        <!-- Floor selector -->
+        <div style="position:relative">
+          <button id="floorBtn" class="hud-btn show">L1 ▾</button>
+          <div id="floorDropdown">
+            <div id="floorList"></div>
+            <!-- Inline add-floor form — avoids prompt() in WebXR -->
+            <div class="floor-add-row" id="floorAddRow">
+              <div class="floor-add" id="floorAddBtn">+ Add Floor</div>
+              <div id="floorAddForm" style="display:none;flex-direction:column;gap:6px;">
+                <input id="floorAddInput" type="text" placeholder="Name e.g. L2" maxlength="6">
+                <input id="floorYInput" type="number" placeholder="Y offset (m)" step="0.1" style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.2);color:var(--paper);font-family:var(--mono);font-size:9px;padding:4px 0;outline:none;width:100%;margin-top:4px;">
+                <button class="floor-add-confirm" id="floorAddConfirm">Add ✓</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button id="exportBtn" class="hud-btn show">↓ Export</button>
+      </div>
+    </div>
+
+    <!-- Restore session banner (shown when a saved session is available) -->
+    <div id="restoreBanner">
+      <div class="restore-title">Saved session found</div>
+      <div id="restoreDesc" style="font-size:8px;letter-spacing:.1em;color:rgba(232,228,219,.45)"></div>
+      <div class="restore-btns">
+        <button class="restore-btn ok" id="restoreYesBtn">Restore</button>
+        <button class="restore-btn" id="restoreNoBtn">Fresh start</button>
+      </div>
     </div>
 
   </div><!-- end #xrOverlay -->
@@ -1004,6 +1166,12 @@ var metersPerUV=null;    // set by ruler: metres / UV unit distance
 var rulerMode=false;     // true while user is dragging ruler line on pickCanvas
 var rulerP1=null, rulerP2=null;   // {x,y} in pickCanvas coords (normalised 0-1)
 var rulerLine=null;      // SVG overlay line element
+
+/* ── Feature state vars ── */
+var currentPdfName = '';         // set on PDF load, used for session key + export
+var qualityRing = null;          // THREE.Line — confidence ring around reticle
+var floorLevels = [{name:'L1', yOffset:0}];  // multi-storey floor list
+var currentFloorIdx = 0;         // index into floorLevels
 
 /* Measurement tool */
 var measureMode=false;
@@ -1812,6 +1980,7 @@ function formatAgo(ts){
 /* Load PDF from an ArrayBuffer (used for both File picker and session restore) */
 function loadFromBuffer(buf, name, knownPages){
   hide('errMsg'); el('launchBtn').classList.remove('show');
+  currentPdfName = name || '';
   el('dropZone').querySelector('.drop-label').textContent = name || 'Loading…';
   pdfjsLib.getDocument({data:buf}).promise
     .then(function(doc){
@@ -1880,6 +2049,8 @@ el('launchBtn').addEventListener('click',function(){
       .then(function(ok){ ok?startWebXR():noXR(); }).catch(noXR);
   } else { noXR(); }
   goStep(0);
+  /* Check for a saved session for this PDF */
+  setTimeout(solvesCheckAndOffer, 1200);
 });
 function noXR(){el('hudHint').textContent='WebXR not supported \u2014 requires Android Chrome or compatible AR browser';}
 
@@ -1983,6 +2154,9 @@ function doReset(){
   show('scanRing'); hide('snapReticle'); hide('cornerBadge');
   hide('snapIndicator'); hide('driftBadge'); hide('planeBadge');
   hide('statusBar'); hide('pickOverlay');
+  el('boundTools').style.display='none';
+  el('restoreBanner').classList.remove('show');
+  hide('confidenceRing'); hide('driftBadge');
   el('hudHint').textContent='Point camera at the ground';
 }
 
@@ -2501,10 +2675,13 @@ el('rulerConfirmBtn').addEventListener('click',function(){
   var asp=pdfCanvas.width/pdfCanvas.height;
   var uvDist=Math.sqrt(du*du+(dv*asp)*(dv*asp));
   metersPerUV=realMetres/uvDist;
-  el('rulerStatus').textContent='\u2714 Scale set — '+realMetres+'m = '+Math.round(Math.sqrt((rulerP2.x-rulerP1.x)**2+(rulerP2.y-rulerP1.y)**2))+'px';
+  var pxLen=Math.round(Math.sqrt((rulerP2.x-rulerP1.x)**2+(rulerP2.y-rulerP1.y)**2));
+  el('rulerStatus').textContent='✔ Scale locked — '+realMetres+'m / '+pxLen+'px = '+(metersPerUV).toFixed(3)+'m/UV';
   el('rulerConfirmBtn').disabled=true;
-  /* Switch back to anchor tab */
-  setPickTab('anchor');
+  /* If plan already bound, immediately re-constrain */
+  if(planBound) reSolvePlan();
+  /* Switch back to anchor tab after short delay so user sees the success message */
+  setTimeout(function(){ setPickTab('anchor'); }, 1200);
 });
 
 /* ═══════════════════════════════
@@ -3392,16 +3569,22 @@ function buildBoundMesh(){
   show('statusBar'); show('cornerBadge');
   el('cornerBadge').textContent='\u2714 Locked \u2022 '+corners.length+' column anchors';
   showBtns('normal');
-  el('hudHint').textContent='Plan structure-locked \u2714 \u2022 All sensors active';
-  el('hudHint').textContent='Plan rigid-locked to '+corners.length+' columns ✔';
+  el('hudHint').textContent='Plan rigid-locked to '+corners.length+' columns \u2714';
+  /* Show bound tools (floor + export) */
+  el('boundTools').style.display='flex';
+  el('floorBtn').textContent = (floorLevels[currentFloorIdx]||{name:'L1'}).name + ' \u25be';
+  floorRenderDropdown();
+  /* Auto-save solve state for session restore */
+  setTimeout(solvesSave, 500);
 }
 
 /* Apply the Kabsch transform to the planRigidGroup */
 function applyRigidTransform(tx,tz,yaw,scale){
   if(!planRigidGroup)return;
-  /* Y position: mean column Y */
+  /* Y position: mean column Y + current floor level offset */
   var meanY=corners.reduce(function(s,c){return s+c.worldPos.y;},0)/Math.max(corners.length,1);
-  planRigidGroup.position.set(tx,meanY,tz);
+  var floorYOff = floorLevels[currentFloorIdx] ? floorLevels[currentFloorIdx].yOffset : 0;
+  planRigidGroup.position.set(tx, meanY + floorYOff, tz);
   planRigidGroup.rotation.set(0,yaw,0);
   planRigidGroup.scale.set(scale,1,scale);
 }
@@ -3431,6 +3614,16 @@ function reSolvePlan(){
     if(smoothPlanTx===sol.tx){ /* first solve */ }
   }
 
+  /* ── Ruler scale constraint ──
+     If user set a real-world distance via the ruler, override the
+     Kabsch-derived scale with the ruler-locked value. Blend gently
+     rather than hard-set to avoid visual snap on subsequent solves. */
+  if(metersPerUV !== null && smoothPlanScl !== null){
+    var rulerScale = metersPerUV;
+    var blend = planBound ? 0.05 : 1.0;   /* first solve: hard-set; later: gentle EMA */
+    smoothPlanScl = smoothPlanScl * (1 - blend) + rulerScale * blend;
+  }
+
   planOrigin.set(smoothPlanTx, 0, smoothPlanTz);
   planScale=smoothPlanScl;
   planBound=true;
@@ -3453,6 +3646,8 @@ function reSolvePlan(){
   }
   updateConstraintPanel();
   updateBoundCard();
+  /* Periodically save solve state for session restore */
+  if(solveCount > 0 && solveCount % 10 === 0) solvesSave();
   return true;
 }
 
@@ -3740,20 +3935,29 @@ function updateConstraintPanel(){
                constraintQuality.gpsBearing*0.15+constraintQuality.planeSnap*0.20);
   var pct=Math.round(overall*100);
   var anomaly=performance.now()<compassAnomalyUntil;
-  /* Quality pill — top right */
-  var icon=overall>0.78?'\u2714':overall>0.5?'\u25CC':'\u25CB';
-  var label=overall>0.78?'Stable':overall>0.5?'Partial':'Weak';
-  el('driftBadge').textContent=icon+' '+pct+'% '+label;
+  /* ── Quality pill — top right ── */
+  var qLabel=overall>0.78?'Stable':overall>0.5?'Partial':'Weak';
+  var qIcon=overall>0.78?'\u2714':overall>0.5?'\u25CC':'\u25CB';
+  el('driftBadge').textContent=qIcon+' '+pct+'% '+qLabel;
   el('driftBadge').style.borderColor=overall>0.78?'rgba(43,232,122,.3)':overall>0.5?'rgba(240,208,96,.3)':'rgba(232,79,43,.3)';
   el('driftBadge').style.color=overall>0.78?'var(--green)':overall>0.5?'var(--yellow)':'var(--accent)';
   show('driftBadge');
-  /* Hint shows anchor count + quality */
+  /* ── DOM confidence ring around screen reticle ── */
+  var ring=el('confidenceRing');
+  if(ring){
+    var qState=overall>0.78?'good':overall>0.5?'partial':'weak';
+    ring.setAttribute('data-quality',qState);
+    /* Ring shows while reticle is visible */
+    if(reticle&&reticle.visible){ show('confidenceRing'); }
+    else { hide('confidenceRing'); }
+  }
+  /* ── Hint: anchor count + anomalies ── */
   var outliers=0;
   corners.forEach(function(c){if(c.cumDrift&&c.cumDrift>0.08)outliers++;});
-  var hintParts=[corners.length+' anchors'];
-  if(anomaly) hintParts.push('\u26A0 compass');
-  if(outliers) hintParts.push(outliers+' outlier'+(outliers>1?'s':''));
-  el('hudHint').textContent=hintParts.join(' \u00b7 ');
+  var parts=[corners.length+' anchors \u00b7 '+pct+'%'];
+  if(anomaly) parts.push('\u26A0 compass');
+  if(outliers) parts.push(outliers+' outlier'+(outliers>1?'s':''));
+  el('hudHint').textContent=parts.join(' \u00b7 ');
 }
 
 /* ═══════════════════════════════
@@ -3792,6 +3996,20 @@ function startWebXR(){
     reticle.add(new THREE.Line(lg,lm));
   });
   scene.add(reticle);
+
+  /* ── Quality confidence ring ──
+     A thin ring just outside the reticle ring, coloured by solve quality.
+     Red < 0.4 | Yellow 0.4-0.7 | Green > 0.7
+     Only visible when plan is bound (planBound=true).                    */
+  var qrGeo = new THREE.RingGeometry(0.155, 0.175, 64);
+  qrGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  var qrMat = new THREE.MeshBasicMaterial({
+    color: 0x888888, side: THREE.DoubleSide,
+    transparent: true, opacity: 0.0, depthWrite: false
+  });
+  qualityRing = new THREE.Mesh(qrGeo, qrMat);
+  qualityRing.visible = false;
+  scene.add(qualityRing);
 
   /* Free plan */
   var asp=pdfCanvas.width/pdfCanvas.height;
@@ -4056,7 +4274,8 @@ function startWebXR(){
     },{passive:true});
     window.addEventListener('touchend',function(e){for(var i=0;i<e.changedTouches.length;i++)delete tMap[e.changedTouches[i].identifier];if(Object.keys(tMap).length<2){prevPinchDist=null;prevPinchAngle=null;}},{passive:true});
 
-    session.addEventListener('end',function(){renderer.setAnimationLoop(null);});
+    session.addEventListener('end',function(){
+      hide('confidenceRing');renderer.setAnimationLoop(null);});
     show('scanRing');
     el('hudHint').textContent='Slowly scan the ground\u2026';
     /* Auto-align to compass heading on first surface detection if available */
@@ -4161,6 +4380,26 @@ function xrFrame(frame){
     if(!wxrPlaced){wxrFloorFound=false; el('hudHint').textContent='Slowly scan the ground\u2026';}
   }
 
+  /* ── Quality ring (3D + DOM): track reticle + reflect solve quality ── */
+  if(qualityRing && reticle && reticle.visible){
+    qualityRing.position.setFromMatrixPosition(reticle.matrix);
+    if(planBound){
+      qualityRing.visible = true;
+      var qOverall3d = (constraintQuality.xrAnchor*0.35 + constraintQuality.compass*0.30 +
+                      constraintQuality.gpsBearing*0.15 + constraintQuality.planeSnap*0.20);
+      var qCol3d = qOverall3d > 0.70 ? 0x2be87a : qOverall3d > 0.40 ? 0xf0d060 : 0xe84f2b;
+      qualityRing.material.color.setHex(qCol3d);
+      qualityRing.material.opacity = Math.min(0.85, qOverall3d * 1.1);
+      var pulse3d = 1.0 + 0.04 * Math.sin(performance.now() * 0.002);
+      qualityRing.scale.set(pulse3d, 1, pulse3d);
+    } else {
+      qualityRing.visible = false;
+    }
+  } else if(qualityRing && (!reticle || !reticle.visible)){
+    qualityRing.visible = false;
+    hide('confidenceRing');   /* hide DOM ring when reticle not visible */
+  }
+
   /* Anchor drift correction + full constraint fusion */
   if(planBound&&corners.length>0){
     if(updateAnchors(frame,xrRefSpace)){
@@ -4168,6 +4407,271 @@ function xrFrame(frame){
     }
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   FLOOR LEVELS  (multi-storey support)
+   floorLevels: [{name, yOffset}]  — yOffset is metres added to planRigidGroup.y
+   ═══════════════════════════════════════════════════════════════ */
+function floorRenderDropdown(){
+  var list = el('floorList');
+  if(!list) return;
+  list.innerHTML = '';
+  floorLevels.forEach(function(fl, i){
+    var item = document.createElement('div');
+    item.className = 'floor-item' + (i === currentFloorIdx ? ' active' : '');
+    var offTxt = fl.yOffset !== 0 ? '  ' + (fl.yOffset > 0 ? '+' : '') + fl.yOffset.toFixed(2) + 'm' : '';
+    item.textContent = fl.name + offTxt;
+    item.addEventListener('click', function(e){
+      e.stopPropagation();
+      currentFloorIdx = i;
+      el('floorBtn').textContent = fl.name + ' \u25be';
+      el('floorDropdown').classList.remove('show');
+      floorRenderDropdown();
+      if(planBound) applyRigidTransform(planOrigin.x, planOrigin.z, planYaw, planScale);
+      showToast('Floor: ' + fl.name, 1800);
+    });
+    list.appendChild(item);
+  });
+}
+
+el('floorBtn').addEventListener('click', function(e){
+  e.stopPropagation();
+  floorRenderDropdown();
+  el('floorDropdown').classList.toggle('show');
+});
+
+el('floorAddBtn').addEventListener('click', function(e){
+  e.stopPropagation();
+  /* Toggle inline form instead of prompt() — works in WebXR overlay */
+  var form = el('floorAddForm');
+  if(!form) return;
+  var isOpen = form.style.display === 'flex';
+  form.style.display = isOpen ? 'none' : 'flex';
+  if(!isOpen){
+    /* Pre-fill sensible defaults */
+    var names = ['L1','L2','L3','B1','B2','Roof','M','UB'];
+    var taken = floorLevels.map(function(f){ return f.name; });
+    var nextName = names.find(function(n){ return taken.indexOf(n) === -1; }) || ('L'+(floorLevels.length+1));
+    el('floorAddInput').value = nextName;
+    /* Default Y = current smoothed floor height so this level is 'here' */
+    var yDefault = smoothFloorY !== null ? smoothFloorY.toFixed(2) : '0';
+    el('floorYInput').value = yDefault;
+    setTimeout(function(){ try{ el('floorAddInput').focus(); }catch(e){} }, 80);
+  }
+});
+el('floorAddConfirm').addEventListener('click', function(e){
+  e.stopPropagation();
+  var name = (el('floorAddInput').value || '').trim().slice(0, 6);
+  if(!name){ showToast('Enter a floor name', 1800); return; }
+  var yOff = parseFloat(el('floorYInput').value) || 0;
+  floorLevels.push({name: name, yOffset: yOff});
+  currentFloorIdx = floorLevels.length - 1;
+  el('floorBtn').textContent = name + ' \u25be';
+  el('floorAddForm').style.display = 'none';
+  el('floorDropdown').classList.remove('show');
+  floorRenderDropdown();
+  if(planBound) applyRigidTransform(planOrigin.x, planOrigin.z, planYaw, planScale);
+  showToast('\u2714 ' + name + ' added', 2000);
+});
+
+/* Close dropdown on any outside tap */
+document.addEventListener('click', function(){ el('floorDropdown').classList.remove('show'); });
+
+
+/* ═══════════════════════════════════════════════════════════════
+   EXPORT  — GPS\u2194plan transform + anchors as downloadable JSON
+   ═══════════════════════════════════════════════════════════════ */
+el('exportBtn').addEventListener('click', function(){
+  if(!planBound){ showToast('Nothing to export yet', 2200); return; }
+  var payload = {
+    _version: 1,
+    _generator: 'ARfloor WebXR',
+    ts: new Date().toISOString(),
+    pdf: currentPdfName || 'unknown',
+    metersPerUV: metersPerUV,
+    planOrigin: {x: planOrigin.x, z: planOrigin.z},
+    planYaw_rad: planYaw,
+    planYaw_deg: planYaw * 180 / Math.PI,
+    planScale_mPerUV: planScale,
+    floorLevels: floorLevels,
+    currentFloor: currentFloorIdx,
+    gps: gpsLat !== null ? {lat: gpsLat, lng: gpsLng, acc: gpsAcc} : null,
+    anchors: corners.map(function(c, i){
+      return {
+        index: i,
+        world: {x: c.worldPos.x, y: c.worldPos.y, z: c.worldPos.z},
+        uv: uvPicks[i] ? {u: uvPicks[i].u, v: uvPicks[i].v} : null,
+        gps: c.gps || null,
+        wasSnapped: c.wasSnapped || false
+      };
+    }),
+    quality: {
+      overall: parseFloat(((constraintQuality.xrAnchor*0.35 + constraintQuality.compass*0.30 +
+                             constraintQuality.gpsBearing*0.15 + constraintQuality.planeSnap*0.20)).toFixed(3)),
+      xrAnchor: constraintQuality.xrAnchor,
+      compass: constraintQuality.compass,
+      gpsBearing: constraintQuality.gpsBearing,
+      planeSnap: constraintQuality.planeSnap,
+      solveCount: solveCount
+    }
+  };
+  try{
+    var blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    var safeName = (currentPdfName || 'session').replace(/[^a-z0-9_\-]/gi, '_').slice(0, 40);
+    a.download = 'arfloor_' + safeName + '_' + Date.now() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    showToast('\u2193 Transform exported', 2500);
+  }catch(err){
+    showToast('Export failed: ' + err.message, 3000);
+  }
+});
+
+
+/* ═══════════════════════════════════════════════════════════════
+   SESSION PERSISTENCE  — save/restore full solve state
+   DB: arfloor_solves v1  |  store: solves  |  key: pdf-name+pages
+   ═══════════════════════════════════════════════════════════════ */
+var _solvesDb = null;
+var SOLVES_DB = 'arfloor_solves';
+var SOLVES_STORE = 'solves';
+
+function solvesOpen(cb){
+  if(_solvesDb){ cb(_solvesDb); return; }
+  try{
+    var req = indexedDB.open(SOLVES_DB, 1);
+    req.onupgradeneeded = function(e){
+      e.target.result.createObjectStore(SOLVES_STORE, {keyPath: 'key'});
+    };
+    req.onsuccess = function(e){ _solvesDb = e.target.result; cb(_solvesDb); };
+    req.onerror = function(){};
+  }catch(e){}
+}
+
+function solvesKey(){
+  return (currentPdfName || 'noname') + '_p' + (pdfDoc ? pdfDoc.numPages : '0');
+}
+
+function solvesSave(){
+  if(!planBound || !corners.length || uvPicks.length !== corners.length) return;
+  var data = {
+    key: solvesKey(),
+    ts: Date.now(),
+    pdfName: currentPdfName,
+    planOrigin: {x: planOrigin.x, z: planOrigin.z},
+    planYaw: planYaw,
+    planScale: planScale,
+    metersPerUV: metersPerUV,
+    floorLevels: floorLevels,
+    currentFloorIdx: currentFloorIdx,
+    anchorCount: corners.length,
+    corners: corners.map(function(c, i){
+      return {
+        worldPos: {x: c.worldPos.x, y: c.worldPos.y, z: c.worldPos.z},
+        gps: c.gps || null,
+        wasSnapped: c.wasSnapped || false,
+        uv: uvPicks[i] || null
+      };
+    })
+  };
+  solvesOpen(function(db){
+    try{
+      var tx = db.transaction(SOLVES_STORE, 'readwrite');
+      tx.objectStore(SOLVES_STORE).put(data);
+    }catch(e){}
+  });
+}
+
+function solvesLoad(cb){
+  var key = solvesKey();
+  solvesOpen(function(db){
+    try{
+      var tx = db.transaction(SOLVES_STORE, 'readonly');
+      tx.objectStore(SOLVES_STORE).get(key).onsuccess = function(e){
+        cb(e.target.result || null);
+      };
+    }catch(e){ cb(null); }
+  });
+}
+
+function solvesDelete(){
+  var key = solvesKey();
+  solvesOpen(function(db){
+    try{
+      var tx = db.transaction(SOLVES_STORE, 'readwrite');
+      tx.objectStore(SOLVES_STORE).delete(key);
+    }catch(e){}
+  });
+}
+
+function solvesCheckAndOffer(){
+  if(!pdfDoc) return;
+  solvesLoad(function(data){
+    if(!data) return;
+    var age = Date.now() - data.ts;
+    /* Only offer restore if session is < 7 days old */
+    if(age > 7 * 86400 * 1000){ solvesDelete(); return; }
+    var ago = formatAgo(data.ts);
+    el('restoreDesc').textContent =
+      (data.pdfName ? data.pdfName + '  \u00b7  ' : '') +
+      data.anchorCount + ' anchor' + (data.anchorCount !== 1 ? 's' : '') + '  \u00b7  ' + ago;
+    el('restoreBanner').classList.add('show');
+  });
+}
+
+function solvesRestore(data){
+  /* Restore corners array and UV picks */
+  corners = data.corners.map(function(c){
+    return {
+      worldPos: {x: c.worldPos.x, y: c.worldPos.y, z: c.worldPos.z},
+      gps: c.gps,
+      wasSnapped: c.wasSnapped || false,
+      anchor: null,   /* XR anchors can't be restored across sessions */
+      cumDrift: 0,
+      originPos: {x: c.worldPos.x, y: c.worldPos.y, z: c.worldPos.z}
+    };
+  });
+  uvPicks = data.corners.map(function(c){ return c.uv; }).filter(Boolean);
+  if(uvPicks.length !== corners.length){
+    showToast('\u26A0 Session mismatch \u2014 try fresh start', 3500);
+    return false;
+  }
+
+  planOrigin.set(data.planOrigin.x, 0, data.planOrigin.z);
+  planYaw = data.planYaw;
+  planScale = data.planScale;
+  metersPerUV = data.metersPerUV || null;
+
+  if(data.floorLevels && data.floorLevels.length){
+    floorLevels = data.floorLevels;
+    currentFloorIdx = data.currentFloorIdx || 0;
+  }
+
+  /* Re-add visual dots for each restored corner */
+  corners.forEach(function(c, i){ addCornerVisual(c.worldPos, i); });
+  return true;
+}
+
+el('restoreYesBtn').addEventListener('click', function(){
+  el('restoreBanner').classList.remove('show');
+  solvesLoad(function(data){
+    if(!data){ showToast('Session data gone \u2014 start fresh', 2500); return; }
+    if(solvesRestore(data)){
+      buildBoundMesh();
+      onPlanBound();
+      showToast('\u2714 Session restored \u00b7 ' + data.anchorCount + ' anchors', 3500);
+    }
+  });
+});
+
+el('restoreNoBtn').addEventListener('click', function(){
+  el('restoreBanner').classList.remove('show');
+  solvesDelete();
+});
 
 })();
 </script>
