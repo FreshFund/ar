@@ -7,710 +7,587 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
+
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 :root {
   --ink:#04050f; --paper:#e8e4db; --accent:#e84f2b;
   --green:#2be87a; --blue:#4da6ff; --yellow:#f0d060;
   --mono:'Space Mono',monospace;
   --display:'Syne',sans-serif;
+  --glass:rgba(4,5,15,.82);
+  --border:rgba(255,255,255,.07);
+  --r:100px;
 }
 html,body { height:100%; overflow:hidden; background:var(--ink); color:var(--paper); font-family:var(--mono); }
 
-/* ── LANDING ── */
+/* ══════════════════════════════════════════════════════
+   LANDING
+══════════════════════════════════════════════════════ */
 #landing {
   position:fixed; inset:0; display:flex; flex-direction:column;
-  align-items:center; justify-content:center; padding:24px;
+  align-items:center; justify-content:center; padding:28px 24px;
   background:var(--ink); z-index:100; overflow-y:auto;
 }
-
-/* Animated grid background */
 #landing::before {
   content:''; position:absolute; inset:0; z-index:0;
   background-image:
-    linear-gradient(rgba(232,79,43,.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(232,79,43,.06) 1px, transparent 1px);
-  background-size:48px 48px;
-  animation:gridDrift 18s linear infinite;
+    linear-gradient(rgba(232,79,43,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232,79,43,.05) 1px, transparent 1px);
+  background-size:52px 52px;
+  animation:gridDrift 20s linear infinite;
 }
 #landing::after {
-  content:''; position:absolute; inset:0; z-index:0;
-  background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(232,79,43,.08) 0%, transparent 70%),
-              radial-gradient(ellipse 40% 40% at 15% 80%, rgba(77,166,255,.06) 0%, transparent 60%),
-              radial-gradient(ellipse 50% 40% at 85% 20%, rgba(43,232,122,.05) 0%, transparent 60%);
-  pointer-events:none;
+  content:''; position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(ellipse 65% 55% at 50% 45%, rgba(232,79,43,.07) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 35% at 12% 80%, rgba(77,166,255,.05) 0%, transparent 60%);
 }
-@keyframes gridDrift { from{background-position:0 0} to{background-position:48px 48px} }
+@keyframes gridDrift { from{background-position:0 0} to{background-position:52px 52px} }
 
 .landing-inner {
-  position:relative; z-index:1; width:100%; max-width:520px;
+  position:relative; z-index:1; width:100%; max-width:480px;
   display:flex; flex-direction:column; align-items:center;
 }
-
-/* Top nav bar */
 .l-nav {
   width:100%; display:flex; align-items:center; justify-content:space-between;
-  margin-bottom:52px; border-bottom:1px solid rgba(232,79,43,.2); padding-bottom:14px;
+  margin-bottom:48px; border-bottom:1px solid rgba(232,79,43,.15); padding-bottom:14px;
 }
 .l-logo {
-  font-family:var(--display); font-size:13px; font-weight:800; letter-spacing:.06em;
+  font-family:var(--display); font-size:12px; font-weight:800; letter-spacing:.08em;
   color:var(--paper); text-transform:uppercase;
 }
 .l-logo span { color:var(--accent); }
 .l-badge {
-  font-size:9px; letter-spacing:.3em; text-transform:uppercase;
-  padding:4px 10px; border:1px solid rgba(43,232,122,.4); color:var(--green);
-  border-radius:100px; background:rgba(43,232,122,.06);
+  font-size:8px; letter-spacing:.32em; text-transform:uppercase;
+  padding:4px 11px; border:1px solid rgba(43,232,122,.35); color:var(--green);
+  border-radius:var(--r); background:rgba(43,232,122,.05);
   animation:badgePulse 2.4s ease-in-out infinite;
 }
-@keyframes badgePulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+@keyframes badgePulse { 0%,100%{opacity:.55} 50%{opacity:1} }
 
-/* Main headline */
 .l-headline {
   font-family:var(--display); font-weight:800;
-  font-size:clamp(36px,10vw,72px); line-height:.9;
-  text-align:center; letter-spacing:-.02em;
-  margin-bottom:10px;
+  font-size:clamp(38px,11vw,76px); line-height:.88;
+  text-align:center; letter-spacing:-.02em; margin-bottom:12px;
   animation:fadeUp .7s cubic-bezier(.16,1,.3,1) both;
 }
 .l-headline .line2 { display:block; color:var(--accent); font-style:italic; }
-@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
 
 .l-sub {
-  font-size:11px; letter-spacing:.18em; text-transform:uppercase;
-  color:rgba(232,228,219,.38); margin-bottom:36px;
-  animation:fadeUp .7s .12s cubic-bezier(.16,1,.3,1) both;
+  font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+  color:rgba(232,228,219,.3); margin-bottom:40px;
+  animation:fadeUp .7s .1s cubic-bezier(.16,1,.3,1) both;
 }
-
-/* Feature tags */
-.l-tags {
-  display:flex; gap:8px; flex-wrap:wrap; justify-content:center;
-  margin-bottom:36px;
-  animation:fadeUp .7s .22s cubic-bezier(.16,1,.3,1) both;
-}
-.l-tag {
-  font-size:9px; letter-spacing:.22em; text-transform:uppercase;
-  padding:5px 12px; border-radius:100px;
-  border:1px solid rgba(255,255,255,.1); color:rgba(232,228,219,.5);
-  background:rgba(255,255,255,.03);
-}
-.l-tag.hi { border-color:rgba(77,166,255,.35); color:var(--blue); background:rgba(77,166,255,.06); }
 
 /* Drop zone */
 .drop-zone {
-  width:100%; border:1px solid rgba(232,79,43,.25);
-  background:rgba(232,79,43,.03);
-  border-radius:4px; padding:28px 20px; text-align:center; cursor:pointer;
-  transition:border-color .2s, background .2s, box-shadow .2s;
+  width:100%; border:1px solid rgba(232,79,43,.2);
+  background:rgba(232,79,43,.025);
+  border-radius:6px; padding:28px 20px; text-align:center; cursor:pointer;
+  transition:border-color .2s, background .2s;
   position:relative; overflow:hidden;
-  animation:fadeUp .7s .32s cubic-bezier(.16,1,.3,1) both;
-}
-.drop-zone::before {
-  content:''; position:absolute; inset:0;
-  background:linear-gradient(135deg, transparent 40%, rgba(232,79,43,.04) 100%);
-  pointer-events:none;
+  animation:fadeUp .7s .2s cubic-bezier(.16,1,.3,1) both;
 }
 .drop-zone:hover, .drop-zone.over {
-  border-color:var(--accent); background:rgba(232,79,43,.07);
-  box-shadow:0 0 32px rgba(232,79,43,.12), inset 0 0 24px rgba(232,79,43,.04);
+  border-color:var(--accent); background:rgba(232,79,43,.06);
 }
-.drop-icon { font-size:28px; display:block; margin-bottom:9px; filter:grayscale(.4); }
-.drop-label { font-size:11px; letter-spacing:.22em; text-transform:uppercase; margin-bottom:5px; color:var(--paper); }
-.drop-sub { font-size:10px; color:rgba(232,228,219,.32); letter-spacing:.1em; }
+.drop-icon { font-size:24px; display:block; margin-bottom:10px; opacity:.6; }
+.drop-label { font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--paper); margin-bottom:4px; }
+.drop-sub { font-size:9px; color:rgba(232,228,219,.28); letter-spacing:.1em; }
 #fileInput { display:none; }
-
-/* Thumb preview */
-#pdfThumb {
-  display:none; margin-top:14px; max-width:100%; max-height:110px;
-  border:1px solid rgba(255,255,255,.1); border-radius:2px;
-}
-#pageNav { display:none; align-items:center; gap:12px; margin-top:8px; font-size:11px; }
+#pdfThumb { display:none; margin-top:14px; max-width:100%; max-height:120px; border:1px solid rgba(255,255,255,.08); border-radius:3px; }
+#pageNav { display:none; align-items:center; gap:12px; margin-top:10px; font-size:11px; }
 .pg-btn {
-  background:none; border:1px solid rgba(255,255,255,.2); color:var(--paper);
-  width:28px; height:28px; cursor:pointer; font-size:15px; font-family:var(--mono);
-  border-radius:2px; transition:border-color .15s, color .15s;
+  background:none; border:1px solid rgba(255,255,255,.18); color:var(--paper);
+  width:28px; height:28px; cursor:pointer; font-size:14px; font-family:var(--mono);
+  border-radius:4px; transition:border-color .15s;
+  touch-action:manipulation;
 }
-.pg-btn:hover { border-color:var(--accent); color:var(--accent); }
+.pg-btn:hover { border-color:var(--accent); }
 
-/* Launch button */
 #launchBtn {
-  display:none; margin-top:18px; position:relative; overflow:hidden;
-  background:var(--accent); color:#fff;
-  border:none; padding:16px 48px; font-family:var(--mono); font-size:11px;
-  letter-spacing:.32em; text-transform:uppercase; cursor:pointer;
-  border-radius:2px; transition:background .2s, box-shadow .2s;
-  animation:fadeUp .5s .4s cubic-bezier(.16,1,.3,1) both;
+  display:none; margin-top:16px;
+  background:var(--accent); color:#fff; border:none;
+  padding:15px 52px; font-family:var(--mono); font-size:11px;
+  letter-spacing:.28em; text-transform:uppercase; cursor:pointer;
+  border-radius:3px; transition:background .2s;
+  animation:fadeUp .5s .3s cubic-bezier(.16,1,.3,1) both;
+  touch-action:manipulation;
 }
-#launchBtn::after {
-  content:''; position:absolute; inset:0;
-  background:linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
-  transform:translateX(-100%); transition:transform .5s;
-}
-#launchBtn:hover::after { transform:translateX(100%); }
 #launchBtn.show { display:block; }
-#launchBtn:hover { background:#c83d1e; box-shadow:0 0 28px rgba(232,79,43,.35); }
+#launchBtn:hover { background:#c83d1e; }
+#errMsg { display:none; margin-top:10px; font-size:10px; color:var(--accent); letter-spacing:.1em; }
 
-.note {
-  margin-top:14px; font-size:10px; color:rgba(232,228,219,.2);
-  letter-spacing:.07em; text-align:center; max-width:380px; line-height:1.9;
-  animation:fadeUp .7s .45s cubic-bezier(.16,1,.3,1) both;
+/* Recent sessions */
+#recentSection { width:100%; margin-top:24px; animation:fadeUp .7s .38s cubic-bezier(.16,1,.3,1) both; }
+.recent-label {
+  font-size:8px; letter-spacing:.3em; text-transform:uppercase;
+  color:rgba(232,228,219,.25); margin-bottom:10px; display:block;
 }
-#errMsg { display:none; margin-top:10px; font-size:11px; color:var(--accent); letter-spacing:.08em; }
+#recentList { display:flex; flex-direction:column; gap:5px; }
+.recent-item {
+  display:flex; align-items:center; gap:11px;
+  background:rgba(255,255,255,.025); border:1px solid rgba(255,255,255,.06);
+  border-radius:4px; padding:9px 11px; cursor:pointer;
+  transition:border-color .15s, background .15s;
+  touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+}
+.recent-item:hover, .recent-item:active {
+  border-color:rgba(232,79,43,.4); background:rgba(232,79,43,.05);
+}
+.recent-thumb { width:40px; height:28px; border-radius:2px; object-fit:cover; background:#0c0d1c; flex-shrink:0; }
+.recent-info { flex:1; min-width:0; }
+.recent-name { font-size:10px; color:var(--paper); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family:var(--mono); letter-spacing:.04em; margin-bottom:2px; }
+.recent-meta { font-size:8px; color:rgba(232,228,219,.28); letter-spacing:.1em; }
+.recent-del { font-size:13px; color:rgba(255,255,255,.18); background:none; border:none; cursor:pointer; padding:4px; line-height:1; flex-shrink:0; touch-action:manipulation; }
+.recent-del:hover { color:var(--accent); }
 
-/* ── AR SCREEN ── */
+/* ══════════════════════════════════════════════════════
+   AR SCREEN
+══════════════════════════════════════════════════════ */
 #arScreen { display:none; position:fixed; inset:0; z-index:200; background:#000; }
 #arCanvas { width:100%; height:100%; display:block; }
 
-/* ── DOM OVERLAY ROOT — covers full screen, is the XR dom-overlay root ── */
-/* Everything the user needs to interact with in AR lives inside #xrOverlay */
-#xrOverlay {
-  position:fixed; inset:0; z-index:300;
-  pointer-events:none;   /* children opt-in with pointer-events:all */
-}
+#xrOverlay { position:fixed; inset:0; z-index:300; pointer-events:none; }
 
-/* ── HUD ── */
-#hud {
-  position:absolute; bottom:0; left:0; right:0; padding:10px 12px 34px;
-  display:flex; flex-direction:column; align-items:center; gap:8px;
-  pointer-events:none;
-  z-index:190;   /* above stepCard (180) so buttons are never covered */
+/* ── Progress bar — 2px at top ── */
+#stepBar {
+  display:none; position:absolute; top:0; left:0; right:0; z-index:400;
+  height:2px; background:rgba(255,255,255,.06); pointer-events:none;
 }
-#hudHint {
-  font-size:11px; letter-spacing:.15em; text-transform:uppercase;
-  color:rgba(255,255,255,.9); background:rgba(0,0,0,.72);
-  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-  padding:8px 16px; border-radius:100px; border:1px solid rgba(255,255,255,.12);
-  max-width:93vw; text-align:center; line-height:1.6;
-}
-#statusBar {
-  display:none; font-size:9px; letter-spacing:.1em; font-family:var(--mono);
-  color:rgba(255,255,255,.7); background:rgba(0,0,0,.65);
-  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-  padding:6px 14px; border-radius:8px; border:1px solid rgba(255,255,255,.08);
-  white-space:pre; line-height:1.7; text-align:left; max-width:96vw;
-  pointer-events:none;
-}
-.slider-row { display:flex; align-items:center; gap:7px; pointer-events:all; }
-.sl-lbl { font-size:10px; letter-spacing:.13em; color:rgba(255,255,255,.42); min-width:44px; }
-input[type=range] { -webkit-appearance:none; width:96px; height:2px; background:rgba(255,255,255,.18); border-radius:1px; outline:none; }
-input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer; }
-.btn-row { display:flex; gap:6px; pointer-events:all; flex-wrap:wrap; justify-content:center; }
-.hud-btn {
-  background:rgba(8,8,16,.82); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
-  border:1px solid rgba(255,255,255,.14); color:#fff;
-  padding:9px 13px; font-family:var(--mono); font-size:10px;
-  letter-spacing:.11em; text-transform:uppercase; cursor:pointer;
-  border-radius:2px; transition:background .15s, border-color .15s, color .15s;
-  touch-action:manipulation; -webkit-tap-highlight-color:transparent;
-  user-select:none; -webkit-user-select:none;
-}
-.hud-btn:active { transform:scale(.95); }
-.hud-btn:hover  { background:rgba(232,79,43,.18); border-color:var(--accent); }
-.hud-btn.g  { background:rgba(43,232,122,.16); border-color:var(--green); color:var(--green); }
-.hud-btn.b  { background:rgba(77,166,255,.16); border-color:var(--blue); color:var(--blue); }
-.hud-btn.y  { background:rgba(240,208,96,.16); border-color:var(--yellow); color:var(--yellow); }
-.hud-btn.r  { border-color:rgba(232,79,43,.4); }
+#stepBarFill { height:100%; background:var(--accent); transition:width .55s cubic-bezier(.4,0,.2,1); }
 
-/* Badges — inside xrOverlay */
-#scanRing { display:none; position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); pointer-events:none; }
-#scanRing svg { animation:pulse 1.4s ease-in-out infinite; }
-@keyframes pulse { 0%,100%{opacity:.3;transform:scale(.88)} 50%{opacity:1;transform:scale(1.05)} }
-
-#snapReticle { display:none; position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); pointer-events:none; }
-#snapIndicator {
-  display:none; position:absolute; top:18px; left:50%; transform:translateX(-50%);
-  font-size:10px; letter-spacing:.22em; text-transform:uppercase; white-space:nowrap;
-  padding:5px 16px; border-radius:100px;
-  border:1px solid var(--green); color:var(--green); background:rgba(43,232,122,.12);
-}
-#cornerBadge {
-  display:none; position:absolute; top:18px; left:50%; transform:translateX(-50%);
-  font-size:11px; letter-spacing:.2em; text-transform:uppercase; white-space:nowrap;
-  padding:6px 16px; border-radius:100px;
-  background:rgba(77,166,255,.12); border:1px solid var(--blue); color:var(--blue);
-}
-#planeBadge {
-  display:none; position:absolute; top:18px; right:14px;
-  font-size:10px; letter-spacing:.18em; text-transform:uppercase; white-space:nowrap;
-  padding:5px 12px; border-radius:100px;
-  background:rgba(43,232,122,.1); border:1px solid var(--green); color:var(--green);
-}
-#driftBadge {
-  display:none; position:absolute; top:52px; right:14px;
-  font-size:10px; letter-spacing:.14em; text-transform:uppercase; white-space:nowrap;
-  padding:4px 10px; border-radius:100px;
-  background:rgba(240,208,96,.08); border:1px solid var(--yellow); color:var(--yellow);
-}
-#toast {
-  display:none; position:absolute; top:54px; left:50%; transform:translateX(-50%);
-  background:rgba(0,0,0,.86); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-  border:1px solid rgba(255,255,255,.1); padding:9px 22px;
-  font-size:11px; letter-spacing:.11em; color:#fff; border-radius:100px; white-space:nowrap;
-}
-
-/* Measurement label floating in 3D space (projected to screen) */
-#measureLabel {
-  display:none; position:absolute; pointer-events:none;
-  background:rgba(240,208,96,.92); color:#080810;
-  font-size:11px; font-weight:700; letter-spacing:.12em;
-  padding:5px 13px; border-radius:100px;
-  transform:translate(-50%,-50%);
-  box-shadow:0 2px 12px rgba(0,0,0,.4);
-}
-
-/* ── PICK OVERLAY ── */
-#pickOverlay {
-  display:none; position:absolute; inset:0;
-  background:rgba(4,5,15,.97);
-  flex-direction:column; pointer-events:all; overflow:hidden;
-}
-#pickOverlay.show { display:flex; }
-
-/* Header bar */
-#pickHeader {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 16px 10px; flex-shrink:0;
-  border-bottom:1px solid rgba(255,255,255,.07);
-}
-#pickTitle {
-  font-size:10px; letter-spacing:.3em; text-transform:uppercase;
-  color:var(--accent); margin:0;
-}
-#pickModeToggle {
-  display:flex; gap:0; border:1px solid rgba(255,255,255,.15); border-radius:3px; overflow:hidden;
-}
-.mode-tab {
-  background:none; border:none; color:rgba(255,255,255,.4);
-  font-family:var(--mono); font-size:9px; letter-spacing:.2em; text-transform:uppercase;
-  padding:6px 12px; cursor:pointer; transition:background .15s, color .15s;
-}
-.mode-tab.active { background:rgba(255,255,255,.1); color:var(--paper); }
-
-/* Zoom viewport — fills all available space */
-#pickViewport {
-  flex:1; overflow:hidden; position:relative; cursor:crosshair;
-  touch-action:none; background:#08080f;
-}
-#pickCanvas {
-  position:absolute; top:0; left:0;
-  transform-origin:0 0;
-  image-rendering:pixelated;
-}
-/* Zoom controls */
-#pickZoomCtrls {
-  position:absolute; bottom:10px; right:10px;
-  display:flex; flex-direction:column; gap:4px; z-index:20;
-}
-.zoom-btn {
-  width:32px; height:32px; border-radius:4px;
-  background:rgba(4,5,15,.88); border:1px solid rgba(255,255,255,.18);
-  color:var(--paper); font-size:18px; line-height:1; cursor:pointer;
-  display:flex; align-items:center; justify-content:center;
-}
-.zoom-btn:active { background:rgba(255,255,255,.12); }
-#pickZoomLabel {
-  position:absolute; bottom:10px; left:10px; z-index:20;
-  font-size:9px; letter-spacing:.15em; color:rgba(255,255,255,.3);
-}
-
-/* Ruler mode canvas tint */
-#pickViewport.ruler-active { cursor:crosshair; }
-#pickViewport.ruler-active #pickCanvas { filter:brightness(.85) sepia(.15); }
-
-/* Footer */
-#pickFooter {
-  flex-shrink:0; padding:10px 14px 14px;
-  border-top:1px solid rgba(255,255,255,.07);
-  display:flex; flex-direction:column; gap:8px;
-}
-
-/* Anchor-pick mode status */
-#pickAnchorStatus {
-  display:flex; align-items:center; justify-content:space-between; gap:8px;
-}
-#pickInfo { font-size:10px; letter-spacing:.14em; color:var(--blue); }
-#pickSub  { font-size:10px; color:rgba(232,228,219,.4); letter-spacing:.08em; }
-
-/* Ruler mode controls */
-#rulerControls {
-  display:none; align-items:center; gap:8px; flex-wrap:wrap;
-}
-#rulerControls.show { display:flex; }
-#rulerStatus {
-  font-size:10px; letter-spacing:.1em; flex:1;
-  color:rgba(240,208,96,.75);
-}
-#rulerDistInput {
-  background:rgba(0,0,0,.6); border:1px solid rgba(240,208,96,.4); color:var(--yellow);
-  font-family:var(--mono); font-size:12px; padding:6px 10px; width:80px;
-  border-radius:2px; outline:none; text-align:center;
-}
-#rulerDistInput::placeholder { color:rgba(240,208,96,.25); }
-#rulerConfirmBtn {
-  background:rgba(240,208,96,.14); border:1px solid var(--yellow); color:var(--yellow);
-  padding:7px 13px; font-family:var(--mono); font-size:9px; letter-spacing:.18em;
-  text-transform:uppercase; cursor:pointer; border-radius:2px; white-space:nowrap;
-}
-#rulerConfirmBtn:disabled { opacity:.3; cursor:not-allowed; }
-
-/* Footer action row */
-.pick-btns {
-  display:flex; gap:7px; flex-wrap:wrap;
-}
-.pick-btn {
-  background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.15); color:var(--paper);
-  padding:9px 14px; font-family:var(--mono); font-size:9px; letter-spacing:.18em;
-  text-transform:uppercase; cursor:pointer; border-radius:3px;
-  transition:background .15s, border-color .15s;
-}
-.pick-btn:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.3); }
-.pick-btn.confirm {
-  background:var(--accent); border-color:var(--accent); color:#fff; margin-left:auto;
-}
-.pick-btn.confirm:disabled { background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.1); color:rgba(255,255,255,.3); cursor:not-allowed; }
-.pick-btn.ruler-active { background:rgba(240,208,96,.14); border-color:var(--yellow); color:var(--yellow); }
-
-
-/* ── GPS / COMPASS HUD PANEL ── */
-#gpsPanel {
-  position:absolute; top:14px; left:14px;
-  display:none; flex-direction:column; gap:5px;
-  pointer-events:all; z-index:10;
-}
-#gpsPanel.show { display:flex; }
-#gpsBadge {
-  display:flex; align-items:center; gap:7px;
-  background:rgba(4,5,15,.88); backdrop-filter:blur(12px);
-  border:1px solid rgba(255,255,255,.1); border-radius:6px;
-  padding:7px 11px; min-width:180px;
-}
-#gpsAccDot {
-  width:8px; height:8px; border-radius:50%; flex-shrink:0;
-  background:var(--green); box-shadow:0 0 6px var(--green);
-  transition:background .4s, box-shadow .4s;
-}
-#gpsAccDot.yellow { background:var(--yellow); box-shadow:0 0 6px var(--yellow); }
-#gpsAccDot.red    { background:var(--accent);  box-shadow:0 0 6px var(--accent); }
-#gpsText { font-size:9px; letter-spacing:.1em; line-height:1.7; color:rgba(232,228,219,.6); }
-#gpsText strong { color:var(--paper); letter-spacing:.04em; display:block; }
-#compassBadge {
-  display:flex; align-items:center; gap:8px;
-  background:rgba(4,5,15,.88); backdrop-filter:blur(12px);
-  border:1px solid rgba(255,255,255,.1); border-radius:6px;
-  padding:6px 11px;
-}
-#compassRose { width:28px; height:28px; flex-shrink:0; }
-#compassRose svg { display:block; transition:transform .25s ease; }
-#compassText { font-size:9px; letter-spacing:.1em; color:rgba(232,228,219,.6); line-height:1.7; }
-#compassText strong { color:var(--paper); display:block; }
-#gpsDriftBadge {
-  display:none; align-items:center; gap:6px;
-  background:rgba(4,5,15,.88); backdrop-filter:blur(12px);
-  border-radius:6px; padding:6px 11px; border:1px solid rgba(255,255,255,.1);
-  font-size:9px; letter-spacing:.11em; line-height:1.6; color:var(--paper);
-}
-#gpsDriftBadge.show { display:flex; }
-#gpsDriftBadge.ok   { border-color:rgba(43,232,122,.4); color:var(--green); }
-#gpsDriftBadge.warn { border-color:rgba(240,208,96,.4); color:var(--yellow); }
-#gpsDriftBadge.bad  { border-color:rgba(232,79,43,.5);  color:var(--accent); }
-.wp-label {
-  position:absolute; pointer-events:none; white-space:nowrap;
-  background:rgba(77,166,255,.92); color:#04050f;
-  font-size:9px; font-weight:700; letter-spacing:.1em;
-  padding:3px 9px; border-radius:100px;
-  transform:translate(-50%,-140%);
-  box-shadow:0 2px 8px rgba(0,0,0,.5);
-}
-#gpsMap {
-  display:none; position:absolute; bottom:160px; right:14px;
-  width:140px; height:140px;
-  background:rgba(4,5,15,.92); backdrop-filter:blur(10px);
-  border:1px solid rgba(77,166,255,.25); border-radius:6px;
-  overflow:hidden; pointer-events:none;
-}
-#gpsMap.show { display:block; }
-#gpsMapCanvas { width:140px; height:140px; display:block; }
-#gpsMapLabel {
-  position:absolute; bottom:4px; left:0; right:0; text-align:center;
-  font-size:8px; letter-spacing:.15em; color:rgba(77,166,255,.45); text-transform:uppercase;
-}
-#gpsBtns { display:none; }
-#gpsBtns.show { display:flex; }
-
-/* ═══════════════════════════════════════
-   STEP WIZARD
-   ═══════════════════════════════════════ */
-
-/* UI toggle button — always top-right, always visible */
+/* ── UI toggle — minimal, top-right ── */
 #uiToggleBtn {
-  position:absolute; top:10px; right:10px; z-index:400;
-  background:rgba(8,8,16,.75); backdrop-filter:blur(12px);
-  border:1px solid rgba(255,255,255,.18); color:rgba(255,255,255,.8);
-  width:36px; height:36px; border-radius:8px;
-  font-size:16px; cursor:pointer; pointer-events:all;
-  display:none;   /* shown once AR session starts */
-  align-items:center; justify-content:center;
-  transition:background .15s, opacity .15s;
+  position:absolute; top:14px; right:14px; z-index:380;
+  background:rgba(4,5,15,.7); backdrop-filter:blur(16px);
+  border:1px solid rgba(255,255,255,.1); color:rgba(255,255,255,.5);
+  width:32px; height:32px; border-radius:8px; font-size:13px;
+  cursor:pointer; pointer-events:all;
+  display:none; align-items:center; justify-content:center;
+  transition:opacity .2s;
+  touch-action:manipulation;
 }
 #uiToggleBtn.visible { display:flex; }
-#uiToggleBtn.ui-off { background:rgba(232,79,43,.25); border-color:rgba(232,79,43,.4); }
+#uiToggleBtn.ui-off { opacity:.4; }
 
-/* When UI is hidden — collapse all panels except hudHint and step card */
-#xrOverlay.ui-hidden #gpsPanel,
-#xrOverlay.ui-hidden #gpsMap,
-#xrOverlay.ui-hidden #wpLabels,
-#xrOverlay.ui-hidden .slider-row,
-#xrOverlay.ui-hidden #normalBtns,
-#xrOverlay.ui-hidden #traceBtns,
-#xrOverlay.ui-hidden #surveyBtns,
-#xrOverlay.ui-hidden #measureBtns,
-#xrOverlay.ui-hidden #cornerBadge,
-#xrOverlay.ui-hidden #snapIndicator,
-#xrOverlay.ui-hidden #driftBadge,
-#xrOverlay.ui-hidden #statusBar,
-#xrOverlay.ui-hidden #stepBar      { display:none !important; }
+/* ── GPS pill — top-left ── */
+#gpsPanel {
+  position:absolute; top:14px; left:14px;
+  display:none; z-index:10; pointer-events:none;
+}
+#gpsPanel.show { display:block; }
+#gpsBadge {
+  display:flex; align-items:center; gap:6px;
+  background:var(--glass); backdrop-filter:blur(16px);
+  border:1px solid var(--border); border-radius:var(--r);
+  padding:5px 11px 5px 8px;
+}
+#gpsAccDot {
+  width:6px; height:6px; border-radius:50%; flex-shrink:0;
+  background:var(--green); box-shadow:0 0 5px var(--green);
+  transition:background .4s, box-shadow .4s;
+}
+#gpsAccDot.yellow { background:var(--yellow); box-shadow:0 0 5px var(--yellow); }
+#gpsAccDot.red { background:var(--accent); box-shadow:0 0 5px var(--accent); }
+#gpsText { font-size:9px; letter-spacing:.08em; color:rgba(232,228,219,.55); line-height:1; }
+#gpsText strong { display:none; } /* hide coords — just show accuracy pill */
+/* Compass badge — hidden, JS still updates it */
+#compassBadge { display:none !important; }
+#gpsDriftBadge { display:none !important; }
+/* GPS minimap — hidden */
+#gpsMap { display:none !important; }
+/* Waypoint labels — hidden */
+#wpLabels { display:none !important; }
 
-/* Progress bar — thin strip at very top of AR screen */
-#stepBar {
-  display:none; position:absolute; top:0; left:0; right:0; z-index:200;
-  height:3px; background:rgba(255,255,255,.08);
+/* ── Reticles ── */
+#scanRing { display:none; position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); pointer-events:none; }
+#scanRing svg { animation:pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:.25;transform:scale(.9)} 50%{opacity:.9;transform:scale(1.04)} }
+#snapReticle { display:none; position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); pointer-events:none; }
+
+/* ── Floating badges ── */
+#snapIndicator {
+  display:none; position:absolute; top:14px; left:50%; transform:translateX(-50%);
+  font-size:9px; letter-spacing:.18em; text-transform:uppercase; white-space:nowrap;
+  padding:4px 12px; border-radius:var(--r);
+  border:1px solid rgba(43,232,122,.25); color:var(--green);
+  background:rgba(43,232,122,.08); backdrop-filter:blur(12px);
   pointer-events:none;
 }
-#stepBarFill {
-  height:100%; background:var(--accent);
-  transition:width .5s cubic-bezier(.4,0,.2,1);
+#cornerBadge {
+  display:none; position:absolute; top:14px; left:50%; transform:translateX(-50%);
+  font-size:9px; letter-spacing:.16em; text-transform:uppercase; white-space:nowrap;
+  padding:4px 14px; border-radius:var(--r);
+  background:rgba(77,166,255,.08); border:1px solid rgba(77,166,255,.25); color:var(--blue);
+  backdrop-filter:blur(12px); pointer-events:none;
+}
+#planeBadge { display:none !important; }
+#driftBadge {
+  display:none; position:absolute; top:14px; right:14px;
+  font-size:9px; letter-spacing:.14em; text-transform:uppercase; white-space:nowrap;
+  padding:4px 10px; border-radius:var(--r);
+  background:var(--glass); backdrop-filter:blur(12px);
+  border:1px solid var(--border); color:rgba(232,228,219,.5);
+  pointer-events:none;
+}
+#driftBadge.show { display:block; }
+
+/* ── Toast ── */
+#toast {
+  display:none; position:absolute; top:52px; left:50%; transform:translateX(-50%);
+  background:var(--glass); backdrop-filter:blur(16px);
+  border:1px solid var(--border); padding:7px 20px;
+  font-size:9px; letter-spacing:.14em; color:rgba(232,228,219,.75);
+  border-radius:var(--r); white-space:nowrap; pointer-events:none; z-index:10;
 }
 
-/* Full-screen step card overlay */
+/* ── Measure label ── */
+#measureLabel {
+  display:none; position:absolute; pointer-events:none;
+  background:rgba(240,208,96,.92); color:#04050f;
+  font-size:11px; font-weight:700; letter-spacing:.1em;
+  padding:4px 12px; border-radius:var(--r); transform:translate(-50%,-50%);
+}
+
+/* ── HUD — bottom ── */
+#hud {
+  position:absolute; bottom:0; left:0; right:0; padding:10px 18px 36px;
+  display:flex; flex-direction:column; align-items:center; gap:7px;
+  pointer-events:none; z-index:190;
+}
+#hudHint {
+  font-size:9px; letter-spacing:.18em; text-transform:uppercase;
+  color:rgba(255,255,255,.6); background:var(--glass);
+  backdrop-filter:blur(16px);
+  padding:7px 18px; border-radius:var(--r);
+  border:1px solid var(--border);
+  max-width:90vw; text-align:center; line-height:1.5;
+}
+/* Status bar — small quality pill shown after binding */
+#statusBar {
+  display:none; font-size:8px; letter-spacing:.1em; font-family:var(--mono);
+  color:rgba(255,255,255,.55); background:var(--glass);
+  backdrop-filter:blur(12px);
+  padding:5px 14px; border-radius:var(--r);
+  border:1px solid var(--border);
+  white-space:pre; line-height:1.65; text-align:left; max-width:96vw;
+  pointer-events:none;
+}
+.hud-btn {
+  background:var(--glass); backdrop-filter:blur(14px);
+  border:1px solid var(--border); color:rgba(255,255,255,.75);
+  padding:9px 16px; font-family:var(--mono); font-size:9px;
+  letter-spacing:.14em; text-transform:uppercase; cursor:pointer;
+  border-radius:4px; transition:background .15s, border-color .15s;
+  touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+  user-select:none; -webkit-user-select:none;
+  pointer-events:all;
+}
+.hud-btn:active { opacity:.7; }
+.hud-btn.g { border-color:rgba(43,232,122,.3); color:var(--green); }
+.hud-btn.b { border-color:rgba(77,166,255,.3); color:var(--blue); }
+.hud-btn.y { border-color:rgba(240,208,96,.3); color:var(--yellow); }
+.btn-row { display:flex; gap:6px; pointer-events:all; flex-wrap:wrap; justify-content:center; }
+.slider-row { display:flex; align-items:center; gap:8px; pointer-events:all; }
+.sl-lbl { font-size:9px; letter-spacing:.13em; color:rgba(255,255,255,.35); min-width:40px; }
+input[type=range] { -webkit-appearance:none; width:88px; height:2px; background:rgba(255,255,255,.14); border-radius:1px; outline:none; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--accent); cursor:pointer; }
+
+/* ══════════════════════════════════════════════════════
+   STEP CARD
+══════════════════════════════════════════════════════ */
 #stepCard {
   display:none; position:absolute; inset:0; z-index:180;
-  background:rgba(4,5,15,.96);
+  background:rgba(4,5,15,.97);
   flex-direction:column; align-items:center; justify-content:flex-start;
-  padding:48px 28px 32px;
+  padding:56px 28px 36px;
   overflow-y:auto; -webkit-overflow-scrolling:touch;
   pointer-events:all;
-  animation:cardIn .35s cubic-bezier(.4,0,.2,1);
+  animation:cardIn .3s cubic-bezier(.4,0,.2,1);
 }
 #stepCard.show { display:flex; }
-@keyframes cardIn {
-  from { opacity:0; transform:translateY(18px); }
-  to   { opacity:1; transform:translateY(0); }
-}
+@keyframes cardIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
 
-/* ── Dismiss (×) button — top-right of card ── */
+/* Dismiss button */
 #scDismiss {
-  display:none; position:absolute; top:18px; right:18px;
-  width:34px; height:34px; border-radius:50%;
-  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12);
-  color:rgba(255,255,255,.45); font-size:16px; line-height:1;
+  display:none; position:absolute; top:16px; right:16px;
+  width:32px; height:32px; border-radius:8px;
+  background:rgba(255,255,255,.05); border:1px solid var(--border);
+  color:rgba(255,255,255,.35); font-size:14px; line-height:1;
   cursor:pointer; pointer-events:all;
-  transition:background .15s, color .15s;
-  align-items:center; justify-content:center;
+  transition:background .15s; align-items:center; justify-content:center;
+  touch-action:manipulation;
 }
 #scDismiss.show { display:flex; }
-#scDismiss:hover { background:rgba(255,255,255,.12); color:#fff; }
+#scDismiss:active { background:rgba(255,255,255,.1); }
 
 /* Step pill */
 .sc-step {
-  font-size:9px; letter-spacing:.35em; text-transform:uppercase;
-  color:var(--accent); background:rgba(232,79,43,.12);
-  border:1px solid rgba(232,79,43,.25); border-radius:100px;
-  padding:4px 14px; margin-bottom:14px;
+  font-size:8px; letter-spacing:.38em; text-transform:uppercase;
+  color:rgba(232,79,43,.7); margin-bottom:20px; align-self:flex-start;
 }
 
-/* Icon area */
+/* Step number / icon — now just a small typographic counter */
 .sc-icon {
-  width:64px; height:64px; border-radius:50%;
-  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
-  display:flex; align-items:center; justify-content:center;
-  font-size:28px; margin-bottom:16px; position:relative; flex-shrink:0;
-}
-.sc-icon::before {
-  content:''; position:absolute; inset:-6px; border-radius:50%;
-  border:1px solid rgba(232,79,43,.2);
-  animation:iconPulse 2.5s ease-in-out infinite;
-}
-@keyframes iconPulse {
-  0%,100%{ transform:scale(1);   opacity:.4; }
-  50%    { transform:scale(1.08); opacity:.9; }
+  font-family:var(--display); font-size:11px; font-weight:800;
+  letter-spacing:.06em; text-transform:uppercase;
+  color:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.07);
+  border-radius:6px; padding:4px 10px;
+  margin-bottom:20px; align-self:flex-start;
 }
 
 .sc-title {
-  font-family:var(--display); font-size:22px; font-weight:800;
-  letter-spacing:-.01em; color:var(--paper);
-  text-align:center; margin-bottom:6px; line-height:1.2;
+  font-family:var(--display); font-size:clamp(26px,7vw,36px); font-weight:800;
+  letter-spacing:-.02em; color:var(--paper);
+  text-align:center; margin-bottom:10px; line-height:1.1;
 }
 .sc-sub {
-  font-size:12px; letter-spacing:.06em; line-height:1.65;
-  color:rgba(232,228,219,.45); text-align:center;
-  max-width:300px; margin-bottom:16px;
+  font-size:11px; letter-spacing:.04em; line-height:1.7;
+  color:rgba(232,228,219,.4); text-align:center;
+  max-width:280px; margin-bottom:24px;
 }
 
-/* ── Accuracy tips list ── */
-#scTips {
-  display:none; width:100%; max-width:320px;
-  margin-bottom:22px; flex-direction:column; gap:7px;
-  max-height:38vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
-}
+/* Tips */
+#scTips { display:none; width:100%; max-width:320px; margin-bottom:24px; flex-direction:column; gap:1px; }
 #scTips.show { display:flex; }
 .sc-tip {
-  display:flex; align-items:flex-start; gap:10px;
-  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07);
-  border-radius:6px; padding:9px 13px;
+  display:flex; align-items:flex-start; gap:12px;
+  padding:10px 0; border-bottom:1px solid rgba(255,255,255,.05);
 }
-.sc-tip-icon { font-size:15px; flex-shrink:0; margin-top:1px; }
-.sc-tip-text { font-size:10px; letter-spacing:.07em; line-height:1.6;
-               color:rgba(232,228,219,.5); }
-.sc-tip-text strong { color:var(--paper); display:block; margin-bottom:1px; }
-/* Tip accent colours */
-.sc-tip.green { border-color:rgba(43,232,122,.2); }
-.sc-tip.green .sc-tip-icon { filter:hue-rotate(80deg); }
-.sc-tip.blue  { border-color:rgba(77,166,255,.2); }
-.sc-tip.yellow{ border-color:rgba(240,208,96,.2); }
+.sc-tip:last-child { border-bottom:none; }
+.sc-tip-icon { font-size:14px; flex-shrink:0; margin-top:1px; opacity:.7; }
+.sc-tip-text { font-size:9px; letter-spacing:.07em; line-height:1.65; color:rgba(232,228,219,.4); }
+.sc-tip-text strong { color:rgba(232,228,219,.75); display:block; margin-bottom:1px; font-size:10px; letter-spacing:.04em; }
 
-/* Live status row inside card (GPS signal etc.) */
+/* Status row */
 .sc-status {
   display:flex; align-items:center; gap:10px;
-  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
-  border-radius:8px; padding:10px 18px; margin-bottom:18px;
-  min-width:240px; justify-content:center;
+  background:rgba(255,255,255,.03); border:1px solid var(--border);
+  border-radius:8px; padding:10px 16px; margin-bottom:20px;
+  width:100%; max-width:320px;
 }
 .sc-dot {
-  width:8px; height:8px; border-radius:50%; flex-shrink:0;
+  width:7px; height:7px; border-radius:50%; flex-shrink:0;
   background:var(--accent); box-shadow:0 0 6px var(--accent);
   transition:background .3s, box-shadow .3s;
 }
-.sc-dot.yellow{ background:var(--yellow); box-shadow:0 0 6px var(--yellow); }
-.sc-dot.green { background:var(--green);  box-shadow:0 0 6px var(--green); }
-.sc-status-text { font-size:10px; letter-spacing:.1em; color:rgba(232,228,219,.6); }
-.sc-status-text strong { color:var(--paper); display:block; font-size:11px; }
+.sc-dot.yellow { background:var(--yellow); box-shadow:0 0 6px var(--yellow); }
+.sc-dot.green  { background:var(--green);  box-shadow:0 0 6px var(--green); }
+.sc-status-text { font-size:9px; letter-spacing:.1em; color:rgba(232,228,219,.5); line-height:1.6; }
+.sc-status-text strong { color:rgba(232,228,219,.85); display:block; font-size:10px; }
 
-/* Primary CTA button */
+/* Primary CTA */
 .sc-btn {
   background:var(--accent); color:#fff; border:none;
-  font-family:var(--mono); font-size:11px; letter-spacing:.22em;
-  text-transform:uppercase; padding:14px 32px; border-radius:3px;
-  cursor:pointer; transition:background .15s, transform .1s;
-  min-width:200px; text-align:center;
-  touch-action:manipulation;   /* kill 300 ms delay on mobile/WebXR */
-  -webkit-tap-highlight-color:transparent;
+  font-family:var(--mono); font-size:10px; letter-spacing:.24em;
+  text-transform:uppercase; padding:15px 32px; border-radius:3px;
+  cursor:pointer; transition:background .15s, opacity .15s;
+  width:100%; max-width:320px; text-align:center;
+  touch-action:manipulation; -webkit-tap-highlight-color:transparent;
   user-select:none; -webkit-user-select:none;
 }
-.sc-btn:hover { background:#c83d1e; }
-.sc-btn:active { transform:scale(.97); }
-.sc-btn:disabled {
-  background:rgba(255,255,255,.08); color:rgba(255,255,255,.25);
-  cursor:not-allowed; transform:none;
-}
+.sc-btn:active { opacity:.8; }
+.sc-btn:disabled { background:rgba(255,255,255,.06); color:rgba(255,255,255,.2); cursor:not-allowed; }
 .sc-btn.secondary {
-  background:transparent; border:1px solid rgba(255,255,255,.2);
-  color:rgba(255,255,255,.5); margin-top:10px;
-  font-size:10px; letter-spacing:.18em; padding:10px 24px;
+  background:transparent; border:1px solid rgba(255,255,255,.12);
+  color:rgba(255,255,255,.4); margin-top:8px;
+  font-size:9px; letter-spacing:.2em; padding:11px 24px;
 }
 
-/* ── Peek / collapsible mode — card collapses to bottom strip.
-   Used for steps where the action happens in the camera view
-   (Place, Orient, Scan, Survey) so the full screen is never blocked. ── */
+/* ── Peek strip ─────────────────────────────────────────────────
+   Full-screen is blocked → collapse to a floating bottom bar.
+   sc-status on left, sc-btn as pill on right.
+   ─────────────────────────────────────────────────────────────── */
 #stepCard.peek-mode {
   justify-content:flex-end;
-  padding-bottom:28px;
-  background:linear-gradient(to top, rgba(4,5,15,.94) 0%, transparent 55%) !important;
-  pointer-events:none;   /* pass ALL touches through transparent top half */
+  padding:0; padding-bottom:36px;
+  background:linear-gradient(to top, rgba(4,5,15,.92) 0%, transparent 48%) !important;
+  pointer-events:none;
+  flex-direction:row; align-items:flex-end;
+  flex-wrap:nowrap; gap:0;
+  padding-left:20px; padding-right:20px;
 }
-/* Re-enable pointer events only on visible bottom content */
 #stepCard.peek-mode .sc-step,
-#stepCard.peek-mode .sc-status { pointer-events:all; }
-
 #stepCard.peek-mode .sc-icon,
 #stepCard.peek-mode .sc-title,
 #stepCard.peek-mode .sc-sub,
 #stepCard.peek-mode .sc-dots,
 #stepCard.peek-mode #scTips,
-#stepCard.peek-mode .sc-btn,
+#stepCard.peek-mode .sc-btn.secondary,
+#stepCard.peek-mode #scAnchorBtns,
 #stepCard.peek-mode #scDismiss { display:none !important; }
 
-/* has-action: peek strip that keeps the primary button visible + tappable.
-   Used for steps where the user must press a button to advance (e.g. GPS survey). */
-#stepCard.peek-mode.has-action .sc-btn {
-  display:flex !important;
-  pointer-events:all;
-  margin-top:8px;
-  width:100%;
+/* Status pill visible in peek strip */
+#stepCard.peek-mode .sc-status {
+  pointer-events:none; background:none; border:none;
+  padding:0; margin:0; flex:1; min-width:0; gap:8px;
 }
-#stepCard.peek-mode.has-action { pointer-events:none; }
-#stepCard.peek-mode.has-action .sc-status,
-#stepCard.peek-mode.has-action .sc-btn    { pointer-events:all; }
+#stepCard.peek-mode .sc-btn { display:none !important; }
 
-/* Anchor mode strip — collapses card to bottom, shows status + done btn */
+/* has-action: show the CTA button in the peek strip */
+#stepCard.peek-mode.has-action .sc-status { pointer-events:none; }
+#stepCard.peek-mode.has-action .sc-btn {
+  display:flex !important; align-items:center; justify-content:center;
+  pointer-events:all; flex-shrink:0;
+  width:auto; max-width:none; padding:12px 22px;
+  border-radius:3px; margin:0 0 0 12px;
+  font-size:9px; letter-spacing:.2em;
+}
+
+/* ── Anchor strip ───────────────────────────────────────────────
+   Same horizontal layout; shows Undo + Done buttons.
+   ─────────────────────────────────────────────────────────────── */
 #stepCard.anchor-mode {
   justify-content:flex-end;
-  padding-bottom:28px;
-  background:linear-gradient(to top, rgba(4,5,15,.92) 0%, rgba(4,5,15,.0) 60%) !important;
+  padding:0 20px 36px;
+  background:linear-gradient(to top, rgba(4,5,15,.9) 0%, transparent 45%) !important;
   pointer-events:none;
+  flex-direction:row; align-items:flex-end; gap:8px;
 }
 #stepCard.anchor-mode .sc-step,
-#stepCard.anchor-mode .sc-status,
-#stepCard.anchor-mode .sc-btn,
-#stepCard.anchor-mode #scAnchorBtns { pointer-events:all; }
 #stepCard.anchor-mode .sc-icon,
 #stepCard.anchor-mode .sc-title,
 #stepCard.anchor-mode .sc-sub,
 #stepCard.anchor-mode .sc-dots,
 #stepCard.anchor-mode #scTips,
-#stepCard.anchor-mode #scDismiss    { display:none !important; }
+#stepCard.anchor-mode .sc-btn.secondary,
+#stepCard.anchor-mode #scDismiss { display:none !important; }
+#stepCard.anchor-mode .sc-status {
+  pointer-events:none; background:none; border:none;
+  padding:0; margin:0; flex:1; min-width:0; gap:8px;
+}
+#stepCard.anchor-mode .sc-btn,
+#stepCard.anchor-mode #scAnchorBtns { pointer-events:all; display:flex !important; }
+#stepCard.anchor-mode .sc-btn {
+  width:auto; max-width:none; padding:12px 20px; margin:0; flex-shrink:0;
+  font-size:9px; letter-spacing:.2em; border-radius:3px;
+}
+#stepCard.anchor-mode #scAnchorBtns {
+  flex-direction:row; gap:6px; margin:0; align-items:center; flex-shrink:0;
+}
+#stepCard.anchor-mode #scAnchorBtns .sc-btn {
+  min-width:0; padding:10px 14px; font-size:9px; margin:0;
+}
 
-/* Step-dots nav */
-.sc-dots {
-  display:flex; gap:6px; margin-top:28px;
-}
-.sc-dot-s {
-  width:6px; height:6px; border-radius:50%;
-  background:rgba(255,255,255,.15); transition:background .3s;
-}
-.sc-dot-s.active { background:var(--accent); }
-.sc-dot-s.done   { background:rgba(232,79,43,.4); }
+/* Step dots — hidden (progress bar is enough) */
+.sc-dots { display:none !important; }
 
+/* ══════════════════════════════════════════════════════
+   PICK / IDENTIFY OVERLAY
+══════════════════════════════════════════════════════ */
+#pickOverlay {
+  display:none; position:absolute; inset:0;
+  background:rgba(4,5,15,.98);
+  flex-direction:column; pointer-events:all; overflow:hidden;
+}
+#pickOverlay.show { display:flex; }
 
-/* ── Recent sessions list ── */
-#recentSection {
-  width:100%; margin-top:20px;
-  animation:fadeUp .7s .42s cubic-bezier(.16,1,.3,1) both;
+#pickHeader {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 18px 12px; flex-shrink:0;
+  border-bottom:1px solid var(--border);
 }
-.recent-label {
-  font-size:9px; letter-spacing:.28em; text-transform:uppercase;
-  color:rgba(232,228,219,.32); margin-bottom:10px; display:block;
+#pickTitle {
+  font-size:9px; letter-spacing:.32em; text-transform:uppercase;
+  color:rgba(232,228,219,.4); margin:0;
 }
-#recentList {
-  display:flex; flex-direction:column; gap:6px;
+#pickModeToggle {
+  display:flex; background:rgba(255,255,255,.05); border-radius:6px;
+  padding:3px; gap:2px;
 }
-.recent-item {
-  display:flex; align-items:center; gap:12px;
-  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07);
-  border-radius:3px; padding:10px 12px; cursor:pointer;
-  transition:border-color .15s, background .15s;
-  touch-action:manipulation; -webkit-tap-highlight-color:transparent;
-}
-.recent-item:hover, .recent-item:active {
-  border-color:rgba(232,79,43,.45); background:rgba(232,79,43,.07);
-}
-.recent-thumb {
-  width:42px; height:30px; border-radius:2px; object-fit:cover;
-  background:#12121f; flex-shrink:0; display:block;
-}
-.recent-info { flex:1; min-width:0; }
-.recent-name {
-  font-size:11px; color:var(--paper); white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis; font-family:var(--mono);
-  letter-spacing:.06em; margin-bottom:2px;
-}
-.recent-meta {
-  font-size:9px; color:rgba(232,228,219,.32); letter-spacing:.1em;
-}
-.recent-del {
-  font-size:14px; color:rgba(255,255,255,.2); background:none; border:none;
-  cursor:pointer; padding:4px; line-height:1; flex-shrink:0;
+.mode-tab {
+  background:none; border:none; color:rgba(255,255,255,.35);
+  font-family:var(--mono); font-size:8px; letter-spacing:.22em; text-transform:uppercase;
+  padding:5px 12px; cursor:pointer; transition:background .15s, color .15s;
+  border-radius:4px;
   touch-action:manipulation;
 }
-.recent-del:hover { color:var(--accent); }
+.mode-tab.active { background:rgba(255,255,255,.1); color:var(--paper); }
+
+#pickViewport {
+  flex:1; overflow:hidden; position:relative; cursor:crosshair;
+  touch-action:none; background:#060710;
+}
+#pickCanvas { position:absolute; top:0; left:0; transform-origin:0 0; image-rendering:pixelated; }
+
+#pickZoomCtrls {
+  position:absolute; bottom:12px; right:12px;
+  display:flex; flex-direction:column; gap:4px; z-index:20;
+}
+.zoom-btn {
+  width:32px; height:32px; border-radius:6px;
+  background:var(--glass); border:1px solid var(--border);
+  color:rgba(255,255,255,.6); font-size:17px; line-height:1; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  touch-action:manipulation;
+}
+.zoom-btn:active { background:rgba(255,255,255,.1); }
+#pickZoomLabel {
+  position:absolute; bottom:12px; left:12px; z-index:20;
+  font-size:8px; letter-spacing:.15em; color:rgba(255,255,255,.2);
+}
+#pickViewport.ruler-active { cursor:crosshair; }
+#pickViewport.ruler-active #pickCanvas { filter:brightness(.82) sepia(.1); }
+
+#pickFooter {
+  flex-shrink:0; padding:12px 16px 18px;
+  border-top:1px solid var(--border);
+  display:flex; flex-direction:column; gap:10px;
+}
+
+/* Anchor status */
+#pickAnchorStatus { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+#pickInfo { font-size:9px; letter-spacing:.14em; color:var(--blue); }
+#pickSub  { font-size:9px; color:rgba(232,228,219,.35); letter-spacing:.08em; }
+
+/* Ruler controls */
+#rulerControls { display:none; align-items:center; gap:8px; flex-wrap:wrap; }
+#rulerControls.show { display:flex; }
+#rulerStatus { font-size:9px; letter-spacing:.1em; flex:1; color:rgba(240,208,96,.65); }
+#rulerDistInput {
+  background:rgba(0,0,0,.5); border:1px solid rgba(240,208,96,.3); color:var(--yellow);
+  font-family:var(--mono); font-size:12px; padding:6px 10px; width:82px;
+  border-radius:3px; outline:none; text-align:center;
+}
+#rulerDistInput::placeholder { color:rgba(240,208,96,.2); }
+#rulerConfirmBtn {
+  background:rgba(240,208,96,.1); border:1px solid rgba(240,208,96,.35); color:var(--yellow);
+  padding:7px 14px; font-family:var(--mono); font-size:8px; letter-spacing:.2em;
+  text-transform:uppercase; cursor:pointer; border-radius:3px;
+  touch-action:manipulation;
+}
+#rulerConfirmBtn:disabled { opacity:.25; cursor:not-allowed; }
+
+.pick-btns { display:flex; gap:6px; flex-wrap:wrap; }
+.pick-btn {
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); color:rgba(232,228,219,.7);
+  padding:9px 14px; font-family:var(--mono); font-size:8px; letter-spacing:.2em;
+  text-transform:uppercase; cursor:pointer; border-radius:3px;
+  transition:background .15s; touch-action:manipulation;
+}
+.pick-btn:active { background:rgba(255,255,255,.1); }
+.pick-btn.confirm { background:var(--accent); border-color:var(--accent); color:#fff; margin-left:auto; }
+.pick-btn.confirm:disabled { background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.08); color:rgba(255,255,255,.22); cursor:not-allowed; }
+.pick-btn.ruler-active { background:rgba(240,208,96,.1); border-color:rgba(240,208,96,.3); color:var(--yellow); }
+
+/* wp labels */
+.wp-label {
+  position:absolute; pointer-events:none; white-space:nowrap;
+  background:rgba(77,166,255,.85); color:#04050f;
+  font-size:8px; font-weight:700; letter-spacing:.1em;
+  padding:3px 9px; border-radius:var(--r); transform:translate(-50%,-140%);
+}
+
+/* ui-hidden mode */
+#xrOverlay.ui-hidden #gpsPanel,
+#xrOverlay.ui-hidden #cornerBadge,
+#xrOverlay.ui-hidden #snapIndicator,
+#xrOverlay.ui-hidden #driftBadge,
+#xrOverlay.ui-hidden #statusBar,
+#xrOverlay.ui-hidden #stepBar { display:none !important; }
+
 </style>
 
 <body>
@@ -728,15 +605,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
       <span class="line2">Floorplan AR.</span>
     </h1>
     <p class="l-sub">Anchored &middot; Drift-corrected &middot; Real-time</p>
-
-    <div class="l-tags">
-      <span class="l-tag hi">Hit-test</span>
-      <span class="l-tag hi">Plane detection</span>
-      <span class="l-tag hi">XR Anchors</span>
-      <span class="l-tag">Scale ruler</span>
-      <span class="l-tag">Measurement</span>
-      <span class="l-tag">PDF overlay</span>
-    </div>
 
     <div class="drop-zone" id="dropZone">
       <span class="drop-icon">&#x1F4C4;</span>
@@ -756,10 +624,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
       <span class="recent-label">Recent floorplans</span>
       <div id="recentList"></div>
     </div>
-    <p class="note">
-      Scan ground &rarr; wireframes on detected surfaces &middot; Tap Anchor &rarr; walk to each column<br>
-      (snaps to column edges) &rarr; set scale &rarr; pick columns on PDF &rarr; plan binds live
-    </p>
+
   </div>
 </div>
 
@@ -819,27 +684,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; h
     <div id="gpsPanel">
       <div id="gpsBadge">
         <div id="gpsAccDot"></div>
-        <div id="gpsText">
-          <strong id="gpsCoordsText">Acquiring GPS…</strong>
-          <span id="gpsAccText">accuracy: —</span>
-        </div>
+        <div id="gpsText"><span id="gpsAccText">GPS —</span><strong id="gpsCoordsText" style="display:none"></strong></div>
       </div>
-      <div id="compassBadge">
-        <div id="compassRose">
-          <svg width="28" height="28" viewBox="0 0 28 28" id="compassSvg">
-            <circle cx="14" cy="14" r="13" stroke="rgba(255,255,255,.12)" stroke-width="1" fill="none"/>
-            <!-- N pointer red, S pointer white -->
-            <polygon points="14,3 11,14 14,12 17,14" fill="#e84f2b"/>
-            <polygon points="14,25 11,14 14,16 17,14" fill="rgba(255,255,255,.4)"/>
-            <circle cx="14" cy="14" r="2" fill="rgba(255,255,255,.6)"/>
-          </svg>
-        </div>
-        <div id="compassText">
-          <strong id="compassHeadingText">—°</strong>
-          <span id="compassDirText">compass</span>
-        </div>
+      <!-- hidden elements kept for JS compatibility -->
+      <div id="compassBadge" style="display:none">
+        <div id="compassRose"><svg id="compassSvg"><polygon points="14,3 11,14 14,12 17,14" fill="#e84f2b"/></svg></div>
+        <div id="compassText"><strong id="compassHeadingText"></strong><span id="compassDirText"></span></div>
       </div>
-      <div id="gpsDriftBadge"></div>
+      <div id="gpsDriftBadge" style="display:none"></div>
     </div>
 
     <!-- GPS minimap -->
@@ -1192,14 +1044,12 @@ var GPS_ACC_GATE = 15;
 var surveyActive = false;   /* metres — required to pass step 0 */
 
 var STEPS = [
-
-  /* ── 0  SENSORS ─────────────────────────────────────────────────
-     Blocks until GPS ≤ 15 m AND compass active. No dismiss.       */
+  /* ── 0  SENSORS ── */
   {
-    pill:'Step 1 · Sensors',
-    icon:'📡',
+    pill:'Sensors',
+    icon:'01',
     title:'Activate Sensors',
-    sub:'GPS and compass are the foundation. Stand near a window or step outside — signal quality here determines everything that follows.',
+    sub:'GPS and compass are the foundation. Stand near a window or step outside for best signal.',
     btnLabel:'Sensors Ready →',
     btnDisabled:true,
     hasStatus:true,
@@ -1208,23 +1058,17 @@ var STEPS = [
     peekMode:false,
     barPct:0,
     tips:[
-      {icon:'🌤️',cls:'green',  title:'Open sky = best accuracy',
-       body:'GPS indoors is typically ±15–30 m. Outdoors or near a window drops to ±3–5 m — a massive improvement in how tightly the plan locks.'},
-      {icon:'🔄',cls:'yellow', title:'Calibrate your compass',
-       body:'If the compass shows "—°", slowly rotate your phone in a figure-8 motion to wake the magnetometer before continuing.'},
-      {icon:'⚡',cls:'blue',   title:'Keep the screen on',
-       body:'Some Android devices pause sensor polling when the screen sleeps. Keep it on throughout setup.'}
+      {icon:'',cls:'',title:'Open sky','body':'Step outside or near a large window. Indoor GPS accuracy can be ±30m or worse.'},
+      {icon:'',cls:'',title:'Compass calibration','body':'Slowly wave your phone in a figure-8 a few times to calibrate the magnetometer.'},
     ]
   },
 
-  /* ── 1  GPS SURVEY ───────────────────────────────────────────────
-     Full info card → "Start Surveying" collapses to peek strip.
-     Survey HUD buttons (Pin + Done) take over below.               */
+  /* ── 1  GPS SURVEY ── */
   {
-    pill:'Step 2 · GPS Survey',
-    icon:'📍',
-    title:'Survey GPS Reference Points',
-    sub:'Walk to at least 3 known points spread across the site and drop a GPS pin at each. This triangulates a real-world coordinate frame.',
+    pill:'GPS Survey',
+    icon:'02',
+    title:'Survey Reference Points',
+    sub:'Walk to at least 3 known site points spread apart and drop a pin at each.',
     btnLabel:'Start Surveying →',
     btnDisabled:false,
     hasStatus:true,
@@ -1233,75 +1077,55 @@ var STEPS = [
     peekMode:true,
     barPct:14,
     tips:[
-      {icon:'📐',cls:'green',  title:'Choose spread-out points',
-       body:'Pick points that form a large triangle across the site — e.g. three corners of the building. The bigger the triangle, the more accurate the bearing calculation.'},
-      {icon:'🏛️',cls:'blue',   title:'Column bases are ideal',
-       body:'If you can identify a column base on the plan and in the real world, surveying it here gives you a GPS+XR paired point for free — used later in anchoring.'},
-      {icon:'⏱️',cls:'yellow', title:'Dwell for 3 seconds per pin',
-       body:'GPS fixes can jump. Stand still for a moment after arriving at each point before dropping the pin — the app averages the last few readings automatically.'},
-      {icon:'↔️',cls:'green',  title:'Minimum 3 m between points',
-       body:'Points closer than 3 m produce unreliable bearing calculations. Spread them across as much of the site as you have access to.'}
+      {icon:'',cls:'',title:'Spread matters','body':'Choose points at opposite ends of the site — minimum 3 m apart. Column bases are ideal.'},
+      {icon:'',cls:'',title:'Wait for accuracy','body':'Watch the GPS accuracy badge. Dwell 3 seconds before dropping a pin at ±8 m or better.'},
     ]
   },
 
-  /* ── 2  SCAN ─────────────────────────────────────────────────────
-     Sweep camera to build surface mesh. Auto-advances on detection. */
+  /* ── 2  SCAN ── */
   {
-    pill:'Step 3 · Scan Room',
-    icon:'🔍',
+    pill:'Scan',
+    icon:'03',
     title:'Scan Room Geometry',
-    sub:'Slowly sweep the floor first, then tilt up to scan walls and columns. Cyan wireframes appear as surfaces are detected — the Next button unlocks when enough is found.',
+    sub:'Sweep floor then tilt up to scan walls and columns. Surface wireframes will appear.',
     btnLabel:'Start Scanning →',
     btnDisabled:false,
     hasStatus:true,
     hasSecondary:false,
-    dismissable:true,
-    peekMode:true,
+    dismissable:false,
+    peekMode:false,
     barPct:28,
     tips:[
-      {icon:'🧱',cls:'blue',   title:'Scan walls and column faces',
-       body:'Tilt the camera up to 45–90° to capture vertical surfaces. Detected column faces become snap targets — the reticle locks to their edges when anchoring.'},
-      {icon:'🚶',cls:'green',  title:'Slow, deliberate sweeps',
-       body:'Fast movement causes tracking loss. One steady sweep from floor to waist height across the full space takes about 30 seconds.'},
-      {icon:'💡',cls:'yellow', title:'Avoid strong backlighting',
-       body:'Bright windows behind your subject wash out the features the SLAM algorithm needs. Face the light source rather than pointing into it.'}
+      {icon:'',cls:'',title:'Floor first','body':'Start by sweeping the floor slowly. Once the floor is detected, tilt up to scan walls and column faces.'},
+      {icon:'',cls:'',title:'Slow and deliberate','body':'Fast motion blurs tracking. Move at walking pace and pause at column corners.'},
     ]
   },
 
-  /* ── 3  ANCHORS ──────────────────────────────────────────────────
-     Full info card → "Place Anchors" collapses to anchor-mode strip. */
+  /* ── 3  ANCHORS ── */
   {
-    pill:'Step 4 · Column Anchors',
-    icon:'⊙',
+    pill:'Anchors',
+    icon:'04',
     title:'Anchor to Columns',
-    sub:'Walk to each column base and hold the reticle on it for 0.6 s. GPS is captured with each anchor. Minimum 2, ideally 4+.',
+    sub:'Walk to each column base and tap to anchor. Minimum 2, ideally 4+.',
     btnLabel:'Place Anchors →',
     btnDisabled:false,
     hasStatus:false,
     hasSecondary:false,
-    dismissable:true,
-    peekMode:true,
-    barPct:43,
+    dismissable:false,
+    peekMode:false,
+    barPct:42,
     tips:[
-      {icon:'🚶',cls:'green',  title:'Walk right up to the base',
-       body:'Stand within 0.5 m of the column base. The reticle snaps to detected column edges — you\'ll see it jump green when locked.'},
-      {icon:'⏱️',cls:'blue',   title:'Hold for 0.6 seconds',
-       body:'Keep the reticle still on the column base until the green ring completes. Movement during the hold cancels it.'},
-      {icon:'📍',cls:'yellow', title:'GPS is captured per anchor',
-       body:'Each anchor records your current GPS fix alongside the XR position. More anchors = better triangulation and less drift over time.'},
-      {icon:'↩️',cls:'green',  title:'Undo if you mis-place',
-       body:'Tap Undo to remove the last anchor and try again. You can restart the whole set if needed.'}
+      {icon:'',cls:'',title:'Walk right up','body':'The closer you are the more accurate the anchor. Aim for the geometric centre of the column base.'},
+      {icon:'',cls:'',title:'GPS captured per anchor','body':'Each anchor records your GPS position — more spread gives a tighter solve.'},
     ]
   },
 
-  /* ── 4  PLACE ────────────────────────────────────────────────────
-     Stand where you can see most anchors, tap floor.
-     Auto-dismissed on placement.                                   */
+  /* ── 4  PLACE ── */
   {
-    pill:'Step 5 · Place Drawing',
-    icon:'📐',
+    pill:'Place',
+    icon:'05',
     title:'Place the Drawing',
-    sub:'Stand at a point where you can see at least 2 of your anchored columns. Point at the floor — when the reticle appears, tap to place.',
+    sub:'Point camera at the floor where you can see at least 2 anchored columns. Tap to place.',
     btnLabel:'Got it →',
     btnDisabled:false,
     hasStatus:false,
@@ -1310,21 +1134,16 @@ var STEPS = [
     peekMode:true,
     barPct:57,
     tips:[
-      {icon:'👁️',cls:'green',  title:'Visibility over proximity',
-       body:'You want to be able to see the anchored columns from your placement point — not necessarily stand at the centre. A corner vantage point works well.'},
-      {icon:'🪵',cls:'blue',   title:'Hard flat floor only',
-       body:'Tap on hard flooring. Rugs, mats or reflective surfaces confuse plane detection and can cause the drawing to tilt or float off the ground.'}
+      {icon:'',cls:'',title:'Visibility matters','body':'Choose a spot where you can see at least 2 of your anchored columns simultaneously.'},
     ]
   },
 
-  /* ── 5  ORIENT ───────────────────────────────────────────────────
-     Starts unlocked — pan/rotate/zoom freely.
-     Tapping Lock freezes drawing and advances to Pick.             */
+  /* ── 5  ORIENT ── */
   {
-    pill:'Step 6 · Orient',
-    icon:'🔄',
+    pill:'Orient',
+    icon:'06',
     title:'Align the Drawing',
-    sub:'The drawing is unlocked. Pinch to scale, two-finger rotate, single-finger drag. Align the drawn columns over the real column bases, then Lock.',
+    sub:'Pinch to scale, two-finger rotate, drag to position. Align column marks on the drawing over real column bases.',
     btnLabel:'Lock & Continue →',
     btnDisabled:false,
     hasStatus:false,
@@ -1333,23 +1152,18 @@ var STEPS = [
     peekMode:true,
     barPct:71,
     tips:[
-      {icon:'🧭',cls:'green',  title:'Tap "Align N" first',
-       body:'If the compass is stable, Align N rotates the drawing so its top faces True North — often gets you within 5° before any manual adjustment.'},
-      {icon:'⊙',cls:'blue',   title:'Align onto your anchor dots',
-       body:'The coloured spheres in AR show where you walked. Rotate and scale until the column marks on the drawing sit directly over those dots.'},
-      {icon:'🔒',cls:'yellow', title:'Lock ends this step',
-       body:'Tapping Lock freezes the drawing and moves to the final identification step. You can always unlock and re-adjust from the HUD if needed.'}
+      {icon:'',cls:'',title:'Anchor dots are your guide','body':'The coloured spheres show where you anchored. Rotate and scale until column marks sit over those dots.'},
+      {icon:'',cls:'',title:'Lock freezes the drawing','body':'Once locked, the plan is rigid. You can re-orient from the HUD if needed.'},
     ]
   },
 
-  /* ── 6  PICK ─────────────────────────────────────────────────────
-     Identify each anchored column on the PDF in the same order.    */
+  /* ── 6  PICK ── */
   {
-    pill:'Step 7 · Identify',
-    icon:'🎯',
+    pill:'Identify',
+    icon:'07',
     title:'Identify Columns on Plan',
-    sub:'Hold on each column in the PDF in the exact same order you anchored them. The coloured dots in AR show the order.',
-    btnLabel:'Open Plan Picker →',
+    sub:'Hold on each column in the PDF in the exact same order you anchored them.',
+    btnLabel:'Open Plan →',
     btnDisabled:false,
     hasStatus:false,
     hasSecondary:false,
@@ -1357,40 +1171,29 @@ var STEPS = [
     peekMode:false,
     barPct:85,
     tips:[
-      {icon:'🔢',cls:'blue',   title:'Order must match exactly',
-       body:'Column 1 in the PDF must be the first column you anchored. The numbered coloured spheres in AR show the order — refer to them if unsure.'},
-      {icon:'🔍',cls:'green',  title:'Zoom in for precision',
-       body:'Tap + or pinch-zoom to get close to each column mark before holding. Picking the geometric centre rather than an edge gives the tightest solve.'},
-      {icon:'📏',cls:'yellow', title:'Set scale on the Scale tab first',
-       body:'Before confirming picks, switch to the Scale tab and drag a line across a known dimension. Scale + picks together give the best rigid-body solve.'}
+      {icon:'',cls:'',title:'Order must match exactly','body':'Column 1 in the PDF must be the first you anchored. Coloured spheres in AR show the order.'},
+      {icon:'',cls:'',title:'Set scale first','body':'Before confirming, switch to the Scale tab and measure a known dimension for the best solve.'},
     ]
   },
 
-  /* ── 7  BOUND ────────────────────────────────────────────────────
-     Live quality score climbs. READY toast fires at ≥85%.
-     Secondary lets user add more anchors to improve score.         */
+  /* ── 7  BOUND ── */
   {
-    pill:'Step 8 · Locked',
-    icon:'✓',
-    title:'Plan Structure-Locked',
-    sub:'All constraints active. Watch the lock quality climb — when it reaches 85 % you\'ll see READY.',
+    pill:'Locked',
+    icon:'08',
+    title:'Plan Locked',
+    sub:'All constraints active. Quality rises as you move around the space.',
     btnLabel:'Close',
     btnDisabled:false,
     hasStatus:true,
     hasSecondary:true,
-    secondaryLabel:'+ Add More Anchors',
+    secondaryLabel:'+ More Anchors',
     dismissable:false,
     peekMode:false,
     barPct:100,
     tips:[
-      {icon:'➕',cls:'green',  title:'More anchors = less drift',
-       body:'Each additional column anchor tightens the Kabsch solve. 6+ anchors typically cuts residual error by half compared to 3.'},
-      {icon:'🔁',cls:'blue',   title:'Walk around to stabilise',
-       body:'Lock quality improves as you move and the re-localisation loop updates anchor positions. A slow walk around the perimeter usually brings it to green.'},
-      {icon:'📍',cls:'yellow', title:'GPS survey points help long-range',
-       body:'The GPS bearing derived from your surveyed points constrains rotation drift over distances where compass alone is insufficient.'}
+      {icon:'',cls:'',title:'More anchors → less drift','body':'Each additional column tightens the Kabsch solve. 6+ typically halves residual error.'},
     ]
-  }
+  },
 ];
 
 function goStep(n){
@@ -2834,8 +2637,8 @@ function onGpsErr(e){ el('gpsCoordsText').textContent='GPS error: '+e.message; }
 
 function updateGPSBadge(){
   if(gpsLat==null)return;
-  el('gpsCoordsText').textContent=fmtCoord(gpsLat,'N','S')+'  '+fmtCoord(gpsLng,'E','W');
-  el('gpsAccText').textContent='acc: '+fmtAcc(gpsAcc)+(gpsAlt!=null?' · alt: '+Math.round(gpsAlt)+'m':'');
+  /* Compact GPS: just show accuracy in the pill */
+  el('gpsAccText').textContent='GPS ' + fmtAcc(gpsAcc);
   var dot=el('gpsAccDot');
   dot.className=''; dot.classList.add(accClass(gpsAcc));
   renderMiniMap();
@@ -3931,32 +3734,26 @@ function ingestGPSForBearing(lat,lng,acc){
 /* ═══════════════════════════════════════════════════════════════
    CONSTRAINT QUALITY PANEL  (updates the statusBar)
    ══════════════════════════════════════════════════════════════ */
-function qualBar(q){
-  var n=Math.round(q*5);
-  var filled='\u2588'.repeat(n), empty='\u2591'.repeat(5-n);
-  return filled+empty;
-}
 function updateConstraintPanel(){
   if(!planBound)return;
-  var anomaly = performance.now()<compassAnomalyUntil;
-  var compassNote = anomaly?' \u26A0anomaly':fusedHeading!=null?' '+Math.round(fusedHeading)+'\u00b0':'';
-  /* Per-anchor outlier note */
-  var outlierAnchors=0;
-  corners.forEach(function(c){if(c.cumDrift&&c.cumDrift>0.08)outlierAnchors++;});
-  var anchorNote=outlierAnchors>0?' ('+outlierAnchors+'\u26A0)':'';
-  var lines=[
-    'XR anchors  '+qualBar(constraintQuality.xrAnchor)+anchorNote,
-    'Compass     '+qualBar(constraintQuality.compass)+compassNote,
-    'GPS+scale   '+qualBar(constraintQuality.gpsBearing)+(gpsScaleEstimate?' sc'+gpsScaleEstimate.scale.toFixed(2):'')+(gpsBearingRef?' '+Math.round(gpsBearingRef.distance)+'m':''),
-    'Plane snap  '+qualBar(constraintQuality.planeSnap),
-  ];
   var overall=(constraintQuality.xrAnchor*0.35+constraintQuality.compass*0.30+
                constraintQuality.gpsBearing*0.15+constraintQuality.planeSnap*0.20);
-  var overallStr=overall>0.78?'\u2714 Stable':overall>0.5?'\u26A0 Partial':'\u26D4 Weak';
-  el('statusBar').textContent=overallStr+'  \u2022  #'+solveCount+'\n'+lines.join('  |  ');
-  el('statusBar').style.whiteSpace='pre';
-  el('driftBadge').textContent=(overall>0.78?'\u2714':'\u26A0')+' '+Math.round(overall*100)+'%';
+  var pct=Math.round(overall*100);
+  var anomaly=performance.now()<compassAnomalyUntil;
+  /* Quality pill — top right */
+  var icon=overall>0.78?'\u2714':overall>0.5?'\u25CC':'\u25CB';
+  var label=overall>0.78?'Stable':overall>0.5?'Partial':'Weak';
+  el('driftBadge').textContent=icon+' '+pct+'% '+label;
+  el('driftBadge').style.borderColor=overall>0.78?'rgba(43,232,122,.3)':overall>0.5?'rgba(240,208,96,.3)':'rgba(232,79,43,.3)';
+  el('driftBadge').style.color=overall>0.78?'var(--green)':overall>0.5?'var(--yellow)':'var(--accent)';
   show('driftBadge');
+  /* Hint shows anchor count + quality */
+  var outliers=0;
+  corners.forEach(function(c){if(c.cumDrift&&c.cumDrift>0.08)outliers++;});
+  var hintParts=[corners.length+' anchors'];
+  if(anomaly) hintParts.push('\u26A0 compass');
+  if(outliers) hintParts.push(outliers+' outlier'+(outliers>1?'s':''));
+  el('hudHint').textContent=hintParts.join(' \u00b7 ');
 }
 
 /* ═══════════════════════════════
