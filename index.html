@@ -521,8 +521,13 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
 #pickViewport {
   flex:1; overflow:hidden; position:relative; cursor:crosshair;
   touch-action:none; background:#060710;
+  isolation:isolate;
 }
-#pickCanvas { position:absolute; top:0; left:0; transform-origin:0 0; image-rendering:pixelated; }
+#pickCanvas {
+  position:absolute; top:0; left:0; transform-origin:0 0;
+  image-rendering:pixelated;
+  will-change:transform; backface-visibility:hidden;
+}
 
 #pickZoomCtrls {
   position:absolute; bottom:12px; right:12px;
@@ -2512,85 +2517,166 @@ el('zoomOut').addEventListener('click',function(){
 });
 el('zoomReset').addEventListener('click',function(){ resetVP(); });
 
-/* Viewport touch/mouse pan + pinch-zoom */
+/* ═══════════════════════════════════════════════════════════════
+   PICK VIEWPORT — pan + pinch-zoom + momentum
+   ═══════════════════════════════════════════════════════════════ */
 (function(){
-  var vp=el('pickViewport');
-  var touches={};
+  var vp = el('pickViewport');
+  var r  = vp.getBoundingClientRect();
 
+  /* Active pointer slots — keyed by pointerId */
+  var pointers = {};     /* id → {x,y} current client pos   */
+
+  /* Momentum state */
+  var velX=0, velY=0;
+  var lastMoveTime=0;
+  var prevPanX=0, prevPanY=0;
+  var momentumRaf=null;
+
+  /* Pinch baseline — captured when a 2nd finger lands */
+  var pinch0Dist=0, pinch0Scale=0, pinch0Mid=null, pinch0OxOy=null;
+
+  /* Single-finger pan baseline — recaptured any time pointer count changes to 1 */
+  var pan0Pos=null, pan0OxOy=null;
+
+  /* ── helpers ── */
   function ptDist(a,b){ var dx=b.x-a.x,dy=b.y-a.y; return Math.sqrt(dx*dx+dy*dy); }
-  function ptMid(a,b){ return{x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
-  function vpXY(e){ var r=vp.getBoundingClientRect(); return{x:e.clientX-r.left,y:e.clientY-r.top}; }
+  function ptMid(a,b) { return{x:(a.x+b.x)/2, y:(a.y+b.y)/2}; }
+  function vpRect()   { return vp.getBoundingClientRect(); }
 
-  /* --- Touch --- */
-  vp.addEventListener('touchstart',function(e){
-    for(var i=0;i<e.changedTouches.length;i++){
-      var t=e.changedTouches[i];
-      touches[t.identifier]={x:t.clientX,y:t.clientY};
-    }
-    var ids=Object.keys(touches);
-    if(ids.length===1){
-      vpDragStart={x:touches[ids[0]].x,y:touches[ids[0]].y};
-      vpDragOrigin={x:vpOx,y:vpOy};
-    } else if(ids.length===2){
-      var a=touches[ids[0]],b=touches[ids[1]];
-      vpPinchDist0=ptDist(a,b); vpPinchScale0=vpScale; vpPinchMid=ptMid(a,b);
-      var r=vp.getBoundingClientRect();
-      vpPinchMid={x:vpPinchMid.x-r.left,y:vpPinchMid.y-r.top};
-    }
-  },{passive:true});
+  function stopMomentum(){
+    if(momentumRaf){ cancelAnimationFrame(momentumRaf); momentumRaf=null; }
+    velX=0; velY=0;
+  }
 
-  vp.addEventListener('touchmove',function(e){
-    e.preventDefault();
-    for(var i=0;i<e.changedTouches.length;i++){
-      var t=e.changedTouches[i];
-      touches[t.identifier]={x:t.clientX,y:t.clientY};
-    }
-    var ids=Object.keys(touches);
-    if(ids.length===1&&vpDragStart&&pickMode==='anchor'){
-      /* Single finger pan (only in anchor mode — ruler needs single touch for drawing) */
-      var dx=touches[ids[0]].x-vpDragStart.x, dy=touches[ids[0]].y-vpDragStart.y;
-      vpOx=vpDragOrigin.x+dx; vpOy=vpDragOrigin.y+dy;
+  function launchMomentum(){
+    if(Math.abs(velX)<0.4 && Math.abs(velY)<0.4) return;
+    var DECAY = 0.88;   /* friction per frame */
+    var MIN   = 0.3;    /* stop threshold px/frame */
+    function step(){
+      velX*=DECAY; velY*=DECAY;
+      if(Math.abs(velX)<MIN && Math.abs(velY)<MIN){ momentumRaf=null; return; }
+      vpOx+=velX; vpOy+=velY;
       clampVP(); applyVP();
-    } else if(ids.length===2&&vpPinchDist0){
-      var a=touches[ids[0]],b=touches[ids[1]];
-      var newDist=ptDist(a,b);
-      var newScale=vpPinchScale0*(newDist/vpPinchDist0);
-      zoomAround(newScale, vpPinchMid.x, vpPinchMid.y);
+      momentumRaf=requestAnimationFrame(step);
     }
-  },{passive:false});
+    momentumRaf=requestAnimationFrame(step);
+  }
 
-  vp.addEventListener('touchend',function(e){
-    for(var i=0;i<e.changedTouches.length;i++) delete touches[e.changedTouches[i].identifier];
-    if(Object.keys(touches).length===0){ vpDragStart=null; vpPinchDist0=null; }
+  /* ── Recapture pan baseline for remaining pointer(s) ── */
+  function recapturePan(){
+    var ids=Object.keys(pointers);
+    if(ids.length===1){
+      pan0Pos  ={x:pointers[ids[0]].x, y:pointers[ids[0]].y};
+      pan0OxOy ={x:vpOx, y:vpOy};
+    }
+  }
+
+  function recapturePinch(){
+    var ids=Object.keys(pointers);
+    if(ids.length===2){
+      var a=pointers[ids[0]], b=pointers[ids[1]];
+      var rc=vpRect();
+      pinch0Dist  = ptDist(a,b);
+      pinch0Scale = vpScale;
+      pinch0Mid   = {x:ptMid(a,b).x-rc.left, y:ptMid(a,b).y-rc.top};
+      pinch0OxOy  = {x:vpOx, y:vpOy};
+    }
+  }
+
+  /* ── Pointer down ── */
+  vp.addEventListener('pointerdown', function(e){
+    stopMomentum();
+    vp.setPointerCapture(e.pointerId);
+    pointers[e.pointerId]={x:e.clientX, y:e.clientY};
+    var n=Object.keys(pointers).length;
+    if(n===1){
+      recapturePan();
+      prevPanX=e.clientX; prevPanY=e.clientY;
+      lastMoveTime=performance.now();
+    } else if(n===2){
+      recapturePinch();
+    }
   },{passive:true});
 
-  /* --- Mouse wheel zoom --- */
+  /* ── Pointer move ── */
+  vp.addEventListener('pointermove', function(e){
+    if(!pointers[e.pointerId]) return;
+    var prev={x:pointers[e.pointerId].x, y:pointers[e.pointerId].y};
+    pointers[e.pointerId]={x:e.clientX, y:e.clientY};
+    var ids=Object.keys(pointers);
+    var now=performance.now();
+
+    if(ids.length===1){
+      /* Single-finger: pan — works in BOTH anchor and ruler mode
+         (ruler uses its own SVG listener on pointerdown/move, not this) */
+      if(!pan0Pos) return;
+      var dx=pointers[ids[0]].x - pan0Pos.x;
+      var dy=pointers[ids[0]].y - pan0Pos.y;
+      vpOx=pan0OxOy.x+dx; vpOy=pan0OxOy.y+dy;
+      clampVP(); applyVP();
+      /* Track velocity (pixels/frame, decaying) */
+      var dt=now-lastMoveTime; if(dt>0&&dt<80){
+        velX=0.7*velX+0.3*(pointers[ids[0]].x-prevPanX);
+        velY=0.7*velY+0.3*(pointers[ids[0]].y-prevPanY);
+      }
+      prevPanX=pointers[ids[0]].x; prevPanY=pointers[ids[0]].y;
+      lastMoveTime=now;
+
+    } else if(ids.length===2 && pinch0Dist){
+      /* Two-finger: pinch-zoom PLUS midpoint pan simultaneously */
+      var a=pointers[ids[0]], b=pointers[ids[1]];
+      var rc=vpRect();
+      var newDist=ptDist(a,b);
+      var newMid ={x:ptMid(a,b).x-rc.left, y:ptMid(a,b).y-rc.top};
+
+      /* 1. Scale around current midpoint */
+      var newScale=Math.max(0.3, Math.min(8, pinch0Scale*(newDist/pinch0Dist)));
+      var ratio=newScale/pinch0Scale;
+      vpOx=pinch0Mid.x-(pinch0Mid.x-pinch0OxOy.x)*ratio;
+      vpOy=pinch0Mid.y-(pinch0Mid.y-pinch0OxOy.y)*ratio;
+      vpScale=newScale;
+
+      /* 2. Add midpoint translation (pan while pinching) */
+      vpOx+=newMid.x-pinch0Mid.x;
+      vpOy+=newMid.y-pinch0Mid.y;
+
+      clampVP(); applyVP();
+    }
+  },{passive:true});
+
+  /* ── Pointer up / cancel ── */
+  function onPointerUp(e){
+    delete pointers[e.pointerId];
+    try{ vp.releasePointerCapture(e.pointerId); }catch(ex){}
+    var n=Object.keys(pointers).length;
+    if(n===0){
+      /* Last finger up → fire momentum */
+      launchMomentum();
+      pan0Pos=null; pinch0Dist=0;
+    } else if(n===1){
+      /* Went from 2→1 finger: recapture pan baseline for remaining finger
+         so there is NO jump on the next pointermove */
+      recapturePan();
+      stopMomentum();
+      pinch0Dist=0;
+      prevPanX=pointers[Object.keys(pointers)[0]].x;
+      prevPanY=pointers[Object.keys(pointers)[0]].y;
+      lastMoveTime=performance.now();
+      velX=0; velY=0;
+    }
+  }
+  vp.addEventListener('pointerup',     onPointerUp, {passive:true});
+  vp.addEventListener('pointercancel', onPointerUp, {passive:true});
+
+  /* ── Mouse wheel zoom (desktop) ── */
   vp.addEventListener('wheel',function(e){
     e.preventDefault();
-    var r=vp.getBoundingClientRect();
-    var cx=e.clientX-r.left, cy=e.clientY-r.top;
-    zoomAround(vpScale*(e.deltaY<0?1.15:0.87), cx, cy);
+    stopMomentum();
+    var rc=vpRect();
+    zoomAround(vpScale*(e.deltaY<0?1.15:0.87), e.clientX-rc.left, e.clientY-rc.top);
   },{passive:false});
 
-  /* --- Mouse pan --- */
-  var mouseDragging=false;
-  vp.addEventListener('mousedown',function(e){
-    if(pickMode==='ruler') return;
-    mouseDragging=true;
-    vpDragStart={x:e.clientX,y:e.clientY};
-    vpDragOrigin={x:vpOx,y:vpOy};
-    vp.style.cursor='grabbing';
-  });
-  window.addEventListener('mousemove',function(e){
-    if(!mouseDragging) return;
-    vpOx=vpDragOrigin.x+(e.clientX-vpDragStart.x);
-    vpOy=vpDragOrigin.y+(e.clientY-vpDragStart.y);
-    clampVP(); applyVP();
-  });
-  window.addEventListener('mouseup',function(){
-    mouseDragging=false;
-    el('pickViewport').style.cursor=pickMode==='ruler'?'crosshair':'crosshair';
-  });
 })();
 
 /* ── Ruler SVG drawing in ruler tab ── */
@@ -2603,7 +2689,10 @@ function initRulerOverlay(){
   var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.id='rulerSvg';
   svg.setAttribute('width',pc.width); svg.setAttribute('height',pc.height);
-  svg.style.cssText='position:absolute;top:0;left:0;transform-origin:0 0;pointer-events:all;display:none;overflow:visible;';
+  /* pointer-events:none by default — only intercept when rulerMode active
+     so the pan handler still fires when ruler is inactive              */
+  svg.style.cssText='position:absolute;top:0;left:0;transform-origin:0 0;' +
+    'will-change:transform;pointer-events:none;display:none;overflow:visible;';
   var line=document.createElementNS('http://www.w3.org/2000/svg','line');
   line.setAttribute('stroke','#f0d060'); line.setAttribute('stroke-width','2');
   line.setAttribute('stroke-dasharray','6 3'); line.setAttribute('display','none');
@@ -2620,28 +2709,34 @@ function initRulerOverlay(){
 
   /* Convert viewport coords → canvas image coords */
   function toCanvas(ex,ey){
-    var r=vp.getBoundingClientRect();
-    var vx=ex-r.left, vy=ey-r.top;
+    var r2=vp.getBoundingClientRect();
+    var vx=ex-r2.left, vy=ey-r2.top;
     return{x:(vx-vpOx)/vpScale, y:(vy-vpOy)/vpScale};
   }
-  function getTouch(e){ return e.touches?e.touches[0]:e; }
 
-  svg.addEventListener('mousedown',rulerDown);
-  svg.addEventListener('touchstart',function(e){ e.preventDefault(); rulerDown(e.touches[0]); },{passive:false});
+  /* ── Ruler draws only when rulerMode=true.
+     We listen on vp (not svg) using pointerdown/move/up so we get
+     events even when svg pointer-events:none.
+     We only intercept when rulerMode is active.                    */
+  var rulerDrawing=false;
+  var rulerPtrId=null;
 
-  function rulerDown(e){
-    if(!rulerMode)return;
+  vp.addEventListener('pointerdown', function(e){
+    if(!rulerMode) return;
+    /* Ignore multi-touch in ruler mode (2nd finger = pan, not ruler) */
+    if(rulerPtrId!==null) return;
+    rulerDrawing=true; rulerPtrId=e.pointerId;
+    svg.style.pointerEvents='all';
     var p=toCanvas(e.clientX,e.clientY);
     rulerP1={x:p.x,y:p.y}; rulerP2=null;
     c1.setAttribute('cx',p.x); c1.setAttribute('cy',p.y); c1.setAttribute('display','');
     c2.setAttribute('display','none'); line.setAttribute('display','none'); txt.setAttribute('display','none');
-    el('rulerStatus').textContent='Drag to end point…';
+    el('rulerStatus').textContent='Drag to end point\u2026';
     el('rulerConfirmBtn').disabled=true;
-  }
-  svg.addEventListener('mousemove',rulerMove);
-  svg.addEventListener('touchmove',function(e){ e.preventDefault(); rulerMove(e.touches[0]); },{passive:false});
-  function rulerMove(e){
-    if(!rulerMode||!rulerP1)return;
+  },{passive:true, capture:true});   /* capture so we get it before pan handler */
+
+  vp.addEventListener('pointermove', function(e){
+    if(!rulerMode||!rulerDrawing||e.pointerId!==rulerPtrId) return;
     var p=toCanvas(e.clientX,e.clientY);
     line.setAttribute('x1',rulerP1.x); line.setAttribute('y1',rulerP1.y);
     line.setAttribute('x2',p.x); line.setAttribute('y2',p.y); line.setAttribute('display','');
@@ -2650,20 +2745,21 @@ function initRulerOverlay(){
     var px=Math.round(Math.sqrt(du*du+dv*dv));
     txt.setAttribute('x',(rulerP1.x+p.x)/2+4); txt.setAttribute('y',(rulerP1.y+p.y)/2-6);
     txt.textContent=px+'px'; txt.setAttribute('display','');
-  }
-  svg.addEventListener('mouseup',rulerUp);
-  svg.addEventListener('touchend',function(e){ e.preventDefault(); rulerUp(getTouch(e.changedTouches[0]||e)); },{passive:false});
-  function rulerUp(e){
-    if(!rulerMode||!rulerP1)return;
+  },{passive:true, capture:true});
+
+  vp.addEventListener('pointerup', function(e){
+    if(!rulerMode||!rulerDrawing||e.pointerId!==rulerPtrId) return;
+    rulerDrawing=false; rulerPtrId=null;
+    svg.style.pointerEvents='none';
     var p=toCanvas(e.clientX,e.clientY);
     rulerP2={x:p.x,y:p.y};
     var du=(rulerP2.x-rulerP1.x)/el('pickCanvas').width;
     var dv=(rulerP2.y-rulerP1.y)/el('pickCanvas').height;
     var uvDist=Math.sqrt(du*du+dv*dv);
     var pxDist=Math.sqrt((rulerP2.x-rulerP1.x)**2+(rulerP2.y-rulerP1.y)**2);
-    el('rulerStatus').textContent=Math.round(pxDist)+'px — enter real distance:';
+    el('rulerStatus').textContent=Math.round(pxDist)+'px \u2014 enter real distance:';
     el('rulerConfirmBtn').disabled=uvDist<0.005;
-  }
+  },{passive:true, capture:true});
 }
 
 el('rulerConfirmBtn').addEventListener('click',function(){
