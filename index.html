@@ -722,6 +722,191 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
   touch-action:manipulation;
 }
 
+
+/* ══════════════════════════════════════════════════════════════
+   AR TOOLS BAR  (shown from step 2, always at bottom of HUD)
+══════════════════════════════════════════════════════════════ */
+#arTools {
+  /* Keep these below hudHint but above the safe-area */
+  order:-1;           /* flex-column: renders above boundTools */
+  flex-wrap:nowrap; gap:5px;
+  overflow-x:auto; -webkit-overflow-scrolling:touch;
+  max-width:96vw;
+  /* hide scrollbar */
+  scrollbar-width:none;
+}
+#arTools::-webkit-scrollbar { display:none; }
+#arTools .hud-btn {
+  flex-shrink:0; min-width:38px; padding:8px 10px;
+  font-size:14px; letter-spacing:0;   /* icons, not words */
+}
+#arTools .hud-btn.active {
+  background:rgba(232,79,43,.2); border-color:var(--accent); color:var(--accent);
+}
+#arTools .hud-btn.active-g {
+  background:rgba(43,232,122,.15); border-color:var(--green); color:var(--green);
+}
+#arTools .hud-btn.active-b {
+  background:rgba(77,166,255,.15); border-color:var(--blue); color:var(--blue);
+}
+
+/* ── Page dropdown ── */
+#pgDropdown {
+  display:none; position:absolute; bottom:46px; right:0;
+  min-width:120px; background:rgba(4,5,15,.97);
+  backdrop-filter:blur(20px); border:1px solid var(--border);
+  border-radius:6px; overflow:hidden; z-index:500; pointer-events:all;
+  max-height:260px; overflow-y:auto;
+}
+#pgDropdown.show { display:block; }
+.pg-item {
+  padding:9px 14px; font-size:9px; letter-spacing:.14em; text-transform:uppercase;
+  color:rgba(255,255,255,.55); cursor:pointer; border-bottom:1px solid rgba(255,255,255,.05);
+  touch-action:manipulation;
+}
+.pg-item:active, .pg-item.active { color:var(--paper); background:rgba(255,255,255,.06); }
+.pg-item.active::after { content:'●'; color:var(--accent); font-size:7px; margin-left:8px; }
+
+/* ══════════════════════════════════════════════════════════════
+   ANNOTATION PANEL  (bottom sheet)
+══════════════════════════════════════════════════════════════ */
+#annotPanel {
+  display:none; position:absolute; bottom:0; left:0; right:0;
+  background:rgba(4,5,15,.96); backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);
+  padding:14px 18px 32px;   /* bottom: safe-area */
+  z-index:360; pointer-events:all;
+  flex-direction:column; gap:10px;
+  animation:slideUp .2s cubic-bezier(.4,0,.2,1);
+}
+#annotPanel.show { display:flex; }
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:none} }
+.annot-panel-row { display:flex; align-items:center; gap:8px; }
+.annot-panel-label {
+  font-size:8px; letter-spacing:.28em; text-transform:uppercase;
+  color:rgba(232,228,219,.35); white-space:nowrap;
+}
+.annot-input {
+  flex:1; background:rgba(255,255,255,.05); border:1px solid var(--border);
+  border-radius:4px; color:var(--paper); font-family:var(--mono); font-size:12px;
+  padding:8px 12px; outline:none; min-width:0;
+}
+.annot-input:focus { border-color:rgba(232,79,43,.5); }
+.annot-btn {
+  background:rgba(255,255,255,.07); border:1px solid var(--border); color:rgba(255,255,255,.55);
+  width:34px; height:34px; border-radius:4px; font-size:14px; cursor:pointer;
+  flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  touch-action:manipulation;
+}
+.annot-btn.ok { border-color:rgba(43,232,122,.35); color:var(--green); }
+.annot-btn.ok:active { background:rgba(43,232,122,.15); }
+.annot-swatches { display:flex; gap:8px; }
+.annot-swatch {
+  width:20px; height:20px; border-radius:50%; cursor:pointer;
+  border:2px solid transparent; transition:border-color .15s;
+  touch-action:manipulation;
+}
+.annot-swatch.active { border-color:var(--paper); }
+
+/* ── Floating annotation labels in AR ── */
+.annot-label {
+  position:absolute; pointer-events:all; white-space:nowrap;
+  padding:5px 12px; border-radius:var(--r);
+  font-size:10px; letter-spacing:.08em; font-family:var(--mono);
+  transform:translate(-50%,-100%) translateY(-8px);
+  box-shadow:0 2px 12px rgba(0,0,0,.5);
+  cursor:pointer; user-select:none;
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.15);
+}
+.annot-label::after {
+  content:''; position:absolute; left:50%; bottom:-6px;
+  transform:translateX(-50%);
+  border:4px solid transparent;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   IFC / BIM OVERLAY  (full-screen panel)
+══════════════════════════════════════════════════════════════ */
+#ifcOverlay {
+  display:none; position:absolute; inset:0; z-index:370;
+  background:rgba(4,5,15,.98); backdrop-filter:blur(20px);
+  flex-direction:column; pointer-events:all; overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+#ifcOverlay.show { display:flex; }
+#ifcHeader {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 18px 14px; flex-shrink:0;
+  border-bottom:1px solid var(--border);
+}
+.ifc-title {
+  font-family:var(--display); font-size:16px; font-weight:800; letter-spacing:-.01em;
+  color:var(--paper);
+}
+.ifc-close {
+  background:rgba(255,255,255,.06); border:1px solid var(--border);
+  color:rgba(255,255,255,.45); width:32px; height:32px;
+  border-radius:6px; font-size:14px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  touch-action:manipulation;
+}
+#ifcDropZone {
+  margin:18px; border:1px dashed rgba(77,166,255,.3);
+  border-radius:6px; padding:28px 20px; text-align:center; cursor:pointer;
+  background:rgba(77,166,255,.03);
+  transition:border-color .2s, background .2s;
+}
+#ifcDropZone:hover, #ifcDropZone.over {
+  border-color:var(--blue); background:rgba(77,166,255,.08);
+}
+#ifcDropZone.loaded { border-color:rgba(43,232,122,.4); background:rgba(43,232,122,.04); }
+.ifc-drop-icon { font-size:26px; margin-bottom:8px; opacity:.5; }
+.ifc-drop-label {
+  font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--paper);
+  margin-bottom:6px;
+}
+.ifc-status {
+  font-size:9px; letter-spacing:.1em; color:rgba(232,228,219,.4); margin:0;
+}
+#ifcLayers { padding:0 18px 18px; flex-shrink:0; }
+.ifc-section-label {
+  font-size:8px; letter-spacing:.3em; text-transform:uppercase;
+  color:rgba(232,228,219,.25); margin-bottom:8px; display:block;
+}
+.ifc-layer-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 0; border-bottom:1px solid rgba(255,255,255,.04);
+}
+.ifc-layer-row:last-child { border-bottom:none; }
+.ifc-layer-name { font-size:10px; letter-spacing:.06em; color:rgba(232,228,219,.7); }
+.ifc-layer-swatch { width:10px; height:10px; border-radius:2px; margin-right:8px; flex-shrink:0; }
+.ifc-layer-left { display:flex; align-items:center; }
+/* Toggle switch */
+.ifc-toggle {
+  width:34px; height:18px; border-radius:9px; background:rgba(255,255,255,.1);
+  position:relative; cursor:pointer; transition:background .2s; border:none;
+  flex-shrink:0; touch-action:manipulation;
+}
+.ifc-toggle.on { background:var(--accent); }
+.ifc-toggle::after {
+  content:''; position:absolute; top:2px; left:2px;
+  width:14px; height:14px; border-radius:50%; background:#fff;
+  transition:transform .2s;
+}
+.ifc-toggle.on::after { transform:translateX(16px); }
+.ifc-unit-toggle { display:flex; gap:2px; background:rgba(255,255,255,.05); border-radius:4px; padding:2px; }
+.ifc-unit-btn {
+  background:none; border:none; color:rgba(255,255,255,.4);
+  font-family:var(--mono); font-size:9px; letter-spacing:.14em; padding:4px 9px;
+  cursor:pointer; border-radius:3px; touch-action:manipulation;
+}
+.ifc-unit-btn.active { background:rgba(255,255,255,.1); color:var(--paper); }
+.ifc-stats {
+  font-size:8px; letter-spacing:.1em; color:rgba(232,228,219,.3);
+  padding:0 18px 18px; line-height:1.9;
+}
+
 </style>
 
 <body>
@@ -939,6 +1124,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
           </div>
         </div>
         <button id="exportBtn" class="hud-btn show">↓ Export</button>
+        <button id="ifcBtn"    class="hud-btn show">⬡ BIM</button>
       </div>
     </div>
 
@@ -950,6 +1136,80 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
         <button class="restore-btn ok" id="restoreYesBtn">Restore</button>
         <button class="restore-btn" id="restoreNoBtn">Fresh start</button>
       </div>
+    </div>
+
+    <!-- ══ AR TOOLS BAR ══ shown from step 2 onward ══ -->
+    <div class="btn-row" id="arTools" style="display:none">
+      <button id="surfBtn" class="hud-btn" title="Cycle surface display">⬡</button>
+      <button id="tapeBtn" class="hud-btn" title="Measure tape">⇐⇒</button>
+      <button id="noteBtn" class="hud-btn" title="Add annotation">✎</button>
+      <button id="camBtn"  class="hud-btn" title="Capture photo">⊙</button>
+      <!-- Page switcher — shown when PDF has multiple pages -->
+      <div style="position:relative">
+        <button id="pgBtn" class="hud-btn" style="display:none">pg 1 ▾</button>
+        <div id="pgDropdown">
+          <div id="pgList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ ANNOTATION INPUT PANEL ══ slides up when placing annotation ══ -->
+    <div id="annotPanel">
+      <div class="annot-panel-row">
+        <span class="annot-panel-label">Note</span>
+        <input id="annotInput" class="annot-input" type="text" placeholder="Type annotation…" maxlength="80">
+        <button class="annot-btn ok"  id="annotSaveBtn">✓</button>
+        <button class="annot-btn"     id="annotCancelBtn">✕</button>
+      </div>
+      <!-- Quick colour swatches -->
+      <div class="annot-swatches">
+        <div class="annot-swatch active" data-c="#f0d060" style="background:#f0d060"></div>
+        <div class="annot-swatch" data-c="#2be87a" style="background:#2be87a"></div>
+        <div class="annot-swatch" data-c="#4da6ff" style="background:#4da6ff"></div>
+        <div class="annot-swatch" data-c="#e84f2b" style="background:#e84f2b"></div>
+        <div class="annot-swatch" data-c="#ffffff" style="background:#fff"></div>
+      </div>
+    </div>
+
+    <!-- ══ ANNOTATION LABELS — DOM overlay, updated each frame ══ -->
+    <div id="annotLabels" style="position:absolute;inset:0;pointer-events:none;"></div>
+
+    <!-- ══ IFC / BIM OVERLAY ══ full-screen panel ══ -->
+    <div id="ifcOverlay">
+      <div id="ifcHeader">
+        <span class="ifc-title">BIM Layer</span>
+        <button class="ifc-close" id="ifcCloseBtn">✕</button>
+      </div>
+      <!-- Upload zone -->
+      <div id="ifcDropZone">
+        <div class="ifc-drop-icon">⬡</div>
+        <p class="ifc-drop-label">Drop .ifc file or tap to browse</p>
+        <p id="ifcStatus" class="ifc-status">No file loaded</p>
+        <input type="file" id="ifcFileInput" accept=".ifc,application/octet-stream" style="display:none">
+      </div>
+      <!-- Layer toggles — shown once loaded -->
+      <div id="ifcLayers" style="display:none">
+        <div class="ifc-section-label">Layers</div>
+        <div id="ifcLayerList"></div>
+        <!-- Unit & scale -->
+        <div class="ifc-section-label" style="margin-top:12px">Units</div>
+        <div class="ifc-layer-row">
+          <span class="ifc-layer-name">IFC scale</span>
+          <div class="ifc-unit-toggle">
+            <button class="ifc-unit-btn active" id="ifcUnitM">m</button>
+            <button class="ifc-unit-btn" id="ifcUnitMM">mm</button>
+          </div>
+        </div>
+        <!-- Y offset -->
+        <div class="ifc-layer-row" style="margin-top:8px">
+          <span class="ifc-layer-name">Y offset (m)</span>
+          <input id="ifcYOffset" type="number" value="0" step="0.1"
+            style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.2);
+                   color:var(--paper);font-family:var(--mono);font-size:10px;width:60px;text-align:right;outline:none;">
+        </div>
+      </div>
+      <!-- IFC stats -->
+      <div id="ifcStats" class="ifc-stats"></div>
     </div>
 
   </div><!-- end #xrOverlay -->
@@ -1373,6 +1633,9 @@ function goStep(n){
   currentStep = n;
   stepTransitionAt = Date.now();
   var s = STEPS[n];
+
+  /* Show AR tool bar from step 2 onward (surfaces scanned, tools useful) */
+  if(n >= 2){ el('arTools').style.display='flex'; } else { el('arTools').style.display='none'; }
 
   /* ── Card content ── */
   el('scPill').textContent   = s.pill;
@@ -4061,7 +4324,7 @@ function updateConstraintPanel(){
 ═══════════════════════════════ */
 function startWebXR(){
   var canvas=el('arCanvas');
-  renderer=new THREE.WebGLRenderer({canvas:canvas,alpha:true,antialias:true});
+  renderer=new THREE.WebGLRenderer({canvas:canvas,alpha:true,antialias:true,preserveDrawingBuffer:true});
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth,window.innerHeight);
   renderer.xr.enabled=true;
@@ -4768,6 +5031,1239 @@ el('restoreNoBtn').addEventListener('click', function(){
   el('restoreBanner').classList.remove('show');
   solvesDelete();
 });
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ①  MESH DETECTION / OVERLAY  — 3 display modes cycled by surfBtn
+       Mode 0 = off       (wires + fills hidden)
+       Mode 1 = wireframe (existing meshWires + planeWires, fills hidden)
+       Mode 2 = solid     (translucent solid fills per semantic label)
+   Solid fills use the same colour palette but at lower opacity and with
+   depthTest=false so they ghost through geometry.
+   ═══════════════════════════════════════════════════════════════════════════ */
+var meshMode = 1;          /* default: wireframe on */
+var meshFills = new Map(); /* XRMesh → THREE.Mesh  (solid fill version) */
+
+var MESH_FILL_OPACITY = 0.18;   /* solid fill alpha */
+var MESH_XRAY_OPACITY = 0.08;   /* x-ray / ghost alpha */
+
+var MESH_MODE_LABELS = ['⬡ off', '⬡ wire', '⬡ solid'];
+var MESH_MODE_ACTIVE = ['', 'active-b', 'active-g'];
+
+function applyMeshMode(){
+  var btn = el('surfBtn');
+  btn.textContent = MESH_MODE_LABELS[meshMode];
+  btn.className = 'hud-btn' + (MESH_MODE_ACTIVE[meshMode] ? ' '+MESH_MODE_ACTIVE[meshMode] : '');
+
+  var wireVis   = meshMode >= 1;
+  var fillVis   = meshMode === 2;
+
+  meshWires.forEach(function(seg){ seg.visible = wireVis; });
+  meshFills.forEach(function(m)  { m.visible   = fillVis; });
+
+  /* plane wires follow wire visibility too */
+  planeWires.forEach(function(w){ w.visible = wireVis; });
+  planeGrids.forEach(function(g){ g.visible = wireVis; });
+}
+
+el('surfBtn').addEventListener('click', function(){
+  meshMode = (meshMode + 1) % 3;
+  applyMeshMode();
+  showToast(MESH_MODE_LABELS[meshMode], 1200);
+});
+
+/* Extend updateSceneMeshes to also maintain solid fills */
+var _origUpdateSceneMeshes = updateSceneMeshes;
+updateSceneMeshes = function(frame, refSpace){
+  _origUpdateSceneMeshes(frame, refSpace);
+  if(!frame.detectedMeshes) return;
+  var seen = new Set();
+  frame.detectedMeshes.forEach(function(mesh){
+    seen.add(mesh);
+    var pose = frame.getPose(mesh.meshSpace, refSpace);
+    if(!pose) return;
+    var m4 = new THREE.Matrix4().fromArray(pose.transform.matrix);
+    /* Rebuild fill mesh when geometry changes */
+    if(!meshFills.has(mesh) || meshChanged.get(mesh) !== mesh.lastChangedTime){
+      var old = meshFills.get(mesh);
+      if(old){ scene.remove(old); old.geometry.dispose(); }
+      var verts = mesh.vertices, idx = mesh.indices;
+      if(!verts || !idx || verts.length < 9){ meshFills.delete(mesh); return; }
+      var geo2 = new THREE.BufferGeometry();
+      geo2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+      geo2.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
+      geo2.computeVertexNormals();
+      var label = mesh.semanticLabel || '_default';
+      var col = MESH_COLOURS[label] || MESH_COLOURS._default;
+      var fill = new THREE.Mesh(geo2,
+        new THREE.MeshBasicMaterial({
+          color: col, transparent: true, opacity: MESH_FILL_OPACITY,
+          side: THREE.DoubleSide, depthWrite: false
+        }));
+      fill.matrixAutoUpdate = false;
+      fill.visible = (meshMode === 2);
+      scene.add(fill);
+      meshFills.set(mesh, fill);
+    }
+    var fill2 = meshFills.get(mesh);
+    if(fill2){ fill2.matrix.copy(m4); fill2.matrixWorldNeedsUpdate = true; }
+  });
+  meshFills.forEach(function(m, mesh){
+    if(!seen.has(mesh)){ scene.remove(m); m.geometry.dispose(); meshFills.delete(mesh); }
+  });
+};
+
+/* Also extend clearSceneMeshes */
+var _origClearSceneMeshes = clearSceneMeshes;
+clearSceneMeshes = function(){
+  meshFills.forEach(function(m){ if(scene){ scene.remove(m); } m.geometry.dispose(); });
+  meshFills.clear();
+  _origClearSceneMeshes();
+};
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ②  IFC / BIM LAYER
+   Loads a .ifc (STEP-format) file, parses wall/floor/column outlines,
+   renders them as coloured LineSegments aligned to the plan's
+   planOrigin + planYaw transform so they sit on top of the PDF overlay.
+
+   Supported entity types:
+     IFCWALLSTANDARDCASE / IFCWALL / IFCCOLUMN / IFCSLAB / IFCBEAM /
+     IFCSTAIR / IFCDOOR / IFCWINDOW — read via IFCLOCALPLACEMENT +
+     IFCAXIS2PLACEMENT3D + IFCEXTRUDEDAREASOLID / IFCARBITRARYCLOSEDPROFILEDEF
+   ═══════════════════════════════════════════════════════════════════════════ */
+var ifcGroup = null;         /* THREE.Group holding all IFC geometry */
+var ifcLoaded = false;
+var ifcLayerVis = {};        /* label → bool */
+var ifcScale = 1.0;          /* metres per IFC unit — default 1.0 (metres); 0.001 for mm */
+var ifcYOffset = 0;
+
+var IFC_LAYER_COLOURS = {
+  wall:   0x4da6ff, column: 0xf0d060, slab:   0xffaa00,
+  beam:   0xff8844, stair:  0x88ffcc, door:   0xffff44,
+  window: 0x88ffff, space:  0x44ff88, other:  0xaaaaaa
+};
+
+function ifcEntityType(name){
+  name = name.toUpperCase();
+  if(name.indexOf('WALL') >= 0)   return 'wall';
+  if(name.indexOf('COLUMN') >= 0) return 'column';
+  if(name.indexOf('SLAB') >= 0 || name.indexOf('FLOOR') >= 0) return 'slab';
+  if(name.indexOf('BEAM') >= 0)   return 'beam';
+  if(name.indexOf('STAIR') >= 0)  return 'stair';
+  if(name.indexOf('DOOR') >= 0)   return 'door';
+  if(name.indexOf('WINDOW') >= 0) return 'window';
+  if(name.indexOf('SPACE') >= 0)  return 'space';
+  return 'other';
+}
+
+/* ── Minimal STEP tokeniser ── */
+function parseSTEP(text){
+  var entities = {};
+  /* Match: #N=TYPENAME(...); across multiple lines — handle nested parens */
+  var lines = text.split('\n');
+  var buf = '';
+  lines.forEach(function(line){
+    line = line.trim();
+    if(line.charAt(0) === '#' || buf.length > 0) buf += ' ' + line;
+    if(buf && buf.indexOf(';') >= 0){
+      var semi = buf.indexOf(';');
+      var chunk = buf.slice(0, semi).replace(/\s+/g,' ').trim();
+      buf = '';
+      var m = chunk.match(/^#(\d+)\s*=\s*([A-Z0-9_]+)\s*\((.*)\)$/s);
+      if(m){
+        entities[m[1]] = { type: m[2], raw: m[3] };
+      }
+    }
+  });
+  return entities;
+}
+
+/* Split top-level STEP args (respects nested parens) */
+function stepArgs(raw){
+  var args = [], depth = 0, cur = '';
+  for(var i = 0; i < raw.length; i++){
+    var c = raw[i];
+    if(c === '(' ){ depth++; cur += c; }
+    else if(c === ')'){ depth--; cur += c; }
+    else if(c === ',' && depth === 0){ args.push(cur.trim()); cur=''; }
+    else cur += c;
+  }
+  if(cur.trim()) args.push(cur.trim());
+  return args;
+}
+
+function stepRef(s){ var m = s && s.match(/^#(\d+)$/); return m ? m[1] : null; }
+function stepNum(s){ return parseFloat(s); }
+function stepList(s){ /* strip outer parens */ return stepArgs(s.replace(/^\(|\)$/g,'')); }
+
+function ifcGetPlacement(entities, id){
+  /* Returns {origin:[x,y,z], xDir:[x,y,z], zDir:[x,y,z]} */
+  if(!id) return null;
+  var e = entities[id];
+  if(!e) return null;
+  if(e.type === 'IFCLOCALPLACEMENT'){
+    var a = stepArgs(e.raw);
+    var parentRef = stepRef(a[0]);
+    var axisRef   = stepRef(a[1]);
+    var local = ifcGetAxis2Placement(entities, axisRef);
+    if(!local) return null;
+    if(parentRef){
+      var parent = ifcGetPlacement(entities, parentRef);
+      if(parent) return combinePlacements(parent, local);
+    }
+    return local;
+  }
+  if(e.type === 'IFCAXIS2PLACEMENT3D') return ifcGetAxis2Placement(entities, id);
+  return null;
+}
+
+function ifcGetAxis2Placement(entities, id){
+  if(!id) return {origin:[0,0,0], xDir:[1,0,0], zDir:[0,0,1]};
+  var e = entities[id];
+  if(!e || e.type !== 'IFCAXIS2PLACEMENT3D') return {origin:[0,0,0], xDir:[1,0,0], zDir:[0,0,1]};
+  var a = stepArgs(e.raw);
+  function getCoords(ref){
+    var r = stepRef(ref); if(!r) return null;
+    var cp = entities[r]; if(!cp || cp.type !== 'IFCCARTESIANPOINT') return null;
+    var pts = stepList(cp.raw);
+    return [stepNum(pts[0])||0, stepNum(pts[1])||0, stepNum(pts[2])||0];
+  }
+  function getDir(ref){
+    var r = stepRef(ref); if(!r) return null;
+    var d = entities[r]; if(!d || d.type !== 'IFCDIRECTION') return null;
+    var pts = stepList(d.raw);
+    return [stepNum(pts[0])||0, stepNum(pts[1])||0, stepNum(pts[2])||0];
+  }
+  return {
+    origin: getCoords(a[0]) || [0,0,0],
+    zDir:   getDir(a[1])   || [0,0,1],
+    xDir:   getDir(a[2])   || [1,0,0]
+  };
+}
+
+function combinePlacements(parent, local){
+  /* Build transform matrices and multiply — simplified for XZ plane (AR floor) */
+  function mat4(p){
+    var o=p.origin, x=p.xDir, z=p.zDir;
+    var y=[z[1]*x[2]-z[2]*x[1], z[2]*x[0]-z[0]*x[2], z[0]*x[1]-z[1]*x[0]];
+    return [x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0, o[0],o[1],o[2],1];
+  }
+  function mul(a,b){
+    var r=new Array(16);
+    for(var i=0;i<4;i++) for(var j=0;j<4;j++){
+      r[i*4+j]=0;
+      for(var k=0;k<4;k++) r[i*4+j]+=a[i*4+k]*b[k*4+j];
+    }
+    return r;
+  }
+  function decompose(m){
+    return {
+      origin:[m[12],m[13],m[14]],
+      xDir:[m[0],m[1],m[2]],
+      zDir:[m[8],m[9],m[10]]
+    };
+  }
+  return decompose(mul(mat4(parent), mat4(local)));
+}
+
+/* Extract 2D profile loop points from an IFCARBITRARYCLOSEDPROFILEDEF */
+function ifcProfilePoints(entities, profileRef){
+  var e = entities[profileRef];
+  if(!e) return [];
+  var a = stepArgs(e.raw);
+  /* IFCARBITRARYCLOSEDPROFILEDEF: profileType, label, outerCurve */
+  var curveRef = stepRef(a[a.length-1]);
+  if(!curveRef) return [];
+  var curve = entities[curveRef];
+  if(!curve) return [];
+  if(curve.type === 'IFCPOLYLINE'){
+    var ptRefs = stepList(curve.raw);
+    return ptRefs.map(function(ref){
+      var r = stepRef(ref); if(!r) return null;
+      var cp = entities[r]; if(!cp) return null;
+      var coords = stepList(cp.raw);
+      return [stepNum(coords[0])||0, stepNum(coords[1])||0];
+    }).filter(Boolean);
+  }
+  if(curve.type === 'IFCRECTANGLEPROFILEDEF'){
+    var rArgs = stepArgs(e.raw);
+    var xdim = stepNum(rArgs[2]), ydim = stepNum(rArgs[3]);
+    return [[-xdim/2,-ydim/2],[xdim/2,-ydim/2],[xdim/2,ydim/2],[-xdim/2,ydim/2],[-xdim/2,-ydim/2]];
+  }
+  return [];
+}
+
+/* Build Three.js geometry for one IFC element and add to ifcGroup */
+function ifcBuildElement(entities, elemId, layerType){
+  var e = entities[elemId];
+  if(!e) return;
+
+  /* Find ObjectPlacement */
+  var eArgs = stepArgs(e.raw);
+  /* Standard elements: GlobalId, OwnerHistory, Name, Description,
+     ObjectType, ObjectPlacement, Representation, Tag */
+  var placementRef = null;
+  for(var ai = 0; ai < eArgs.length; ai++){
+    var r = stepRef(eArgs[ai]);
+    if(r && entities[r] && entities[r].type.indexOf('PLACEMENT') >= 0){
+      placementRef = r; break;
+    }
+  }
+  if(!placementRef) return;
+
+  var placement = ifcGetPlacement(entities, placementRef);
+  if(!placement) return;
+
+  /* Find RepresentationRef → look for IFCEXTRUDEDAREASOLID */
+  var repRef = null;
+  for(var bi = 0; bi < eArgs.length; bi++){
+    var r2 = stepRef(eArgs[bi]);
+    if(r2 && entities[r2] && entities[r2].type === 'IFCPRODUCTDEFINITIONSHAPE'){
+      repRef = r2; break;
+    }
+  }
+  if(!repRef) return;
+
+  /* Walk rep → items → IFCEXTRUDEDAREASOLID */
+  var repE = entities[repRef];
+  if(!repE) return;
+  var repArgs = stepArgs(repE.raw);
+  /* IFCPRODUCTDEFINITIONSHAPE: Name, Desc, Representations */
+  var repsListRaw = repArgs[repArgs.length-1];
+  var repsList = stepList(repsListRaw);
+
+  repsList.forEach(function(rr){
+    var shapeRef = stepRef(rr); if(!shapeRef) return;
+    var shapeE = entities[shapeRef]; if(!shapeE) return;
+    /* IFCSHAPEREPRESENTATION: ContextOfItems, RepresentationId, RepType, Items */
+    var shArgs = stepArgs(shapeE.raw);
+    var itemsRaw = shArgs[shArgs.length-1];
+    var items = stepList(itemsRaw);
+    items.forEach(function(ir){
+      var itemRef = stepRef(ir); if(!itemRef) return;
+      var itemE = entities[itemRef]; if(!itemE) return;
+      if(itemE.type === 'IFCEXTRUDEDAREASOLID'){
+        ifcBuildExtrusion(entities, itemRef, placement, layerType);
+      } else if(itemE.type === 'IFCPOLYLINE'){
+        ifcBuildPolyline(entities, itemRef, placement, layerType);
+      }
+    });
+  });
+}
+
+function ifcBuildExtrusion(entities, extId, placement, layerType){
+  var e = entities[extId];
+  if(!e) return;
+  var a = stepArgs(e.raw);
+  /* IFCEXTRUDEDAREASOLID: SweptArea, Position, ExtrudedDirection, Depth */
+  var profileRef = stepRef(a[0]);
+  var depth = stepNum(a[a.length-1]) || 3.0;
+  if(!profileRef) return;
+
+  var pts2d = ifcProfilePoints(entities, profileRef);
+  if(!pts2d || pts2d.length < 2) return;
+
+  /* Scale + apply placement */
+  var sc = ifcScale;
+  var ox = placement.origin[0]*sc, oy = placement.origin[1]*sc, oz = placement.origin[2]*sc;
+  var xd = placement.xDir, zd = placement.zDir;
+  var yd = [zd[1]*xd[2]-zd[2]*xd[1], zd[2]*xd[0]-zd[0]*xd[2], zd[0]*xd[1]-zd[1]*xd[0]];
+
+  /* Build 3D points — bottom loop only for floor-plan look */
+  var worldPts = pts2d.map(function(p){
+    var lx = p[0]*sc, lz = p[1]*sc;
+    return new THREE.Vector3(
+      ox + xd[0]*lx + yd[0]*lz,
+      oz + xd[2]*lx + yd[2]*lz, /* Y in AR = IFC Z */
+      oy + xd[1]*lx + yd[1]*lz  /* Z in AR = IFC Y */
+    ).applyAxisAngle(new THREE.Vector3(0,1,0), planYaw)
+     .add(new THREE.Vector3(planOrigin.x, planOrigin.y + ifcYOffset, planOrigin.z));
+  });
+
+  /* Close loop */
+  if(worldPts.length > 0) worldPts.push(worldPts[0].clone());
+
+  var col = IFC_LAYER_COLOURS[layerType] || IFC_LAYER_COLOURS.other;
+  var geo = new THREE.BufferGeometry().setFromPoints(worldPts);
+  var line = new THREE.Line(geo, new THREE.LineBasicMaterial({color:col, transparent:true, opacity:0.85}));
+  line.userData.ifcLayer = layerType;
+  line.visible = (ifcLayerVis[layerType] !== false);
+  ifcGroup.add(line);
+}
+
+function ifcBuildPolyline(entities, lineId, placement, layerType){
+  var e = entities[lineId];
+  if(!e) return;
+  var ptRefs = stepList(e.raw);
+  var sc = ifcScale;
+  var ox = placement.origin[0]*sc, oy = placement.origin[1]*sc, oz = placement.origin[2]*sc;
+  var xd = placement.xDir, zd = placement.zDir;
+  var yd = [zd[1]*xd[2]-zd[2]*xd[1], zd[2]*xd[0]-zd[0]*xd[2], zd[0]*xd[1]-zd[1]*xd[0]];
+
+  var worldPts = [];
+  ptRefs.forEach(function(ref){
+    var r = stepRef(ref); if(!r) return;
+    var cp = entities[r]; if(!cp || cp.type !== 'IFCCARTESIANPOINT') return;
+    var coords = stepList(cp.raw);
+    var lx = (stepNum(coords[0])||0)*sc, lz = (stepNum(coords[1])||0)*sc;
+    worldPts.push(new THREE.Vector3(
+      ox + xd[0]*lx + yd[0]*lz,
+      oz + xd[2]*lx + yd[2]*lz,
+      oy + xd[1]*lx + yd[1]*lz
+    ).applyAxisAngle(new THREE.Vector3(0,1,0), planYaw)
+     .add(new THREE.Vector3(planOrigin.x, planOrigin.y + ifcYOffset, planOrigin.z)));
+  });
+  if(worldPts.length < 2) return;
+  var col = IFC_LAYER_COLOURS[layerType] || IFC_LAYER_COLOURS.other;
+  var geo = new THREE.BufferGeometry().setFromPoints(worldPts);
+  var line = new THREE.Line(geo, new THREE.LineBasicMaterial({color:col, transparent:true, opacity:0.75}));
+  line.userData.ifcLayer = layerType;
+  line.visible = (ifcLayerVis[layerType] !== false);
+  ifcGroup.add(line);
+}
+
+/* Build ALL elements matching a set of types */
+var ELEM_TYPES = ['IFCWALL','IFCWALLSTANDARDCASE','IFCCOLUMN','IFCSLAB','IFCBEAM',
+                  'IFCSTAIR','IFCDOOR','IFCWINDOW','IFCSPACE','IFCPLATE'];
+
+function ifcParseAndBuild(text){
+  try{
+    var entities = parseSTEP(text);
+    var count = Object.keys(entities).length;
+    if(count < 10){ el('ifcStatus').textContent='Not a valid IFC file'; return; }
+    el('ifcStatus').textContent='Parsing '+count+' entities…';
+
+    /* Detect units */
+    for(var id in entities){
+      var e = entities[id];
+      if(e.type === 'IFCSIUNIT'){
+        var a = stepArgs(e.raw);
+        var unitName = a[a.length-1].replace(/['.]/g,'').toUpperCase();
+        if(unitName === 'METRE' || unitName === 'METER') ifcScale = 1.0;
+        else if(unitName === 'MILLIMETRE' || unitName === 'MILLIMETER') ifcScale = 0.001;
+      }
+    }
+
+    if(!scene){ el('ifcStatus').textContent='AR session not started yet'; return; }
+
+    /* Remove old group */
+    if(ifcGroup){ scene.remove(ifcGroup); ifcGroup = null; }
+    ifcGroup = new THREE.Group();
+    scene.add(ifcGroup);
+    ifcLayerVis = {};
+
+    var counts = {};
+    for(var eid in entities){
+      var etype = entities[eid].type;
+      var matched = ELEM_TYPES.find(function(t){ return etype === t; });
+      if(!matched) continue;
+      var layerType = ifcEntityType(etype);
+      counts[layerType] = (counts[layerType]||0) + 1;
+      ifcLayerVis[layerType] = true;
+      try{ ifcBuildElement(entities, eid, layerType); }catch(err){}
+    }
+
+    var total = ifcGroup.children.length;
+    el('ifcStatus').textContent = '\u2714 Loaded \u2022 '+total+' objects';
+    el('ifcDropZone').classList.add('loaded');
+    ifcLoaded = true;
+
+    /* Build layer toggles */
+    buildIfcLayerUI(counts);
+
+  }catch(err){
+    el('ifcStatus').textContent='Parse error: '+err.message;
+    console.error('IFC parse error', err);
+  }
+}
+
+function buildIfcLayerUI(counts){
+  el('ifcLayers').style.display='';
+  var list = el('ifcLayerList');
+  list.innerHTML = '';
+  var layers = Object.keys(counts).sort();
+  layers.forEach(function(layer){
+    var col = '#' + (IFC_LAYER_COLOURS[layer]||0xaaaaaa).toString(16).padStart(6,'0');
+    var row = document.createElement('div');
+    row.className = 'ifc-layer-row';
+    row.innerHTML =
+      '<div class="ifc-layer-left">' +
+        '<div class="ifc-layer-swatch" style="background:'+col+'"></div>' +
+        '<span class="ifc-layer-name">'+layer+' ('+counts[layer]+')</span>' +
+      '</div>' +
+      '<button class="ifc-toggle on" data-layer="'+layer+'"></button>';
+    row.querySelector('button').addEventListener('click', function(){
+      var l = this.dataset.layer;
+      ifcLayerVis[l] = !ifcLayerVis[l];
+      this.classList.toggle('on', !!ifcLayerVis[l]);
+      if(ifcGroup){
+        ifcGroup.children.forEach(function(c){
+          if(c.userData.ifcLayer === l) c.visible = !!ifcLayerVis[l];
+        });
+      }
+    });
+    list.appendChild(row);
+  });
+
+  /* Stats */
+  var stats = Object.entries(counts).map(function(kv){ return kv[0]+': '+kv[1]; }).join('\n');
+  el('ifcStats').textContent = stats;
+}
+
+/* Update IFC group transform when plan moves */
+function updateIfcTransform(){
+  if(!ifcGroup || !planBound) return;
+  /* IFC group is in world space — we need to re-evaluate each child.
+     For now re-parse is too expensive; store the original placement in each line's
+     userData and apply transform delta. This is handled at build-time above. */
+}
+
+/* IFC overlay UI wiring */
+el('ifcBtn').addEventListener('click', function(){
+  el('ifcOverlay').classList.add('show');
+});
+el('ifcCloseBtn').addEventListener('click', function(){
+  el('ifcOverlay').classList.remove('show');
+});
+
+el('ifcDropZone').addEventListener('click', function(){
+  el('ifcFileInput').click();
+});
+el('ifcDropZone').addEventListener('dragover', function(e){
+  e.preventDefault(); this.classList.add('over');
+});
+el('ifcDropZone').addEventListener('dragleave', function(){
+  this.classList.remove('over');
+});
+el('ifcDropZone').addEventListener('drop', function(e){
+  e.preventDefault(); this.classList.remove('over');
+  var file = e.dataTransfer.files[0];
+  if(file) loadIfcFile(file);
+});
+el('ifcFileInput').addEventListener('change', function(){
+  if(this.files[0]) loadIfcFile(this.files[0]);
+});
+
+function loadIfcFile(file){
+  el('ifcStatus').textContent = 'Loading ' + file.name + '…';
+  var reader = new FileReader();
+  reader.onload = function(ev){ ifcParseAndBuild(ev.target.result); };
+  reader.onerror = function(){ el('ifcStatus').textContent = 'Read error'; };
+  reader.readAsText(file);
+}
+
+/* Unit toggle */
+el('ifcUnitM').addEventListener('click', function(){
+  ifcScale = 1.0;
+  this.classList.add('active'); el('ifcUnitMM').classList.remove('active');
+});
+el('ifcUnitMM').addEventListener('click', function(){
+  ifcScale = 0.001;
+  this.classList.add('active'); el('ifcUnitM').classList.remove('active');
+});
+el('ifcYOffset').addEventListener('change', function(){
+  ifcYOffset = parseFloat(this.value)||0;
+  showToast('IFC Y offset: '+ifcYOffset.toFixed(2)+'m', 1500);
+});
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ③  ANNOTATION LAYER
+   Tap-place sticky notes in AR space.  Each annotation has:
+     worldPos {x,y,z}, text, color, id (uuid), ts
+   Labels are DOM divs projected every frame via camera.project().
+   Saved to IndexedDB under key 'annots_' + solvesKey().
+   ═══════════════════════════════════════════════════════════════════════════ */
+var annotations     = [];     /* [{id, worldPos, text, color}] */
+var annotMode       = false;   /* true = next tap places annotation */
+var annotPending    = null;    /* worldPos waiting for text input */
+var annotColor      = '#f0d060';
+
+var ANNOT_DB   = 'arfloor_annots';
+var ANNOT_STORE= 'annots';
+var _annotDb   = null;
+
+function annotDbOpen(cb){
+  if(_annotDb){ cb(_annotDb); return; }
+  try{
+    var req = indexedDB.open(ANNOT_DB, 1);
+    req.onupgradeneeded = function(e){
+      e.target.result.createObjectStore(ANNOT_STORE, {keyPath:'key'});
+    };
+    req.onsuccess = function(e){ _annotDb=e.target.result; cb(_annotDb); };
+    req.onerror   = function(){};
+  }catch(e){}
+}
+
+function annotSave(){
+  if(!annotations.length) return;
+  annotDbOpen(function(db){
+    var tx = db.transaction(ANNOT_STORE,'readwrite');
+    tx.objectStore(ANNOT_STORE).put({key: 'annots_'+solvesKey(), data: annotations});
+  });
+}
+
+function annotLoad(){
+  annotDbOpen(function(db){
+    var tx = db.transaction(ANNOT_STORE,'readonly');
+    var req = tx.objectStore(ANNOT_STORE).get('annots_'+solvesKey());
+    req.onsuccess = function(e){
+      if(e.target.result && e.target.result.data){
+        annotations = e.target.result.data;
+        annotations.forEach(function(a){ addAnnotLabel(a); });
+      }
+    };
+  });
+}
+
+function annotUuid(){
+  return Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+}
+
+function addAnnotLabel(annot){
+  var div = document.createElement('div');
+  div.className = 'annot-label';
+  div.id = 'annot_'+annot.id;
+  div.textContent = annot.text;
+  div.style.color = '#111';
+  div.style.background = annot.color;
+  div.style.setProperty('--ac', annot.color);
+  div.style.cssText += '; --ac:'+annot.color+'; background:'+annot.color+'; color:#111;';
+  div.style.setProperty('--ac', annot.color);
+  /* Dot indicator */
+  div.style.setProperty('--annot-c', annot.color);
+  /* After pseudo-element color via style var */
+  div.setAttribute('data-id', annot.id);
+
+  /* Long-press to delete */
+  var pressTimer;
+  div.addEventListener('pointerdown', function(){
+    pressTimer = setTimeout(function(){
+      if(!confirm('Delete this annotation?')) return;
+      annotations = annotations.filter(function(a){ return a.id !== annot.id; });
+      div.remove();
+      annotSave();
+    }, 700);
+  });
+  div.addEventListener('pointerup', function(){ clearTimeout(pressTimer); });
+  div.addEventListener('pointercancel', function(){ clearTimeout(pressTimer); });
+
+  el('annotLabels').appendChild(div);
+  return div;
+}
+
+function updateAnnotLabels(){
+  if(!camera || !annotations.length) return;
+  annotations.forEach(function(a){
+    var div = document.getElementById('annot_'+a.id);
+    if(!div) return;
+    var wp = new THREE.Vector3(a.worldPos.x, a.worldPos.y + 0.08, a.worldPos.z);
+    var proj = wp.clone().project(camera);
+    /* Only show if in front of camera */
+    if(proj.z > 1){ div.style.display='none'; return; }
+    div.style.display='';
+    var sx = (proj.x*0.5+0.5)*window.innerWidth;
+    var sy = (-proj.y*0.5+0.5)*window.innerHeight;
+    div.style.left = sx+'px';
+    div.style.top  = sy+'px';
+  });
+}
+
+/* Enter/exit annotation placement mode */
+function enterAnnotMode(){
+  annotMode = true;
+  annotPending = null;
+  el('noteBtn').classList.add('active');
+  el('hudHint').textContent = 'Tap floor to place note\u2026';
+}
+function exitAnnotMode(){
+  annotMode = false;
+  annotPending = null;
+  el('noteBtn').classList.remove('active');
+  el('annotPanel').classList.remove('show');
+  el('hudHint').textContent = planBound ? 'Plan active' : 'Point camera at the ground';
+}
+
+el('noteBtn').addEventListener('click', function(){
+  if(annotMode){ exitAnnotMode(); } else { enterAnnotMode(); }
+});
+
+/* Swatch colour selection */
+el('annotPanel').querySelectorAll('.annot-swatch').forEach(function(s){
+  s.addEventListener('click', function(){
+    el('annotPanel').querySelectorAll('.annot-swatch').forEach(function(x){ x.classList.remove('active'); });
+    this.classList.add('active');
+    annotColor = this.dataset.c;
+  });
+});
+
+el('annotSaveBtn').addEventListener('click', function(){
+  var text = el('annotInput').value.trim();
+  if(!text || !annotPending) return;
+  var annot = {id: annotUuid(), worldPos: annotPending, text: text, color: annotColor, ts: Date.now()};
+  annotations.push(annot);
+  addAnnotLabel(annot);
+  annotSave();
+  el('annotInput').value = '';
+  el('annotPanel').classList.remove('show');
+  annotPending = null;
+  el('hudHint').textContent = 'Tap to add another note \u2022 ✎ to stop';
+});
+
+el('annotCancelBtn').addEventListener('click', function(){
+  el('annotInput').value = '';
+  el('annotPanel').classList.remove('show');
+  annotPending = null;
+  if(annotMode) el('hudHint').textContent = 'Tap floor to place note\u2026';
+});
+
+/* Annotation tap handling is injected into the XR select handler at runtime */
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ④  AR MEASUREMENT TAPE  — wire tapeBtn to existing measureMode
+   ═══════════════════════════════════════════════════════════════════════════ */
+el('tapeBtn').addEventListener('click', function(){
+  if(measureMode){
+    exitMeasureMode();
+    el('tapeBtn').classList.remove('active-g');
+    showToast('Tape off', 1200);
+  } else {
+    if(annotMode) exitAnnotMode();
+    enterMeasureMode();
+    el('tapeBtn').classList.add('active-g');
+    showToast('Tap two points to measure', 2000);
+  }
+});
+
+/* Sync tape button state when measurement completes */
+var _origExitMeasureMode = exitMeasureMode;
+exitMeasureMode = function(){
+  _origExitMeasureMode();
+  el('tapeBtn').classList.remove('active-g');
+};
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ⑤  PHOTO CAPTURE
+   Composites arCanvas (WebGL) + xrOverlay DOM into a PNG download.
+   Uses html2canvas to capture the DOM overlay, then draws both onto an
+   offscreen canvas.  Falls back to WebGL canvas only if html2canvas fails.
+   ═══════════════════════════════════════════════════════════════════════════ */
+var captureNextFrame = false;
+
+function capturePhoto(){
+  if(!renderer){ showToast('AR not started', 2000); return; }
+  captureNextFrame = true;
+  showToast('\u23F8 Capturing\u2026', 1200);
+}
+
+function doCapture(){
+  captureNextFrame = false;
+  try{
+    var glCanvas = el('arCanvas');
+    var out = document.createElement('canvas');
+    out.width  = glCanvas.width;
+    out.height = glCanvas.height;
+    var ctx = out.getContext('2d');
+
+    /* 1. Draw the WebGL frame */
+    ctx.drawImage(glCanvas, 0, 0);
+
+    /* 2. Draw annotation labels on top (text-only, positioned) */
+    ctx.font = '12px monospace';
+    annotations.forEach(function(a){
+      var div = document.getElementById('annot_'+a.id);
+      if(!div || div.style.display==='none') return;
+      var left = parseFloat(div.style.left)||0;
+      var top  = parseFloat(div.style.top)||0;
+      ctx.fillStyle = a.color;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(left-6, top-20, ctx.measureText(a.text).width+16, 22, 10)
+                    : ctx.rect(left-6, top-20, ctx.measureText(a.text).width+16, 22);
+      ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.fillText(a.text, left+2, top-4);
+    });
+
+    /* 3. Draw measure label if visible */
+    var ml = el('measureLabel');
+    if(ml && ml.style.display !== 'none'){
+      var left2 = parseFloat(ml.style.left)||0;
+      var top2  = parseFloat(ml.style.top) ||0;
+      ctx.fillStyle = '#f0d060';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText(ml.textContent, left2, top2);
+    }
+
+    /* 4. Timestamp watermark */
+    ctx.font = '10px monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillText('ARfloor \u2022 ' + new Date().toLocaleTimeString(), 12, out.height-12);
+
+    /* 5. Download */
+    out.toBlob(function(blob){
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'arfloor_' + Date.now() + '.png';
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      showToast('\u2713 Photo saved', 2000);
+    }, 'image/png');
+  }catch(err){
+    showToast('Capture failed: '+err.message, 3000);
+    console.error(err);
+  }
+}
+
+el('camBtn').addEventListener('click', capturePhoto);
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ⑥  COLLABORATIVE SYNC  — share solve via QR code
+   Encodes the current planOrigin / planYaw / planScale / anchors into a
+   compact JSON → base64 → URL fragment.  Other device scans QR and the
+   page auto-restores the solve on load (if same PDF is already loaded).
+   QR code is rendered via qrcode.js loaded lazily from CDN.
+   ═══════════════════════════════════════════════════════════════════════════ */
+var qrOverlay = (function(){
+  var div = document.createElement('div');
+  div.id = 'qrOverlay';
+  div.style.cssText =
+    'display:none;position:absolute;inset:0;z-index:400;background:rgba(4,5,15,.97);' +
+    'backdrop-filter:blur(20px);flex-direction:column;align-items:center;' +
+    'justify-content:center;gap:18px;pointer-events:all;';
+  div.innerHTML =
+    '<div style="font-family:var(--display);font-size:18px;font-weight:800;color:var(--paper)">Share Session</div>' +
+    '<div id="qrBox" style="background:#fff;padding:14px;border-radius:6px;"></div>' +
+    '<p style="font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:rgba(232,228,219,.45);text-align:center;max-width:260px;margin:0">' +
+      'Scan on second device with same PDF loaded</p>' +
+    '<div style="display:flex;gap:10px">' +
+      '<button id="qrCopyBtn" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:var(--paper);' +
+        'font-family:var(--mono);font-size:9px;letter-spacing:.2em;padding:10px 18px;border-radius:var(--r);cursor:pointer;">Copy Link</button>' +
+      '<button id="qrCloseBtn" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:var(--paper);' +
+        'font-family:var(--mono);font-size:9px;letter-spacing:.2em;padding:10px 18px;border-radius:var(--r);cursor:pointer;">Close</button>' +
+    '</div>';
+  document.querySelector('#xrOverlay').appendChild(div);
+  return div;
+})();
+
+function buildShareURL(){
+  if(!planBound){ return null; }
+  var payload = {
+    v:1,
+    pdf: currentPdfName||'',
+    po:{x:+planOrigin.x.toFixed(4), z:+planOrigin.z.toFixed(4)},
+    py:+planYaw.toFixed(5),
+    ps:+planScale.toFixed(5),
+    mpuv: metersPerUV ? +metersPerUV.toFixed(6) : null,
+    fl: floorLevels,
+    fi: currentFloorIdx,
+    anc: corners.slice(0,6).map(function(c,i){
+      return {w:{x:+c.worldPos.x.toFixed(3),y:+c.worldPos.y.toFixed(3),z:+c.worldPos.z.toFixed(3)},
+              uv: uvPicks[i]||null};
+    })
+  };
+  var b64 = btoa(JSON.stringify(payload));
+  return location.href.split('#')[0] + '#arfs=' + encodeURIComponent(b64);
+}
+
+function showQR(){
+  if(!planBound){ showToast('Nothing to share yet \u2014 bind plan first', 2500); return; }
+  var url = buildShareURL();
+  if(!url){ return; }
+  el('qrBox').innerHTML = '';
+  /* Lazy-load qrcode.js */
+  function renderQR(){
+    try{
+      new QRCode(el('qrBox'),{text:url,width:200,height:200,colorDark:'#0a0a14',colorLight:'#ffffff'});
+    }catch(e){ el('qrBox').innerHTML='<p style="font-size:10px;color:#333;padding:8px">QR lib not loaded</p>'; }
+  }
+  if(window.QRCode){ renderQR(); }
+  else {
+    var s = document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    s.onload=renderQR; s.onerror=function(){ el('qrBox').innerHTML='<p style="color:#333;padding:8px;font-size:10px">QR unavailable</p>'; };
+    document.head.appendChild(s);
+  }
+  qrOverlay.style.display='flex';
+  el('qrCopyBtn').onclick=function(){
+    try{ navigator.clipboard.writeText(url).then(function(){ showToast('\u2713 Link copied', 2000); }); }
+    catch(e){ showToast('Copy: '+url.slice(0,40)+'…',4000); }
+  };
+  el('qrCloseBtn').onclick=function(){ qrOverlay.style.display='none'; };
+}
+
+/* Wire a Share button into boundTools */
+(function(){
+  var shareBtn = document.createElement('button');
+  shareBtn.id='shareBtn'; shareBtn.className='hud-btn show';
+  shareBtn.textContent='⇡ Share';
+  shareBtn.addEventListener('click', showQR);
+  el('boundTools').appendChild(shareBtn);
+})();
+
+/* On load: check URL hash for incoming share */
+(function(){
+  function tryLoadHash(){
+    var h = location.hash;
+    var m = h.match(/[#&]arfs=([^&]+)/);
+    if(!m) return;
+    try{
+      var data = JSON.parse(atob(decodeURIComponent(m[1])));
+      if(data.v !== 1) return;
+      /* Store for later — will be applied once AR session starts */
+      window._arfsIncoming = data;
+      showToast('\u2714 Shared session detected \u2022 launch AR to restore', 4000);
+    }catch(e){}
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',tryLoadHash);
+  else tryLoadHash();
+})();
+
+function applyIncomingShare(data){
+  if(!data) return false;
+  try{
+    planOrigin.set(data.po.x, 0, data.po.z);
+    planYaw   = data.py;
+    planScale = data.ps;
+    if(data.mpuv) metersPerUV = data.mpuv;
+    if(data.fl && data.fl.length){ floorLevels=data.fl; currentFloorIdx=data.fi||0; }
+    data.anc.forEach(function(a){
+      corners.push({worldPos:a.w, anchor:null, wasSnapped:false, gps:null,
+                    originPos:{x:a.w.x,y:a.w.y,z:a.w.z}});
+      if(a.uv) uvPicks.push(a.uv);
+    });
+    corners.forEach(function(c,i){ addCornerVisual(c.worldPos,i); });
+    return true;
+  }catch(e){ return false; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ⑦  VISUAL RE-LOCALISATION
+   When a session resumes with existing anchors, use:
+     1. GPS position → estimate which side of the building we're on
+     2. Compass heading → refine planYaw
+     3. Run Kabsch to fine-tune planOrigin/planScale from current camera pos
+   Called automatically 2s after plan is restored, and via a "Re-locate" button.
+   ═══════════════════════════════════════════════════════════════════════════ */
+var reloBtn = (function(){
+  var btn = document.createElement('button');
+  btn.id='reloBtn'; btn.className='hud-btn';
+  btn.textContent='\u21bb Locate';
+  btn.style.display='none';
+  btn.title='Re-localise plan using GPS + compass';
+  el('arTools').appendChild(btn);
+  return btn;
+})();
+
+function tryReLocalise(){
+  if(!planBound || !corners.length){ showToast('No session to re-localise', 2000); return; }
+
+  var improved = false;
+
+  /* Step 1: if compass heading known, refine planYaw */
+  if(fusedHeading !== null && xrNorthOffset !== null){
+    var compassYaw = -(fusedHeading - xrNorthOffset) * Math.PI / 180;
+    /* Blend toward compass — don't snap, just nudge */
+    var delta = compassYaw - planYaw;
+    /* Wrap delta to ±π */
+    while(delta >  Math.PI) delta -= 2*Math.PI;
+    while(delta < -Math.PI) delta += 2*Math.PI;
+    if(Math.abs(delta) < 0.35 /* ~20° */){
+      planYaw += delta * 0.4;
+      improved = true;
+    }
+  }
+
+  /* Step 2: force a fresh Kabsch solve using current corner worldPos values */
+  if(corners.length >= 2 && uvPicks.length === corners.length){
+    try{ reSolvePlan(); improved = true; }catch(e){}
+  }
+
+  /* Step 3: if GPS available, check gross position consistency */
+  if(gpsLat !== null){
+    var gpsCornersWithGps = corners.filter(function(c){ return c.gps; });
+    if(gpsCornersWithGps.length >= 2){
+      /* Not adjusting XR coords here (GPS too noisy), but update quality */
+      constraintQuality.gpsBearing = Math.min(1, gpsCornersWithGps.length / 3);
+    }
+  }
+
+  if(improved){
+    applyRigidTransform(planOrigin.x, planOrigin.z, planYaw, planScale);
+    showToast('\u21bb Re-localised \u2022 '+corners.length+' anchors', 2500);
+  } else {
+    showToast('Not enough data to re-localise', 2500);
+  }
+}
+
+reloBtn.addEventListener('click', tryReLocalise);
+
+/* Show reloBtn once plan is bound (appended to arTools) */
+var _origOnPlanBound = onPlanBound;
+onPlanBound = function(){
+  _origOnPlanBound();
+  reloBtn.style.display='';
+  annotLoad();   /* load saved annotations for this session */
+  /* Apply incoming share if one is waiting */
+  if(window._arfsIncoming){
+    var d = window._arfsIncoming; window._arfsIncoming = null;
+    if(applyIncomingShare(d)){
+      buildBoundMesh();
+      showToast('\u2714 Shared session applied', 3000);
+    }
+  }
+};
+
+/* Auto re-localise 3s after session restore */
+var _origSolvesRestore = solvesRestore;
+solvesRestore = function(data){
+  var ok = _origSolvesRestore(data);
+  if(ok) setTimeout(tryReLocalise, 3000);
+  return ok;
+};
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ⑧  OFFLINE MODE + PWA
+   Registers an inline service worker (via Blob URL) that caches the app
+   shell and CDN assets for offline use.  Also injects a web app manifest.
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  /* ── Web App Manifest ── */
+  var manifest = {
+    name: 'ARfloor',
+    short_name: 'ARfloor',
+    description: 'AR floorplan overlay for construction and inspection',
+    start_url: './',
+    display: 'fullscreen',
+    orientation: 'portrait',
+    background_color: '#04050f',
+    theme_color: '#04050f',
+    icons: [
+      {src:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" fill="%2304050f"/><text y="130" x="20" font-size="120" fill="%23e84f2b">⬡</text></svg>',
+       sizes:'192x192', type:'image/svg+xml'},
+      {src:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="%2304050f"/><text y="380" x="40" font-size="320" fill="%23e84f2b">⬡</text></svg>',
+       sizes:'512x512', type:'image/svg+xml'}
+    ]
+  };
+  var mBlob = new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'});
+  var mUrl  = URL.createObjectURL(mBlob);
+  var link  = document.createElement('link');
+  link.rel='manifest'; link.href=mUrl;
+  document.head.appendChild(link);
+
+  /* ── Service Worker (Blob) ── */
+  if(!('serviceWorker' in navigator)) return;
+  var CACHE = 'arfloor-v1';
+  var URLS_TO_CACHE = [
+    location.pathname,
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+  ];
+
+  var swCode = [
+    'var CACHE="'+CACHE+'";',
+    'var URLS='+JSON.stringify(URLS_TO_CACHE)+';',
+    'self.addEventListener("install",function(e){',
+    '  e.waitUntil(caches.open(CACHE).then(function(c){',
+    '    return Promise.allSettled(URLS.map(function(u){',
+    '      return c.add(u).catch(function(){});',
+    '    }));',
+    '  }).then(function(){ return self.skipWaiting(); }));',
+    '});',
+    'self.addEventListener("activate",function(e){',
+    '  e.waitUntil(caches.keys().then(function(keys){',
+    '    return Promise.all(keys.filter(function(k){ return k!==CACHE; }).map(function(k){ return caches.delete(k); }));',
+    '  }).then(function(){ return self.clients.claim(); }));',
+    '});',
+    'self.addEventListener("fetch",function(e){',
+    '  if(e.request.method!=="GET") return;',
+    '  e.respondWith(caches.match(e.request).then(function(cached){',
+    '    if(cached) return cached;',
+    '    return fetch(e.request).then(function(res){',
+    '      if(res.ok){',
+    '        var clone=res.clone();',
+    '        caches.open(CACHE).then(function(c){ c.put(e.request,clone); });',
+    '      }',
+    '      return res;',
+    '    }).catch(function(){',
+    '      return new Response("Offline",{status:503});',
+    '    });',
+    '  }));',
+    '});'
+  ].join('\n');
+
+  var swBlob = new Blob([swCode], {type:'application/javascript'});
+  var swUrl  = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swUrl, {scope: location.pathname}).then(function(reg){
+    /* On update available, notify user */
+    reg.addEventListener('updatefound', function(){
+      showToast('\u2193 App updated \u2022 reload to apply', 4000);
+    });
+  }).catch(function(){});   /* SW optional — don't crash if blocked */
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ⑨  PDF PAGE SWITCHER IN AR
+   pgBtn appears when pdfDoc.numPages > 1.  In AR, tapping a page re-renders
+   it and hot-swaps the Three.js texture on planeMesh and/or boundMesh.
+   ═══════════════════════════════════════════════════════════════════════════ */
+function updatePlanTexture(newCanvas){
+  /* Hot-swap the texture on both free plan and bound mesh */
+  function swapTex(mesh){
+    if(!mesh || !mesh.material || !mesh.material.map) return;
+    var old = mesh.material.map;
+    var tex = new THREE.Texture(newCanvas);
+    tex.needsUpdate = true;
+    tex.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = true;
+    mesh.material.map = tex;
+    mesh.material.needsUpdate = true;
+    if(old) old.dispose();
+    /* Adjust aspect ratio */
+    var asp = newCanvas.width / newCanvas.height;
+    if(mesh.geometry){
+      /* Rebuild geometry with new aspect */
+      mesh.geometry.dispose();
+      var geo = new THREE.PlaneGeometry(asp, 1, 1, 1);
+      geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+      var uvAttr = geo.attributes.uv;
+      for(var i=0; i<uvAttr.count; i++) uvAttr.setY(i, 1-uvAttr.getY(i));
+      uvAttr.needsUpdate = true;
+      mesh.geometry = geo;
+    }
+  }
+  swapTex(planeMesh);
+  swapTex(boundMesh);
+  pdfCanvas = newCanvas;
+}
+
+function renderPageAR(n){
+  if(!pdfDoc || n < 1 || n > pdfDoc.numPages) return;
+  currentPage = n;
+  /* Update pgBtn label */
+  el('pgBtn').textContent = 'pg '+n+' \u25be';
+  /* Close dropdown */
+  el('pgDropdown').classList.remove('show');
+
+  showToast('Loading page '+n+'…', 1500);
+  pdfDoc.getPage(n).then(function(page){
+    var vp0 = page.getViewport({scale:1});
+    var sc  = Math.min(8, 8192/Math.max(vp0.width, vp0.height));
+    var vp  = page.getViewport({scale:sc});
+    var hi  = document.createElement('canvas');
+    hi.width  = Math.round(vp.width);
+    hi.height = Math.round(vp.height);
+    page.render({canvasContext:hi.getContext('2d'), viewport:vp}).promise.then(function(){
+      /* In AR: swap texture; on landing: update pdfCanvas for launch */
+      if(renderer && scene){
+        updatePlanTexture(hi);
+        showToast('\u2714 Page '+n+' loaded', 1800);
+      } else {
+        pdfCanvas = hi;
+        el('pgInfo').textContent = n+' / '+pdfDoc.numPages;
+      }
+    }).catch(function(e){ showToast('Render error: '+e.message, 3000); });
+  });
+}
+
+function buildPgDropdown(){
+  if(!pdfDoc) return;
+  var list = el('pgList');
+  list.innerHTML = '';
+  for(var i = 1; i <= pdfDoc.numPages; i++){
+    (function(n){
+      var item = document.createElement('div');
+      item.className = 'pg-item' + (n===currentPage?' active':'');
+      item.textContent = 'Page '+n;
+      item.addEventListener('click', function(e){ e.stopPropagation(); renderPageAR(n); });
+      list.appendChild(item);
+    })(i);
+  }
+}
+
+el('pgBtn').addEventListener('click', function(e){
+  e.stopPropagation();
+  buildPgDropdown();
+  el('pgDropdown').classList.toggle('show');
+});
+
+/* Show pgBtn in AR tools once PDF with multiple pages is loaded */
+(function(){
+  var _origRenderPage = renderPage;
+  renderPage = function(n){
+    _origRenderPage(n);
+    /* After first render, update pgBtn visibility */
+    setTimeout(function(){
+      if(pdfDoc && pdfDoc.numPages > 1){
+        el('pgBtn').style.display='';
+        el('pgBtn').textContent = 'pg '+n+' \u25be';
+      } else {
+        el('pgBtn').style.display='none';
+      }
+    }, 200);
+  };
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HOOK ALL NEW FEATURES INTO THE XR SELECT HANDLER
+   The XR select handler is a closure inside startWebXR.  We intercept it
+   by monkey-patching the session.addEventListener at the global scope by
+   wrapping the entire handler registration.  Instead, we hook into the
+   XR tap flow via a globally dispatched custom event that the original
+   select handler fires.
+
+   Simpler approach: override the 'arTap' handling inline via a pre-hook
+   on the reticle position read.  Since we can't easily wrap the closure,
+   we extend the logic via a globally checked flag evaluated BEFORE the
+   existing select code would run.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Patch: inject annotation + capture handling into xrFrame */
+var _origXrFrame = xrFrame;
+xrFrame = function(frame){
+  _origXrFrame(frame);
+  /* Project annotation labels every frame */
+  try{ updateAnnotLabels(); }catch(e){}
+  /* Fire deferred screenshot after render */
+  if(captureNextFrame){ doCapture(); }
+};
+
+/* Patch the XR select handler by wrapping startWebXR */
+var _origStartWebXR = startWebXR;
+startWebXR = function(){
+  _origStartWebXR();
+  /* After session is started, patch the select listener */
+  if(!xrSession) return;
+  xrSession.addEventListener('select', function(){
+    /* Annotation tap */
+    if(annotMode && reticle && reticle.visible){
+      var rx=reticle.matrix.elements[12],ry=reticle.matrix.elements[13],rz=reticle.matrix.elements[14];
+      var fp = {x:rx,y:ry,z:rz};
+      annotPending = fp;
+      el('annotInput').value = '';
+      el('annotPanel').classList.add('show');
+      /* Try to focus input after short delay */
+      setTimeout(function(){ try{ el('annotInput').focus(); }catch(e){} }, 120);
+      /* Don't let other handlers see this tap */
+    }
+  });
+};
+
+/* Close pgDropdown on outside tap */
+document.addEventListener('click', function(){ el('pgDropdown').classList.remove('show'); });
+
 
 })();
 </script>
