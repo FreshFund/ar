@@ -5035,36 +5035,37 @@ el('restoreNoBtn').addEventListener('click', function(){
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ①  MESH DETECTION / OVERLAY  — 3 display modes cycled by surfBtn
-       Mode 0 = off       (wires + fills hidden)
-       Mode 1 = wireframe (existing meshWires + planeWires, fills hidden)
-       Mode 2 = solid     (translucent solid fills per semantic label)
-   Solid fills use the same colour palette but at lower opacity and with
-   depthTest=false so they ghost through geometry.
-   ═══════════════════════════════════════════════════════════════════════════ */
-var meshMode = 1;          /* default: wireframe on */
-var meshFills = new Map(); /* XRMesh → THREE.Mesh  (solid fill version) */
+       Mode 0 = off  |  Mode 1 = wireframe  |  Mode 2 = solid+wire
+   ─────────────────────────────────────────────────────────────────────────── */
+var meshMode = 1;              /* start on wireframe */
+var meshFills = new Map();     /* XRMesh → THREE.Mesh  (solid fill)  */
+var meshFillsChanged = new Map(); /* XRMesh → lastChangedTime  (independent tracker) */
+var MESH_FILL_OPACITY = 0.18;
 
-var MESH_FILL_OPACITY = 0.18;   /* solid fill alpha */
-var MESH_XRAY_OPACITY = 0.08;   /* x-ray / ghost alpha */
-
-var MESH_MODE_LABELS = ['⬡ off', '⬡ wire', '⬡ solid'];
-var MESH_MODE_ACTIVE = ['', 'active-b', 'active-g'];
+var MESH_MODE_LABELS  = ['\u2b21 off', '\u2b21 wire', '\u2b21 solid'];
+var MESH_MODE_CLASSES = ['', 'active-b', 'active-g'];
 
 function applyMeshMode(){
   var btn = el('surfBtn');
   btn.textContent = MESH_MODE_LABELS[meshMode];
-  btn.className = 'hud-btn' + (MESH_MODE_ACTIVE[meshMode] ? ' '+MESH_MODE_ACTIVE[meshMode] : '');
+  /* Reset classes to base + optional active class */
+  btn.className = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' ' + MESH_MODE_CLASSES[meshMode] : '');
 
-  var wireVis   = meshMode >= 1;
-  var fillVis   = meshMode === 2;
+  var wireVis = meshMode >= 1;
+  var fillVis = meshMode === 2;
 
+  /* XR scene meshes */
   meshWires.forEach(function(seg){ seg.visible = wireVis; });
   meshFills.forEach(function(m)  { m.visible   = fillVis; });
 
-  /* plane wires follow wire visibility too */
+  /* Plane wires + grids */
   planeWires.forEach(function(w){ w.visible = wireVis; });
   planeGrids.forEach(function(g){ g.visible = wireVis; });
 }
+
+/* Initialise button label immediately — don't wait for first click */
+/* (called after DOM ready; applyMeshMode() is deferred until scene exists) */
+el('surfBtn').textContent = MESH_MODE_LABELS[meshMode];
 
 el('surfBtn').addEventListener('click', function(){
   meshMode = (meshMode + 1) % 3;
@@ -5072,30 +5073,38 @@ el('surfBtn').addEventListener('click', function(){
   showToast(MESH_MODE_LABELS[meshMode], 1200);
 });
 
-/* Extend updateSceneMeshes to also maintain solid fills */
+/* ── Extend updateSceneMeshes to maintain solid fills ─────────────────────
+   Uses a SEPARATE meshFillsChanged Map so we don't race with meshChanged
+   (the original fn writes meshChanged before we check it).               */
 var _origUpdateSceneMeshes = updateSceneMeshes;
 updateSceneMeshes = function(frame, refSpace){
   _origUpdateSceneMeshes(frame, refSpace);
   if(!frame.detectedMeshes) return;
+
   var seen = new Set();
   frame.detectedMeshes.forEach(function(mesh){
     seen.add(mesh);
     var pose = frame.getPose(mesh.meshSpace, refSpace);
     if(!pose) return;
     var m4 = new THREE.Matrix4().fromArray(pose.transform.matrix);
-    /* Rebuild fill mesh when geometry changes */
-    if(!meshFills.has(mesh) || meshChanged.get(mesh) !== mesh.lastChangedTime){
+
+    /* Rebuild fill only when ITS OWN change-tracker says geometry changed */
+    if(!meshFills.has(mesh) || meshFillsChanged.get(mesh) !== mesh.lastChangedTime){
+      meshFillsChanged.set(mesh, mesh.lastChangedTime);
       var old = meshFills.get(mesh);
-      if(old){ scene.remove(old); old.geometry.dispose(); }
+      if(old){ scene.remove(old); old.geometry.dispose(); old.material.dispose(); }
+
       var verts = mesh.vertices, idx = mesh.indices;
       if(!verts || !idx || verts.length < 9){ meshFills.delete(mesh); return; }
-      var geo2 = new THREE.BufferGeometry();
-      geo2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
-      geo2.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
-      geo2.computeVertexNormals();
+
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+      geo.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
+      geo.computeVertexNormals();
+
       var label = mesh.semanticLabel || '_default';
-      var col = MESH_COLOURS[label] || MESH_COLOURS._default;
-      var fill = new THREE.Mesh(geo2,
+      var col   = MESH_COLOURS[label] || MESH_COLOURS._default;
+      var fill  = new THREE.Mesh(geo,
         new THREE.MeshBasicMaterial({
           color: col, transparent: true, opacity: MESH_FILL_OPACITY,
           side: THREE.DoubleSide, depthWrite: false
@@ -5105,467 +5114,587 @@ updateSceneMeshes = function(frame, refSpace){
       scene.add(fill);
       meshFills.set(mesh, fill);
     }
-    var fill2 = meshFills.get(mesh);
-    if(fill2){ fill2.matrix.copy(m4); fill2.matrixWorldNeedsUpdate = true; }
+
+    /* Update pose every frame */
+    var f2 = meshFills.get(mesh);
+    if(f2){ f2.matrix.copy(m4); f2.matrixWorldNeedsUpdate = true; }
   });
+
+  /* Remove stale fills */
   meshFills.forEach(function(m, mesh){
-    if(!seen.has(mesh)){ scene.remove(m); m.geometry.dispose(); meshFills.delete(mesh); }
+    if(!seen.has(mesh)){
+      scene.remove(m); m.geometry.dispose(); m.material.dispose();
+      meshFills.delete(mesh); meshFillsChanged.delete(mesh);
+    }
   });
 };
 
 /* Also extend clearSceneMeshes */
 var _origClearSceneMeshes = clearSceneMeshes;
 clearSceneMeshes = function(){
-  meshFills.forEach(function(m){ if(scene){ scene.remove(m); } m.geometry.dispose(); });
-  meshFills.clear();
+  meshFills.forEach(function(m){
+    if(scene) scene.remove(m);
+    m.geometry.dispose(); m.material.dispose();
+  });
+  meshFills.clear(); meshFillsChanged.clear();
   _origClearSceneMeshes();
 };
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ②  IFC / BIM LAYER
-   Loads a .ifc (STEP-format) file, parses wall/floor/column outlines,
-   renders them as coloured LineSegments aligned to the plan's
-   planOrigin + planYaw transform so they sit on top of the PDF overlay.
+   Parses a .ifc (STEP) file and renders wall / column / slab footprints
+   as coloured LINE loops aligned to the live planOrigin + planYaw.
 
-   Supported entity types:
-     IFCWALLSTANDARDCASE / IFCWALL / IFCCOLUMN / IFCSLAB / IFCBEAM /
-     IFCSTAIR / IFCDOOR / IFCWINDOW — read via IFCLOCALPLACEMENT +
-     IFCAXIS2PLACEMENT3D + IFCEXTRUDEDAREASOLID / IFCARBITRARYCLOSEDPROFILEDEF
-   ═══════════════════════════════════════════════════════════════════════════ */
-var ifcGroup = null;         /* THREE.Group holding all IFC geometry */
-var ifcLoaded = false;
-var ifcLayerVis = {};        /* label → bool */
-var ifcScale = 1.0;          /* metres per IFC unit — default 1.0 (metres); 0.001 for mm */
-var ifcYOffset = 0;
+   Coordinate conventions:
+     IFC  : X = east,  Y = north,  Z = up   (Z-up, right-handed)
+     Three: X = right, Y = up,     Z = viewer (Y-up, right-handed)
+   Mapping: THREE.x = IFC.x   THREE.y = IFC.z   THREE.z = −IFC.y
+   ─────────────────────────────────────────────────────────────────────────── */
+var ifcGroup    = null;
+var ifcLoaded   = false;
+var ifcLayerVis = {};
+var ifcScale    = 1.0;   /* metres per IFC unit — auto-detected */
+var ifcYOffset  = 0;     /* vertical nudge in AR metres */
 
 var IFC_LAYER_COLOURS = {
-  wall:   0x4da6ff, column: 0xf0d060, slab:   0xffaa00,
-  beam:   0xff8844, stair:  0x88ffcc, door:   0xffff44,
-  window: 0x88ffff, space:  0x44ff88, other:  0xaaaaaa
+  wall:0x4da6ff, column:0xf0d060, slab:0xffaa00,
+  beam:0xff8844, stair:0x88ffcc, door:0xffff44,
+  window:0x88ffff, space:0x44ff88, other:0xaaaaaa
 };
 
 function ifcEntityType(name){
-  name = name.toUpperCase();
-  if(name.indexOf('WALL') >= 0)   return 'wall';
-  if(name.indexOf('COLUMN') >= 0) return 'column';
-  if(name.indexOf('SLAB') >= 0 || name.indexOf('FLOOR') >= 0) return 'slab';
-  if(name.indexOf('BEAM') >= 0)   return 'beam';
-  if(name.indexOf('STAIR') >= 0)  return 'stair';
-  if(name.indexOf('DOOR') >= 0)   return 'door';
-  if(name.indexOf('WINDOW') >= 0) return 'window';
-  if(name.indexOf('SPACE') >= 0)  return 'space';
+  if(name.indexOf('WALL')   >=0) return 'wall';
+  if(name.indexOf('COLUMN') >=0) return 'column';
+  if(name.indexOf('SLAB')   >=0) return 'slab';
+  if(name.indexOf('BEAM')   >=0) return 'beam';
+  if(name.indexOf('STAIR')  >=0) return 'stair';
+  if(name.indexOf('DOOR')   >=0) return 'door';
+  if(name.indexOf('WINDOW') >=0) return 'window';
+  if(name.indexOf('SPACE')  >=0) return 'space';
   return 'other';
 }
 
-/* ── Minimal STEP tokeniser ── */
+/* ── Robust state-machine STEP parser ──────────────────────────────────────
+   Handles arbitrary nesting depth and multi-line entities.             */
 function parseSTEP(text){
   var entities = {};
-  /* Match: #N=TYPENAME(...); across multiple lines — handle nested parens */
-  var lines = text.split('\n');
-  var buf = '';
-  lines.forEach(function(line){
-    line = line.trim();
-    if(line.charAt(0) === '#' || buf.length > 0) buf += ' ' + line;
-    if(buf && buf.indexOf(';') >= 0){
-      var semi = buf.indexOf(';');
-      var chunk = buf.slice(0, semi).replace(/\s+/g,' ').trim();
-      buf = '';
-      var m = chunk.match(/^#(\d+)\s*=\s*([A-Z0-9_]+)\s*\((.*)\)$/s);
-      if(m){
-        entities[m[1]] = { type: m[2], raw: m[3] };
+  text = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  /* Remove header section (ISO-10303-21 header) */
+  var dataIdx = text.indexOf('DATA;');
+  if(dataIdx >= 0) text = text.slice(dataIdx+5);
+
+  var i = 0, n = text.length;
+  while(i < n){
+    /* Seek '#' that starts an entity assignment */
+    while(i < n && text[i] !== '#') i++;
+    if(i >= n) break;
+    i++; /* skip '#' */
+
+    /* Read numeric ID */
+    var idStart = i;
+    while(i < n && text[i] >= '0' && text[i] <= '9') i++;
+    if(i === idStart){ i++; continue; }
+    var id = text.slice(idStart, i);
+
+    /* Skip whitespace and '=' */
+    while(i < n && (text[i]===' '||text[i]==='\t'||text[i]==='\n'||text[i]==='=')) i++;
+
+    /* Read TYPE NAME (uppercase letters, digits, underscore) */
+    var typeStart = i;
+    while(i < n && (text.charCodeAt(i)>=65&&text.charCodeAt(i)<=90 ||
+                    text.charCodeAt(i)>=48&&text.charCodeAt(i)<=57 ||
+                    text[i]==='_')) i++;
+    var type = text.slice(typeStart, i);
+    if(!type) continue;
+
+    /* Skip whitespace before '(' */
+    while(i < n && (text[i]===' '||text[i]==='\t'||text[i]==='\n')) i++;
+    if(i >= n || text[i] !== '(') continue;
+
+    /* Capture content between outermost parens */
+    var depth = 0;
+    var rawStart = i + 1;
+    while(i < n){
+      var c = text[i];
+      if(c === "'"){            /* skip quoted string */
+        i++;
+        while(i < n && text[i] !== "'") i++;
+      } else if(c === '('){
+        depth++;
+      } else if(c === ')'){
+        depth--;
+        if(depth === 0){ break; }
       }
+      i++;
     }
-  });
+    var raw = text.slice(rawStart, i);
+    i++; /* skip closing ')' */
+
+    entities[id] = {type:type, raw:raw};
+  }
   return entities;
 }
 
-/* Split top-level STEP args (respects nested parens) */
+/* ── Split top-level STEP args, respecting nested parens + quoted strings */
 function stepArgs(raw){
-  var args = [], depth = 0, cur = '';
-  for(var i = 0; i < raw.length; i++){
-    var c = raw[i];
-    if(c === '(' ){ depth++; cur += c; }
-    else if(c === ')'){ depth--; cur += c; }
-    else if(c === ',' && depth === 0){ args.push(cur.trim()); cur=''; }
-    else cur += c;
+  var args=[], depth=0, inStr=false, cur='';
+  for(var i=0;i<raw.length;i++){
+    var c=raw[i];
+    if(inStr){ cur+=c; if(c==="'") inStr=false; continue; }
+    if(c==="'"){ inStr=true; cur+=c; continue; }
+    if(c==='('){ depth++; cur+=c; }
+    else if(c===')'){ depth--; cur+=c; }
+    else if(c===','&&depth===0){ args.push(cur.trim()); cur=''; }
+    else cur+=c;
   }
   if(cur.trim()) args.push(cur.trim());
   return args;
 }
 
-function stepRef(s){ var m = s && s.match(/^#(\d+)$/); return m ? m[1] : null; }
-function stepNum(s){ return parseFloat(s); }
-function stepList(s){ /* strip outer parens */ return stepArgs(s.replace(/^\(|\)$/g,'')); }
+function stepRef(s){ var m=s&&s.match(/^#(\d+)$/); return m?m[1]:null; }
+function stepNum(s){ return parseFloat(s)||0; }
+function stepList(s){ return stepArgs(s.replace(/^\s*\(|\)\s*$/g,'')); }
 
-function ifcGetPlacement(entities, id){
-  /* Returns {origin:[x,y,z], xDir:[x,y,z], zDir:[x,y,z]} */
-  if(!id) return null;
-  var e = entities[id];
-  if(!e) return null;
-  if(e.type === 'IFCLOCALPLACEMENT'){
+/* ── Read IFCCARTESIANPOINT → [x,y,z] (2- or 3-coord) ── */
+function ifcPt(entities, ref){
+  var r=stepRef(ref); if(!r) return null;
+  var e=entities[r]; if(!e||e.type!=='IFCCARTESIANPOINT') return null;
+  var a=stepList(e.raw);
+  return [stepNum(a[0]),stepNum(a[1]),a.length>2?stepNum(a[2]):0];
+}
+
+/* ── Read IFCDIRECTION → [x,y,z] ── */
+function ifcDir(entities, ref){
+  var r=stepRef(ref); if(!r) return null;
+  var e=entities[r]; if(!e||e.type!=='IFCDIRECTION') return null;
+  var a=stepList(e.raw);
+  return [stepNum(a[0]),stepNum(a[1]),a.length>2?stepNum(a[2]):0];
+}
+
+/* ── Resolve IFCAXIS2PLACEMENT3D → {o,x,y,z} (all unit vectors) ── */
+function ifcAxis2Placement3D(entities, id){
+  var def = {o:[0,0,0],x:[1,0,0],y:[0,1,0],z:[0,0,1]};
+  if(!id) return def;
+  var e=entities[id]; if(!e||e.type!=='IFCAXIS2PLACEMENT3D') return def;
+  var a=stepArgs(e.raw);
+  var o = ifcPt(entities,a[0])   || [0,0,0];
+  var z = ifcDir(entities,a[1])  || [0,0,1];
+  var x = ifcDir(entities,a[2])  || [1,0,0];
+  /* Recompute Y = Z × X */
+  var y = [z[1]*x[2]-z[2]*x[1], z[2]*x[0]-z[0]*x[2], z[0]*x[1]-z[1]*x[0]];
+  return {o:o, x:x, y:y, z:z};
+}
+
+/* ── Resolve a (potentially chained) IFCLOCALPLACEMENT into a THREE.Matrix4 ─
+   Uses THREE.Matrix4 throughout to avoid the row/column-major confusion.   */
+var _placementCache = {};
+function ifcResolvePlacement(entities, id, scale){
+  if(!id) return new THREE.Matrix4();
+  if(_placementCache[id]) return _placementCache[id];
+  var e=entities[id]; if(!e) return new THREE.Matrix4();
+
+  var result = new THREE.Matrix4();
+  if(e.type==='IFCLOCALPLACEMENT'){
     var a = stepArgs(e.raw);
     var parentRef = stepRef(a[0]);
     var axisRef   = stepRef(a[1]);
-    var local = ifcGetAxis2Placement(entities, axisRef);
-    if(!local) return null;
+    var local = ifcAxis2Placement3D(entities, axisRef);
+    /* Build local-space matrix: columns = x, y, z, then translation */
+    var localMat = new THREE.Matrix4().set(
+      local.x[0], local.y[0], local.z[0], local.o[0]*scale,
+      local.x[1], local.y[1], local.z[1], local.o[1]*scale,
+      local.x[2], local.y[2], local.z[2], local.o[2]*scale,
+      0,          0,          0,          1
+    );
     if(parentRef){
-      var parent = ifcGetPlacement(entities, parentRef);
-      if(parent) return combinePlacements(parent, local);
+      var parentMat = ifcResolvePlacement(entities, parentRef, scale);
+      result.multiplyMatrices(parentMat, localMat);
+    } else {
+      result.copy(localMat);
     }
-    return local;
+  } else if(e.type==='IFCAXIS2PLACEMENT3D'){
+    var local2 = ifcAxis2Placement3D(entities, id);
+    result.set(
+      local2.x[0], local2.y[0], local2.z[0], local2.o[0]*scale,
+      local2.x[1], local2.y[1], local2.z[1], local2.o[1]*scale,
+      local2.x[2], local2.y[2], local2.z[2], local2.o[2]*scale,
+      0,           0,           0,            1
+    );
   }
-  if(e.type === 'IFCAXIS2PLACEMENT3D') return ifcGetAxis2Placement(entities, id);
-  return null;
+  _placementCache[id] = result;
+  return result;
 }
 
-function ifcGetAxis2Placement(entities, id){
-  if(!id) return {origin:[0,0,0], xDir:[1,0,0], zDir:[0,0,1]};
-  var e = entities[id];
-  if(!e || e.type !== 'IFCAXIS2PLACEMENT3D') return {origin:[0,0,0], xDir:[1,0,0], zDir:[0,0,1]};
-  var a = stepArgs(e.raw);
-  function getCoords(ref){
-    var r = stepRef(ref); if(!r) return null;
-    var cp = entities[r]; if(!cp || cp.type !== 'IFCCARTESIANPOINT') return null;
-    var pts = stepList(cp.raw);
-    return [stepNum(pts[0])||0, stepNum(pts[1])||0, stepNum(pts[2])||0];
-  }
-  function getDir(ref){
-    var r = stepRef(ref); if(!r) return null;
-    var d = entities[r]; if(!d || d.type !== 'IFCDIRECTION') return null;
-    var pts = stepList(d.raw);
-    return [stepNum(pts[0])||0, stepNum(pts[1])||0, stepNum(pts[2])||0];
-  }
-  return {
-    origin: getCoords(a[0]) || [0,0,0],
-    zDir:   getDir(a[1])   || [0,0,1],
-    xDir:   getDir(a[2])   || [1,0,0]
-  };
+/* ── IFC world point → AR world Vector3 (centred on ifcCentroid) ────────── */
+var ifcCentroid = {x:0, y:0, z:0};   /* set in buildIFCScene */
+
+function ifcWorldToAR(wx, wy, wz){
+  /* Centre on model centroid, convert IFC(X,Y,Z) → AR(X,Y,Z):
+       AR.x = IFC.x − cx
+       AR.y = IFC.z − cz   (IFC up → AR up; use centroid Z for floor)
+       AR.z = −(IFC.y − cy) (IFC north → AR -Z)                      */
+  var lx = wx - ifcCentroid.x;
+  var ly = wy - ifcCentroid.y;
+  var lz = wz - ifcCentroid.z;
+  var arX = lx;
+  var arY = lz + ifcYOffset;
+  var arZ = -ly;
+  /* Apply planYaw rotation + planOrigin offset */
+  var cos = Math.cos(planYaw), sin = Math.sin(planYaw);
+  return new THREE.Vector3(
+    planOrigin.x + arX*cos - arZ*sin,
+    planOrigin.y + arY,
+    planOrigin.z + arX*sin + arZ*cos
+  );
 }
 
-function combinePlacements(parent, local){
-  /* Build transform matrices and multiply — simplified for XZ plane (AR floor) */
-  function mat4(p){
-    var o=p.origin, x=p.xDir, z=p.zDir;
-    var y=[z[1]*x[2]-z[2]*x[1], z[2]*x[0]-z[0]*x[2], z[0]*x[1]-z[1]*x[0]];
-    return [x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0, o[0],o[1],o[2],1];
-  }
-  function mul(a,b){
-    var r=new Array(16);
-    for(var i=0;i<4;i++) for(var j=0;j<4;j++){
-      r[i*4+j]=0;
-      for(var k=0;k<4;k++) r[i*4+j]+=a[i*4+k]*b[k*4+j];
+/* ── 2D profile → flat THREE.Vector3 array (IFC world space) ────────────── */
+function ifcProfileToWorld(entities, profileRef, placementMat){
+  var e = entities[profileRef]; if(!e) return [];
+
+  if(e.type==='IFCARBITRARYCLOSEDPROFILEDEF'||e.type==='IFCARBITRARYPROFILEDEFWITHVOIDS'){
+    var a = stepArgs(e.raw);
+    var curveRef = stepRef(a[a.length-1]); if(!curveRef) return [];
+    var curve = entities[curveRef]; if(!curve) return [];
+    var pts2d = [];
+    if(curve.type==='IFCPOLYLINE'){
+      stepList(curve.raw).forEach(function(ref){
+        var p = ifcPt(entities,ref); if(p) pts2d.push(p);
+      });
+    } else if(curve.type==='IFCINDEXEDPOLYCURVE'){
+      /* Points list is first arg */
+      var pListRef = stepRef(stepArgs(curve.raw)[0]);
+      if(pListRef){
+        var pList = entities[pListRef];
+        if(pList){
+          stepList(pList.raw).forEach(function(coord){
+            var nums=stepList(coord);
+            pts2d.push([stepNum(nums[0]),stepNum(nums[1])]);
+          });
+        }
+      }
     }
-    return r;
+    return pts2d.map(function(p){
+      var v = new THREE.Vector4(p[0],p[1],0,1).applyMatrix4(placementMat);
+      return [v.x,v.y,v.z];
+    });
   }
-  function decompose(m){
-    return {
-      origin:[m[12],m[13],m[14]],
-      xDir:[m[0],m[1],m[2]],
-      zDir:[m[8],m[9],m[10]]
-    };
-  }
-  return decompose(mul(mat4(parent), mat4(local)));
-}
 
-/* Extract 2D profile loop points from an IFCARBITRARYCLOSEDPROFILEDEF */
-function ifcProfilePoints(entities, profileRef){
-  var e = entities[profileRef];
-  if(!e) return [];
-  var a = stepArgs(e.raw);
-  /* IFCARBITRARYCLOSEDPROFILEDEF: profileType, label, outerCurve */
-  var curveRef = stepRef(a[a.length-1]);
-  if(!curveRef) return [];
-  var curve = entities[curveRef];
-  if(!curve) return [];
-  if(curve.type === 'IFCPOLYLINE'){
-    var ptRefs = stepList(curve.raw);
-    return ptRefs.map(function(ref){
-      var r = stepRef(ref); if(!r) return null;
-      var cp = entities[r]; if(!cp) return null;
-      var coords = stepList(cp.raw);
-      return [stepNum(coords[0])||0, stepNum(coords[1])||0];
-    }).filter(Boolean);
+  if(e.type==='IFCRECTANGLEPROFILEDEF'){
+    var ra = stepArgs(e.raw);
+    /* IFCRECTANGLEPROFILEDEF: ProfileType, ProfileName, Position, XDim, YDim */
+    /* Find position matrix — it's an IFCAXIS2PLACEMENT2D */
+    var pos2dRef = null;
+    for(var ri=0;ri<ra.length;ri++){
+      var rr=stepRef(ra[ri]);
+      if(rr&&entities[rr]&&entities[rr].type==='IFCAXIS2PLACEMENT2D'){ pos2dRef=rr; break; }
+    }
+    var xdim = stepNum(ra[ra.length-2]);
+    var ydim = stepNum(ra[ra.length-1]);
+    if(xdim<=0||ydim<=0) return [];
+    /* Corners in profile local space */
+    var corners2d = [
+      [-xdim/2,-ydim/2],[ xdim/2,-ydim/2],[ xdim/2, ydim/2],[-xdim/2, ydim/2],[-xdim/2,-ydim/2]
+    ];
+    /* Apply 2D position if present */
+    if(pos2dRef){
+      var pax=entities[pos2dRef]; var paa=stepArgs(pax.raw);
+      var loc2 = ifcPt(entities,paa[0])||[0,0];
+      var dir2 = null;
+      var dr=stepRef(paa[1]);
+      if(dr&&entities[dr]){ var dd=stepList(entities[dr].raw); dir2=[stepNum(dd[0]),stepNum(dd[1])]; }
+      if(dir2){
+        var cos2=dir2[0],sin2=dir2[1];
+        corners2d=corners2d.map(function(c){
+          return [loc2[0]+c[0]*cos2-c[1]*sin2, loc2[1]+c[0]*sin2+c[1]*cos2];
+        });
+      } else {
+        corners2d=corners2d.map(function(c){ return [c[0]+loc2[0],c[1]+loc2[1]]; });
+      }
+    }
+    return corners2d.map(function(p){
+      var v=new THREE.Vector4(p[0],p[1],0,1).applyMatrix4(placementMat);
+      return [v.x,v.y,v.z];
+    });
   }
-  if(curve.type === 'IFCRECTANGLEPROFILEDEF'){
-    var rArgs = stepArgs(e.raw);
-    var xdim = stepNum(rArgs[2]), ydim = stepNum(rArgs[3]);
-    return [[-xdim/2,-ydim/2],[xdim/2,-ydim/2],[xdim/2,ydim/2],[-xdim/2,ydim/2],[-xdim/2,-ydim/2]];
+
+  if(e.type==='IFCCIRCLEPROFILEDEF'){
+    var ca=stepArgs(e.raw);
+    var radius=stepNum(ca[ca.length-1]);
+    if(radius<=0) return [];
+    var segs=16;
+    var c2=[];
+    for(var ci=0;ci<=segs;ci++){
+      var ang=ci/segs*Math.PI*2;
+      var v2=new THREE.Vector4(Math.cos(ang)*radius,Math.sin(ang)*radius,0,1).applyMatrix4(placementMat);
+      c2.push([v2.x,v2.y,v2.z]);
+    }
+    return c2;
   }
+
   return [];
 }
 
-/* Build Three.js geometry for one IFC element and add to ifcGroup */
+/* ── Main build routine: walk IFCEXTRUDEDAREASOLID and IFCPOLYLINE ────────── */
 function ifcBuildElement(entities, elemId, layerType){
-  var e = entities[elemId];
-  if(!e) return;
-
-  /* Find ObjectPlacement */
+  var e = entities[elemId]; if(!e) return;
   var eArgs = stepArgs(e.raw);
-  /* Standard elements: GlobalId, OwnerHistory, Name, Description,
-     ObjectType, ObjectPlacement, Representation, Tag */
+
+  /* Find ObjectPlacement ref */
   var placementRef = null;
-  for(var ai = 0; ai < eArgs.length; ai++){
-    var r = stepRef(eArgs[ai]);
-    if(r && entities[r] && entities[r].type.indexOf('PLACEMENT') >= 0){
-      placementRef = r; break;
+  for(var i=0;i<eArgs.length;i++){
+    var r=stepRef(eArgs[i]);
+    if(r&&entities[r]&&(entities[r].type==='IFCLOCALPLACEMENT'||entities[r].type==='IFCAXIS2PLACEMENT3D')){
+      placementRef=r; break;
     }
   }
   if(!placementRef) return;
 
-  var placement = ifcGetPlacement(entities, placementRef);
-  if(!placement) return;
+  var placementMat = ifcResolvePlacement(entities, placementRef, ifcScale);
 
-  /* Find RepresentationRef → look for IFCEXTRUDEDAREASOLID */
-  var repRef = null;
-  for(var bi = 0; bi < eArgs.length; bi++){
-    var r2 = stepRef(eArgs[bi]);
-    if(r2 && entities[r2] && entities[r2].type === 'IFCPRODUCTDEFINITIONSHAPE'){
-      repRef = r2; break;
-    }
+  /* Find IFCPRODUCTDEFINITIONSHAPE */
+  var repShapeRef = null;
+  for(var j=0;j<eArgs.length;j++){
+    var r2=stepRef(eArgs[j]);
+    if(r2&&entities[r2]&&entities[r2].type==='IFCPRODUCTDEFINITIONSHAPE'){ repShapeRef=r2; break; }
   }
-  if(!repRef) return;
+  if(!repShapeRef) return;
 
-  /* Walk rep → items → IFCEXTRUDEDAREASOLID */
-  var repE = entities[repRef];
-  if(!repE) return;
-  var repArgs = stepArgs(repE.raw);
-  /* IFCPRODUCTDEFINITIONSHAPE: Name, Desc, Representations */
-  var repsListRaw = repArgs[repArgs.length-1];
-  var repsList = stepList(repsListRaw);
-
-  repsList.forEach(function(rr){
-    var shapeRef = stepRef(rr); if(!shapeRef) return;
-    var shapeE = entities[shapeRef]; if(!shapeE) return;
-    /* IFCSHAPEREPRESENTATION: ContextOfItems, RepresentationId, RepType, Items */
-    var shArgs = stepArgs(shapeE.raw);
-    var itemsRaw = shArgs[shArgs.length-1];
-    var items = stepList(itemsRaw);
-    items.forEach(function(ir){
-      var itemRef = stepRef(ir); if(!itemRef) return;
-      var itemE = entities[itemRef]; if(!itemE) return;
-      if(itemE.type === 'IFCEXTRUDEDAREASOLID'){
-        ifcBuildExtrusion(entities, itemRef, placement, layerType);
-      } else if(itemE.type === 'IFCPOLYLINE'){
-        ifcBuildPolyline(entities, itemRef, placement, layerType);
-      }
+  /* Walk Representations list */
+  var pdsArgs = stepArgs(entities[repShapeRef].raw);
+  var repListRaw = pdsArgs[pdsArgs.length-1];
+  stepList(repListRaw).forEach(function(rr){
+    var shRef=stepRef(rr); if(!shRef) return;
+    var sh=entities[shRef]; if(!sh||sh.type!=='IFCSHAPEREPRESENTATION') return;
+    var shArgs=stepArgs(sh.raw);
+    /* RepresentationType (index 2) — prefer 'FootPrint' or 'Body' */
+    stepList(shArgs[shArgs.length-1]).forEach(function(ir){
+      var itemRef=stepRef(ir); if(!itemRef) return;
+      var item=entities[itemRef]; if(!item) return;
+      ifcBuildItem(entities, itemRef, item, placementMat, layerType);
     });
   });
 }
 
-function ifcBuildExtrusion(entities, extId, placement, layerType){
-  var e = entities[extId];
-  if(!e) return;
-  var a = stepArgs(e.raw);
-  /* IFCEXTRUDEDAREASOLID: SweptArea, Position, ExtrudedDirection, Depth */
-  var profileRef = stepRef(a[0]);
-  var depth = stepNum(a[a.length-1]) || 3.0;
-  if(!profileRef) return;
-
-  var pts2d = ifcProfilePoints(entities, profileRef);
-  if(!pts2d || pts2d.length < 2) return;
-
-  /* Scale + apply placement */
-  var sc = ifcScale;
-  var ox = placement.origin[0]*sc, oy = placement.origin[1]*sc, oz = placement.origin[2]*sc;
-  var xd = placement.xDir, zd = placement.zDir;
-  var yd = [zd[1]*xd[2]-zd[2]*xd[1], zd[2]*xd[0]-zd[0]*xd[2], zd[0]*xd[1]-zd[1]*xd[0]];
-
-  /* Build 3D points — bottom loop only for floor-plan look */
-  var worldPts = pts2d.map(function(p){
-    var lx = p[0]*sc, lz = p[1]*sc;
-    return new THREE.Vector3(
-      ox + xd[0]*lx + yd[0]*lz,
-      oz + xd[2]*lx + yd[2]*lz, /* Y in AR = IFC Z */
-      oy + xd[1]*lx + yd[1]*lz  /* Z in AR = IFC Y */
-    ).applyAxisAngle(new THREE.Vector3(0,1,0), planYaw)
-     .add(new THREE.Vector3(planOrigin.x, planOrigin.y + ifcYOffset, planOrigin.z));
-  });
-
-  /* Close loop */
-  if(worldPts.length > 0) worldPts.push(worldPts[0].clone());
-
+function ifcBuildItem(entities, itemRef, item, parentMat, layerType){
   var col = IFC_LAYER_COLOURS[layerType] || IFC_LAYER_COLOURS.other;
-  var geo = new THREE.BufferGeometry().setFromPoints(worldPts);
-  var line = new THREE.Line(geo, new THREE.LineBasicMaterial({color:col, transparent:true, opacity:0.85}));
+
+  if(item.type==='IFCEXTRUDEDAREASOLID'){
+    var a=stepArgs(item.raw);
+    /* arg[0]=SweptArea, arg[1]=Position, arg[2]=Direction, arg[3]=Depth */
+    var profileRef=stepRef(a[0]); if(!profileRef) return;
+    /* Compose local extrusion position into parent */
+    var extPosRef=stepRef(a[1]);
+    var extMat=extPosRef ? ifcResolvePlacement(entities,extPosRef,1.0) : new THREE.Matrix4();
+    var combinedMat = new THREE.Matrix4().multiplyMatrices(parentMat, extMat);
+    var pts3d = ifcProfileToWorld(entities, profileRef, combinedMat);
+    ifcAddLine(pts3d, col, layerType, true);
+  }
+  else if(item.type==='IFCPOLYLINE'){
+    var ptRefs=stepList(item.raw);
+    var pts3d2=[];
+    ptRefs.forEach(function(ref){
+      var p=ifcPt(entities,ref);
+      if(!p) return;
+      var v=new THREE.Vector4(p[0]*ifcScale,p[1]*ifcScale,p[2]*ifcScale,1).applyMatrix4(parentMat);
+      pts3d2.push([v.x,v.y,v.z]);
+    });
+    ifcAddLine(pts3d2, col, layerType, false);
+  }
+  else if(item.type==='IFCBOOLEANCLIPPINGRESULT'||item.type==='IFCBOOLEANRESULT'){
+    /* Recurse on first operand */
+    var ba=stepArgs(item.raw);
+    var op1ref=stepRef(ba[1]);
+    if(op1ref&&entities[op1ref]) ifcBuildItem(entities,op1ref,entities[op1ref],parentMat,layerType);
+  }
+  else if(item.type==='IFCMAPPEDITEM'){
+    /* IFCMAPPEDITEM: MappingSource (IFCREPRESENTATIONMAP), MappingTarget */
+    var mi=stepArgs(item.raw);
+    var mapRef=stepRef(mi[0]);
+    if(!mapRef) return;
+    var mapE=entities[mapRef];
+    if(!mapE||mapE.type!=='IFCREPRESENTATIONMAP') return;
+    var mapArgs=stepArgs(mapE.raw);
+    /* arg[0]=MappingOrigin (placement), arg[1]=MappedRepresentation */
+    var mapPosRef=stepRef(mapArgs[0]);
+    var mapMat=mapPosRef?ifcResolvePlacement(entities,mapPosRef,ifcScale):new THREE.Matrix4();
+    var mapRepRef=stepRef(mapArgs[1]);
+    if(!mapRepRef) return;
+    var mapRep=entities[mapRepRef];
+    if(!mapRep||mapRep.type!=='IFCSHAPEREPRESENTATION') return;
+    var mrArgs=stepArgs(mapRep.raw);
+    stepList(mrArgs[mrArgs.length-1]).forEach(function(ir2){
+      var iRef2=stepRef(ir2); if(!iRef2) return;
+      var iE2=entities[iRef2]; if(!iE2) return;
+      var combined2=new THREE.Matrix4().multiplyMatrices(parentMat,mapMat);
+      ifcBuildItem(entities,iRef2,iE2,combined2,layerType);
+    });
+  }
+}
+
+function ifcAddLine(pts3d, col, layerType, close){
+  if(!pts3d||pts3d.length<2) return;
+  var arPts = pts3d.map(function(p){ return ifcWorldToAR(p[0],p[1],p[2]); });
+  if(close && arPts.length>0) arPts.push(arPts[0].clone());
+  var geo = new THREE.BufferGeometry().setFromPoints(arPts);
+  var line = new THREE.Line(geo,
+    new THREE.LineBasicMaterial({color:col, transparent:true, opacity:0.88}));
   line.userData.ifcLayer = layerType;
   line.visible = (ifcLayerVis[layerType] !== false);
   ifcGroup.add(line);
 }
 
-function ifcBuildPolyline(entities, lineId, placement, layerType){
-  var e = entities[lineId];
-  if(!e) return;
-  var ptRefs = stepList(e.raw);
-  var sc = ifcScale;
-  var ox = placement.origin[0]*sc, oy = placement.origin[1]*sc, oz = placement.origin[2]*sc;
-  var xd = placement.xDir, zd = placement.zDir;
-  var yd = [zd[1]*xd[2]-zd[2]*xd[1], zd[2]*xd[0]-zd[0]*xd[2], zd[0]*xd[1]-zd[1]*xd[0]];
-
-  var worldPts = [];
-  ptRefs.forEach(function(ref){
-    var r = stepRef(ref); if(!r) return;
-    var cp = entities[r]; if(!cp || cp.type !== 'IFCCARTESIANPOINT') return;
-    var coords = stepList(cp.raw);
-    var lx = (stepNum(coords[0])||0)*sc, lz = (stepNum(coords[1])||0)*sc;
-    worldPts.push(new THREE.Vector3(
-      ox + xd[0]*lx + yd[0]*lz,
-      oz + xd[2]*lx + yd[2]*lz,
-      oy + xd[1]*lx + yd[1]*lz
-    ).applyAxisAngle(new THREE.Vector3(0,1,0), planYaw)
-     .add(new THREE.Vector3(planOrigin.x, planOrigin.y + ifcYOffset, planOrigin.z)));
-  });
-  if(worldPts.length < 2) return;
-  var col = IFC_LAYER_COLOURS[layerType] || IFC_LAYER_COLOURS.other;
-  var geo = new THREE.BufferGeometry().setFromPoints(worldPts);
-  var line = new THREE.Line(geo, new THREE.LineBasicMaterial({color:col, transparent:true, opacity:0.75}));
-  line.userData.ifcLayer = layerType;
-  line.visible = (ifcLayerVis[layerType] !== false);
-  ifcGroup.add(line);
-}
-
-/* Build ALL elements matching a set of types */
-var ELEM_TYPES = ['IFCWALL','IFCWALLSTANDARDCASE','IFCCOLUMN','IFCSLAB','IFCBEAM',
-                  'IFCSTAIR','IFCDOOR','IFCWINDOW','IFCSPACE','IFCPLATE'];
+/* ── Main entry: parse text, auto-detect units, build scene geometry ────── */
+var ELEM_TYPES = [
+  'IFCWALL','IFCWALLSTANDARDCASE','IFCWALLTYPE',
+  'IFCCOLUMN','IFCCOLUMNTYPE',
+  'IFCSLAB','IFCSLABTYPE',
+  'IFCBEAM','IFCBEAMTYPE',
+  'IFCSTAIR','IFCSTAIRFLIGHT',
+  'IFCDOOR','IFCWINDOW','IFCPLATE'
+];
 
 function ifcParseAndBuild(text){
+  el('ifcStatus').textContent = 'Parsing\u2026';
+  _placementCache = {};
+
   try{
     var entities = parseSTEP(text);
-    var count = Object.keys(entities).length;
-    if(count < 10){ el('ifcStatus').textContent='Not a valid IFC file'; return; }
-    el('ifcStatus').textContent='Parsing '+count+' entities…';
+    var total = Object.keys(entities).length;
+    if(total < 5){ el('ifcStatus').textContent='Not a valid IFC file ('+total+' entities)'; return; }
 
-    /* Detect units */
-    for(var id in entities){
-      var e = entities[id];
-      if(e.type === 'IFCSIUNIT'){
-        var a = stepArgs(e.raw);
-        var unitName = a[a.length-1].replace(/['.]/g,'').toUpperCase();
-        if(unitName === 'METRE' || unitName === 'METER') ifcScale = 1.0;
-        else if(unitName === 'MILLIMETRE' || unitName === 'MILLIMETER') ifcScale = 0.001;
+    /* ── Auto-detect length unit ── */
+    for(var uid in entities){
+      var ue=entities[uid];
+      if(ue.type==='IFCSIUNIT'){
+        var ua=stepArgs(ue.raw);
+        /* IFCSIUNIT: Dimensions, UnitType, Prefix, Name */
+        var uname=(ua[ua.length-1]||'').replace(/['. ]/g,'').toUpperCase();
+        var upfx =(ua[ua.length-2]||'').replace(/['. ]/g,'').toUpperCase();
+        if(uname==='METRE'||uname==='METER'){
+          if(upfx==='MILLI') ifcScale=0.001;
+          else if(upfx==='CENTI') ifcScale=0.01;
+          else ifcScale=1.0;
+        }
       }
     }
 
-    if(!scene){ el('ifcStatus').textContent='AR session not started yet'; return; }
+    if(!scene){ el('ifcStatus').textContent='Start AR session first, then reload the IFC'; return; }
 
-    /* Remove old group */
-    if(ifcGroup){ scene.remove(ifcGroup); ifcGroup = null; }
+    /* ── Remove old geometry ── */
+    if(ifcGroup){ scene.remove(ifcGroup); ifcGroup=null; }
     ifcGroup = new THREE.Group();
     scene.add(ifcGroup);
     ifcLayerVis = {};
 
-    var counts = {};
+    /* ── First pass: collect all element placement origins to find centroid ── */
+    var cxSum=0, cySum=0, czSum=0, cCount=0;
     for(var eid in entities){
-      var etype = entities[eid].type;
-      var matched = ELEM_TYPES.find(function(t){ return etype === t; });
-      if(!matched) continue;
-      var layerType = ifcEntityType(etype);
-      counts[layerType] = (counts[layerType]||0) + 1;
-      ifcLayerVis[layerType] = true;
-      try{ ifcBuildElement(entities, eid, layerType); }catch(err){}
+      var etype=entities[eid].type;
+      if(ELEM_TYPES.indexOf(etype)<0) continue;
+      var eArgs=stepArgs(entities[eid].raw);
+      for(var ai=0;ai<eArgs.length;ai++){
+        var r=stepRef(eArgs[ai]);
+        if(r&&entities[r]&&entities[r].type==='IFCLOCALPLACEMENT'){
+          var pm=ifcResolvePlacement(entities,r,ifcScale);
+          var pos=new THREE.Vector3().setFromMatrixPosition(pm);
+          cxSum+=pos.x; cySum+=pos.y; czSum+=pos.z; cCount++;
+          break;
+        }
+      }
+    }
+    _placementCache = {}; /* reset after centroid pass */
+    if(cCount>0){
+      ifcCentroid = {x:cxSum/cCount, y:cySum/cCount, z:czSum/cCount};
+    } else {
+      ifcCentroid = {x:0,y:0,z:0};
     }
 
-    var total = ifcGroup.children.length;
-    el('ifcStatus').textContent = '\u2714 Loaded \u2022 '+total+' objects';
-    el('ifcDropZone').classList.add('loaded');
-    ifcLoaded = true;
+    /* ── Second pass: build geometry ── */
+    var counts={}, built=0;
+    for(var eid2 in entities){
+      var etype2=entities[eid2].type;
+      if(ELEM_TYPES.indexOf(etype2)<0) continue;
+      var lt=ifcEntityType(etype2);
+      counts[lt]=(counts[lt]||0)+1;
+      ifcLayerVis[lt]=true;
+      var before=ifcGroup.children.length;
+      try{ ifcBuildElement(entities,eid2,lt); }catch(err2){}
+      if(ifcGroup.children.length>before) built++;
+    }
 
-    /* Build layer toggles */
-    buildIfcLayerUI(counts);
+    var objCount=ifcGroup.children.length;
+    if(objCount===0){
+      el('ifcStatus').textContent='Parsed '+total+' entities but no renderable geometry found. Check IFC version/content.';
+    } else {
+      el('ifcStatus').textContent='\u2714 '+objCount+' objects from '+built+' elements';
+      el('ifcDropZone').classList.add('loaded');
+      ifcLoaded=true;
+      buildIfcLayerUI(counts);
+    }
 
   }catch(err){
-    el('ifcStatus').textContent='Parse error: '+err.message;
-    console.error('IFC parse error', err);
+    el('ifcStatus').textContent='Error: '+err.message;
+    console.error('IFC error',err);
   }
 }
 
 function buildIfcLayerUI(counts){
   el('ifcLayers').style.display='';
-  var list = el('ifcLayerList');
-  list.innerHTML = '';
-  var layers = Object.keys(counts).sort();
-  layers.forEach(function(layer){
-    var col = '#' + (IFC_LAYER_COLOURS[layer]||0xaaaaaa).toString(16).padStart(6,'0');
-    var row = document.createElement('div');
-    row.className = 'ifc-layer-row';
-    row.innerHTML =
-      '<div class="ifc-layer-left">' +
-        '<div class="ifc-layer-swatch" style="background:'+col+'"></div>' +
-        '<span class="ifc-layer-name">'+layer+' ('+counts[layer]+')</span>' +
-      '</div>' +
+  var list=el('ifcLayerList'); list.innerHTML='';
+  Object.keys(counts).sort().forEach(function(layer){
+    var hex='#'+(IFC_LAYER_COLOURS[layer]||0xaaaaaa).toString(16).padStart(6,'0');
+    var row=document.createElement('div'); row.className='ifc-layer-row';
+    row.innerHTML=
+      '<div class="ifc-layer-left">'+
+        '<div class="ifc-layer-swatch" style="background:'+hex+'"></div>'+
+        '<span class="ifc-layer-name">'+layer+' ('+counts[layer]+')</span>'+
+      '</div>'+
       '<button class="ifc-toggle on" data-layer="'+layer+'"></button>';
-    row.querySelector('button').addEventListener('click', function(){
-      var l = this.dataset.layer;
-      ifcLayerVis[l] = !ifcLayerVis[l];
-      this.classList.toggle('on', !!ifcLayerVis[l]);
-      if(ifcGroup){
-        ifcGroup.children.forEach(function(c){
-          if(c.userData.ifcLayer === l) c.visible = !!ifcLayerVis[l];
-        });
-      }
+    row.querySelector('button').addEventListener('click',function(){
+      var l=this.dataset.layer;
+      ifcLayerVis[l]=!ifcLayerVis[l];
+      this.classList.toggle('on',!!ifcLayerVis[l]);
+      if(ifcGroup) ifcGroup.children.forEach(function(c){
+        if(c.userData.ifcLayer===l) c.visible=!!ifcLayerVis[l];
+      });
     });
     list.appendChild(row);
   });
-
-  /* Stats */
-  var stats = Object.entries(counts).map(function(kv){ return kv[0]+': '+kv[1]; }).join('\n');
-  el('ifcStats').textContent = stats;
+  el('ifcStats').textContent=Object.entries(counts)
+    .map(function(kv){ return kv[0]+': '+kv[1]; }).join(' \u2022 ');
 }
 
-/* Update IFC group transform when plan moves */
-function updateIfcTransform(){
-  if(!ifcGroup || !planBound) return;
-  /* IFC group is in world space — we need to re-evaluate each child.
-     For now re-parse is too expensive; store the original placement in each line's
-     userData and apply transform delta. This is handled at build-time above. */
-}
-
-/* IFC overlay UI wiring */
-el('ifcBtn').addEventListener('click', function(){
-  el('ifcOverlay').classList.add('show');
-});
-el('ifcCloseBtn').addEventListener('click', function(){
-  el('ifcOverlay').classList.remove('show');
-});
-
-el('ifcDropZone').addEventListener('click', function(){
-  el('ifcFileInput').click();
-});
-el('ifcDropZone').addEventListener('dragover', function(e){
-  e.preventDefault(); this.classList.add('over');
-});
-el('ifcDropZone').addEventListener('dragleave', function(){
-  this.classList.remove('over');
-});
-el('ifcDropZone').addEventListener('drop', function(e){
+/* ── UI wiring ── */
+el('ifcBtn').addEventListener('click',function(){ el('ifcOverlay').classList.add('show'); });
+el('ifcCloseBtn').addEventListener('click',function(){ el('ifcOverlay').classList.remove('show'); });
+el('ifcDropZone').addEventListener('click',function(){ el('ifcFileInput').click(); });
+el('ifcDropZone').addEventListener('dragover',function(e){ e.preventDefault(); this.classList.add('over'); });
+el('ifcDropZone').addEventListener('dragleave',function(){ this.classList.remove('over'); });
+el('ifcDropZone').addEventListener('drop',function(e){
   e.preventDefault(); this.classList.remove('over');
-  var file = e.dataTransfer.files[0];
-  if(file) loadIfcFile(file);
+  if(e.dataTransfer.files[0]) loadIfcFile(e.dataTransfer.files[0]);
 });
-el('ifcFileInput').addEventListener('change', function(){
+el('ifcFileInput').addEventListener('change',function(){
   if(this.files[0]) loadIfcFile(this.files[0]);
 });
-
 function loadIfcFile(file){
-  el('ifcStatus').textContent = 'Loading ' + file.name + '…';
-  var reader = new FileReader();
-  reader.onload = function(ev){ ifcParseAndBuild(ev.target.result); };
-  reader.onerror = function(){ el('ifcStatus').textContent = 'Read error'; };
+  el('ifcStatus').textContent='Loading '+file.name+'\u2026';
+  var reader=new FileReader();
+  reader.onload=function(ev){ ifcParseAndBuild(ev.target.result); };
+  reader.onerror=function(){ el('ifcStatus').textContent='Read error'; };
   reader.readAsText(file);
 }
-
-/* Unit toggle */
-el('ifcUnitM').addEventListener('click', function(){
-  ifcScale = 1.0;
-  this.classList.add('active'); el('ifcUnitMM').classList.remove('active');
+el('ifcUnitM').addEventListener('click',function(){
+  ifcScale=1.0; this.classList.add('active'); el('ifcUnitMM').classList.remove('active');
 });
-el('ifcUnitMM').addEventListener('click', function(){
-  ifcScale = 0.001;
-  this.classList.add('active'); el('ifcUnitM').classList.remove('active');
+el('ifcUnitMM').addEventListener('click',function(){
+  ifcScale=0.001; this.classList.add('active'); el('ifcUnitM').classList.remove('active');
 });
-el('ifcYOffset').addEventListener('change', function(){
-  ifcYOffset = parseFloat(this.value)||0;
-  showToast('IFC Y offset: '+ifcYOffset.toFixed(2)+'m', 1500);
+el('ifcYOffset').addEventListener('change',function(){
+  ifcYOffset=parseFloat(this.value)||0;
+  showToast('IFC Y offset: '+ifcYOffset.toFixed(2)+'m',1500);
 });
 
 
