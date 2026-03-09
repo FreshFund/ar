@@ -1138,6 +1138,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
       </div>
     </div>
 
+    <!-- ══ Y-OFFSET SLIDER ══ shown during orient step only ══ -->
+    <div id="ySliderRow" class="slider-row" style="display:none;pointer-events:all">
+      <span class="sl-lbl" style="min-width:14px">↕</span>
+      <input type="range" id="ySlider" min="-2" max="2" step="0.01" value="0"
+        style="width:110px">
+      <span class="sl-lbl" id="ySliderVal" style="min-width:42px;color:rgba(255,255,255,.6);font-family:var(--mono)">0.00 m</span>
+    </div>
+
     <!-- ══ AR TOOLS BAR ══ shown from step 2 onward ══ -->
     <div class="btn-row" id="arTools" style="display:none">
       <button id="surfBtn" class="hud-btn" title="Cycle surface display">⬡</button>
@@ -1263,6 +1271,7 @@ function delaunay(pts) {
 ═══════════════════════════════ */
 var pdfDoc=null, currentPage=1, pdfCanvas=null;
 var xfOpacity=0.82, xfRotY=0.0, xfScaleM=1.0, xfLocked=true;
+var xfY=0.0;   /* manual Y-offset (m) applied during orient step */
 var traceMode=false, MAX_CORNERS=10;
 var corners=[];   // {worldPos:{x,y,z}, anchor:XRAnchor|null}
 var uvPicks=[];   // {u,v}  — plan UV coords for each column
@@ -2029,12 +2038,15 @@ function onPlanPlaced(){
    Starts unlocked. Tapping Lock → advances to Pick.
    ───────────────────────────────────────────────────────────────── */
 function stepOrientEnter(){
-  xfLocked=false;
+  xfLocked=false; xfY=0;
+  el('ySlider').value='0'; el('ySliderVal').textContent='0.00 m';
+  if(planeGroup) planeGroup._baseY=planeGroup.position.y;
   /* Peek strip with Lock button visible — user needs to interact with the drawing */
   el('stepCard').className='show peek-mode has-action';
   el('hud').style.display='';
   el('scBtn').textContent='Lock & Continue \u2192'; el('scBtn').disabled=false;
   el('hudHint').textContent='Pinch \u00b7 rotate \u00b7 drag to align \u2022 then Lock';
+  el('ySliderRow').style.display='flex';
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -2046,6 +2058,7 @@ function stepPickEnter(){
   el('stepCard').style.background='';
   el('scAnchorBtns').style.display='none';
   el('hud').style.display='';
+  el('ySliderRow').style.display='none';   /* hide Y slider once locked */
 }
 
 function onPlanBound(){ goStep(7); }
@@ -2337,7 +2350,22 @@ el('uiToggleBtn').addEventListener('click',function(){
 ═══════════════════════════════ */
 /* opacitySlider removed */
 /* alignBtn removed */
-function applyFree(){if(planeGroup&&wxrPlaced)planeGroup.rotation.y=xfRotY;}
+
+/* ── Y-offset slider (shown during orient step) ── */
+el('ySlider').addEventListener('input', function(){
+  xfY = parseFloat(this.value);
+  el('ySliderVal').textContent = (xfY >= 0 ? '+' : '') + xfY.toFixed(2) + ' m';
+  applyFree();
+});
+function applyFree(){
+  if(!planeGroup||!wxrPlaced) return;
+  planeGroup.rotation.y = xfRotY;
+  /* Apply manual Y offset — lets user float the plan up/down during orient */
+  planeGroup.position.y = (planeGroup.position.y||(0)) + 0; /* Y is set at placement; xfY is a delta */
+  /* We store the original placement Y and add xfY to it */
+  if(planeGroup._baseY === undefined) planeGroup._baseY = planeGroup.position.y;
+  planeGroup.position.y = planeGroup._baseY + xfY;
+}
 
 /* traceBtn removed */
 /* traceUndoBtn/traceDoneBtn/traceCancelBtn removed */
@@ -2401,7 +2429,8 @@ function clearWireVisuals(){
 }
 function doReset(){
   traceMode=false; surveyActive=false; corners=[]; uvPicks=[];
-  wxrPlaced=false; xfLocked=true; xfRotY=0; xfScaleM=1;
+  wxrPlaced=false; xfLocked=true; xfRotY=0; xfScaleM=1; xfY=0;
+  el('ySliderRow').style.display='none';
   currentSnap=null; solveCount=0;
   measureMode=false; measurePt1=null; measurePt2=null;
   metersPerUV=null; rulerP1=null; rulerP2=null;
@@ -4576,6 +4605,7 @@ function startWebXR(){
       var q=new THREE.Quaternion();
       new THREE.Matrix4().fromArray(reticle.matrix.elements).decompose(new THREE.Vector3(),q,new THREE.Vector3());
       planeGroup.position.set(px,py,pz); planeGroup.quaternion.copy(q); planeGroup.visible=true;
+      planeGroup._baseY = py; xfY = 0;
       surfaceQuat.copy(q); wxrPlaced=true;
       floorPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0).applyQuaternion(q).normalize(),new THREE.Vector3(px,py,pz));
       if(fusedHeading!=null) xrNorthOffset=fusedHeading;
@@ -5034,37 +5064,116 @@ el('restoreNoBtn').addEventListener('click', function(){
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   ①  MESH DETECTION / OVERLAY  — 3 display modes cycled by surfBtn
-       Mode 0 = off  |  Mode 1 = wireframe  |  Mode 2 = solid+wire
-   ─────────────────────────────────────────────────────────────────────────── */
-var meshMode = 1;              /* start on wireframe */
-var meshFills = new Map();     /* XRMesh → THREE.Mesh  (solid fill)  */
-var meshFillsChanged = new Map(); /* XRMesh → lastChangedTime  (independent tracker) */
+   ①  MESH / SURFACE OVERLAY  — 3 modes cycled by surfBtn
+   ─────────────────────────────────────────────────────────────────────────
+   Mode 0 = off    — all surface geometry hidden
+   Mode 1 = wire   — boundary loops + floor grid (what already existed)
+   Mode 2 = solid  — filled plane polygon meshes (fan-triangulated) layered
+                     on top of the wires, tinted by plane type
+
+   Device reality:
+     • frame.detectedPlanes   → always works on Android Chrome 92+
+     • frame.detectedMeshes   → requires chrome://flags/#webxr-incubations
+   This implementation uses detectedPlanes as the ground truth for solid fills
+   so it works on every supported device.  XRMesh wires are layered on top if
+   the device supports it (transparent bonus — never required).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+var meshMode = 1;              /* start: wireframe on   */
+var planeFills = new Map();    /* XRPlane → THREE.Mesh  */
+
+/* Per-fill change tracking uses polygon.length as a lightweight change key */
+var planeFillChanged = new Map();  /* XRPlane → polygon.length */
+
+/* Solid fill colours — same hue as wires but more opaque */
+var PLANE_FILL_COL = {
+  floor: 0x1a7a45,   /* dark green  */
+  wall:  0x1a3d7a,   /* dark blue   */
+};
+var PLANE_FILL_OPACITY_FLOOR = 0.22;
+var PLANE_FILL_OPACITY_WALL  = 0.30;
+
+/* XRMesh fill tracking (bonus — works if device supports mesh-detection) */
+var meshFills = new Map();
+var meshFillsChanged = new Map();
 var MESH_FILL_OPACITY = 0.18;
 
 var MESH_MODE_LABELS  = ['\u2b21 off', '\u2b21 wire', '\u2b21 solid'];
 var MESH_MODE_CLASSES = ['', 'active-b', 'active-g'];
 
+/* ── Fan-triangulate a convex (or near-convex) polygon ─────────────────── */
+function fanTriangulate(pts){
+  /* pts: Array of THREE.Vector3 in world space, first = pivot */
+  if(pts.length < 3) return null;
+  var positions = [];
+  /* Remove closing duplicate */
+  var loop = pts;
+  if(pts[0].distanceTo(pts[pts.length-1]) < 0.001) loop = pts.slice(0, pts.length-1);
+  if(loop.length < 3) return null;
+  var pivot = loop[0];
+  for(var i = 1; i < loop.length - 1; i++){
+    positions.push(pivot.x, pivot.y, pivot.z);
+    positions.push(loop[i].x, loop[i].y, loop[i].z);
+    positions.push(loop[i+1].x, loop[i+1].y, loop[i+1].z);
+  }
+  if(positions.length < 9) return null;
+  var geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/* ── Build or update the solid fill mesh for one detected plane ─────────── */
+function updatePlaneFill(plane, pm, isWall){
+  var polyLen = plane.polygon.length;
+  /* Only rebuild when polygon changes */
+  if(planeFillChanged.get(plane) === polyLen) return;
+  planeFillChanged.set(plane, polyLen);
+
+  /* Remove old fill */
+  var oldFill = planeFills.get(plane);
+  if(oldFill){ scene.remove(oldFill); oldFill.geometry.dispose(); oldFill.material.dispose(); }
+
+  /* World-space polygon vertices (no Y-lift — fill sits exactly on surface) */
+  var wpts = plane.polygon.map(function(v){
+    return new THREE.Vector3(v.x, v.y + 0.005, v.z).applyMatrix4(pm);
+  });
+
+  var geo = fanTriangulate(wpts);
+  if(!geo) return;
+
+  var col = isWall ? PLANE_FILL_COL.wall : PLANE_FILL_COL.floor;
+  var opa = isWall ? PLANE_FILL_OPACITY_WALL : PLANE_FILL_OPACITY_FLOOR;
+
+  var fill = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    color: col, transparent: true, opacity: opa,
+    side: THREE.DoubleSide, depthWrite: false
+  }));
+  fill.visible = (meshMode === 2);
+  scene.add(fill);
+  planeFills.set(plane, fill);
+}
+
+/* ── Apply current mode to all existing surface geometry ────────────────── */
 function applyMeshMode(){
   var btn = el('surfBtn');
   btn.textContent = MESH_MODE_LABELS[meshMode];
-  /* Reset classes to base + optional active class */
   btn.className = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' ' + MESH_MODE_CLASSES[meshMode] : '');
 
   var wireVis = meshMode >= 1;
   var fillVis = meshMode === 2;
 
-  /* XR scene meshes */
-  meshWires.forEach(function(seg){ seg.visible = wireVis; });
-  meshFills.forEach(function(m)  { m.visible   = fillVis; });
-
-  /* Plane wires + grids */
+  /* Plane wires + grids (always available) */
   planeWires.forEach(function(w){ w.visible = wireVis; });
   planeGrids.forEach(function(g){ g.visible = wireVis; });
+  planeFills.forEach(function(f){ f.visible = fillVis; });
+
+  /* XRMesh wires + fills (device-dependent bonus) */
+  meshWires.forEach(function(seg){ seg.visible = wireVis; });
+  meshFills.forEach(function(m)  { m.visible   = fillVis; });
 }
 
-/* Initialise button label immediately — don't wait for first click */
-/* (called after DOM ready; applyMeshMode() is deferred until scene exists) */
+/* Set initial label immediately */
 el('surfBtn').textContent = MESH_MODE_LABELS[meshMode];
 
 el('surfBtn').addEventListener('click', function(){
@@ -5073,54 +5182,77 @@ el('surfBtn').addEventListener('click', function(){
   showToast(MESH_MODE_LABELS[meshMode], 1200);
 });
 
-/* ── Extend updateSceneMeshes to maintain solid fills ─────────────────────
-   Uses a SEPARATE meshFillsChanged Map so we don't race with meshChanged
-   (the original fn writes meshChanged before we check it).               */
+/* ── Extend updatePlaneWireframes to build solid fills too ──────────────── */
+var _origUpdatePlaneWireframes = updatePlaneWireframes;
+updatePlaneWireframes = function(frame, refSpace){
+  _origUpdatePlaneWireframes(frame, refSpace);
+  /* Now build/update solid fills for every tracked plane */
+  if(!frame.detectedPlanes || !scene) return;
+  var seen = new Set();
+  frame.detectedPlanes.forEach(function(plane){
+    if(!plane.planeSpace || !plane.polygon || plane.polygon.length < 3) return;
+    seen.add(plane);
+    try{
+      var pp = frame.getPose(plane.planeSpace, refSpace);
+      if(!pp) return;
+      var pm = new THREE.Matrix4().fromArray(pp.transform.matrix);
+      var isWall = plane.orientation === 'vertical';
+      updatePlaneFill(plane, pm, isWall);
+    }catch(e){}
+  });
+  /* Clean up stale fills */
+  planeFills.forEach(function(fill, plane){
+    if(!seen.has(plane)){
+      scene.remove(fill); fill.geometry.dispose(); fill.material.dispose();
+      planeFills.delete(plane); planeFillChanged.delete(plane);
+    }
+  });
+};
+
+/* ── Extend clearPlaneWires to also clear fills ─────────────────────────── */
+var _origClearPlaneWires = clearPlaneWires;
+clearPlaneWires = function(){
+  planeFills.forEach(function(f){ if(scene){ scene.remove(f); } f.geometry.dispose(); f.material.dispose(); });
+  planeFills.clear(); planeFillChanged.clear();
+  _origClearPlaneWires();
+};
+
+/* ── Extend updateSceneMeshes to maintain XRMesh solid fills (bonus) ──────
+   Uses a SEPARATE change-tracker so we don't race with meshChanged.      */
 var _origUpdateSceneMeshes = updateSceneMeshes;
 updateSceneMeshes = function(frame, refSpace){
   _origUpdateSceneMeshes(frame, refSpace);
-  if(!frame.detectedMeshes) return;
-
+  if(!frame.detectedMeshes || !scene) return;
   var seen = new Set();
   frame.detectedMeshes.forEach(function(mesh){
     seen.add(mesh);
     var pose = frame.getPose(mesh.meshSpace, refSpace);
     if(!pose) return;
     var m4 = new THREE.Matrix4().fromArray(pose.transform.matrix);
-
-    /* Rebuild fill only when ITS OWN change-tracker says geometry changed */
     if(!meshFills.has(mesh) || meshFillsChanged.get(mesh) !== mesh.lastChangedTime){
       meshFillsChanged.set(mesh, mesh.lastChangedTime);
       var old = meshFills.get(mesh);
       if(old){ scene.remove(old); old.geometry.dispose(); old.material.dispose(); }
-
       var verts = mesh.vertices, idx = mesh.indices;
       if(!verts || !idx || verts.length < 9){ meshFills.delete(mesh); return; }
-
       var geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
       geo.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
       geo.computeVertexNormals();
-
       var label = mesh.semanticLabel || '_default';
-      var col   = MESH_COLOURS[label] || MESH_COLOURS._default;
-      var fill  = new THREE.Mesh(geo,
-        new THREE.MeshBasicMaterial({
-          color: col, transparent: true, opacity: MESH_FILL_OPACITY,
-          side: THREE.DoubleSide, depthWrite: false
-        }));
+      var col = MESH_COLOURS[label] || MESH_COLOURS._default;
+      var fill = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        color: col, transparent: true, opacity: MESH_FILL_OPACITY,
+        side: THREE.DoubleSide, depthWrite: false
+      }));
       fill.matrixAutoUpdate = false;
       fill.visible = (meshMode === 2);
       scene.add(fill);
       meshFills.set(mesh, fill);
     }
-
-    /* Update pose every frame */
     var f2 = meshFills.get(mesh);
     if(f2){ f2.matrix.copy(m4); f2.matrixWorldNeedsUpdate = true; }
   });
-
-  /* Remove stale fills */
   meshFills.forEach(function(m, mesh){
     if(!seen.has(mesh)){
       scene.remove(m); m.geometry.dispose(); m.material.dispose();
@@ -5129,13 +5261,10 @@ updateSceneMeshes = function(frame, refSpace){
   });
 };
 
-/* Also extend clearSceneMeshes */
+/* ── Extend clearSceneMeshes to clear XRMesh fills too ─────────────────── */
 var _origClearSceneMeshes = clearSceneMeshes;
 clearSceneMeshes = function(){
-  meshFills.forEach(function(m){
-    if(scene) scene.remove(m);
-    m.geometry.dispose(); m.material.dispose();
-  });
+  meshFills.forEach(function(m){ if(scene){ scene.remove(m); } m.geometry.dispose(); m.material.dispose(); });
   meshFills.clear(); meshFillsChanged.clear();
   _origClearSceneMeshes();
 };
