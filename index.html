@@ -806,6 +806,11 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
   border:2px solid transparent; transition:border-color .15s;
   touch-action:manipulation;
 }
+.annot-cat{background:transparent;border:1px solid rgba(255,255,255,.18);color:var(--paper);
+  font-size:13px;width:28px;height:24px;border-radius:4px;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;transition:background .15s;}
+.annot-cat.active{background:rgba(240,208,96,.22);border-color:rgba(240,208,96,.7);}
+
 .annot-swatch.active { border-color:var(--paper); }
 
 /* ── Floating annotation labels in AR ── */
@@ -1060,6 +1065,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
         <div id="pickModeToggle">
           <button class="mode-tab active" id="tabAnchor">Anchor</button>
           <button class="mode-tab" id="tabRuler">Scale</button>
+          <button class="mode-tab" id="tabRoom">Room Dim</button>
         </div>
       </div>
 
@@ -1088,6 +1094,13 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
           <span id="rulerStatus">Drag a line across a known dimension</span>
           <input type="number" id="rulerDistInput" placeholder="metres" min="0.01" step="0.01">
           <button id="rulerConfirmBtn" disabled>Set</button>
+        </div>
+        <div id="roomControls" style="display:none;gap:6px;align-items:center">
+          <span id="roomStatus" style="font-size:10px;opacity:.7;flex:1">Tap 2 points on plan</span>
+          <input type="number" id="roomDistInput" placeholder="m" min="0.01" step="0.01"
+            style="width:60px;background:transparent;border:none;border-bottom:1px solid rgba(240,208,96,.4);color:var(--paper);font-family:var(--mono);font-size:11px;padding:3px 0;outline:none">
+          <button id="roomConfirmBtn" disabled
+            style="background:rgba(240,208,96,.15);border:1px solid rgba(240,208,96,.4);color:var(--paper);font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:3px;cursor:pointer">Lock</button>
         </div>
 
         <!-- Action buttons -->
@@ -1151,6 +1164,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
       <button id="surfBtn" class="hud-btn" title="Cycle surface display">⬡</button>
       <button id="tapeBtn" class="hud-btn" title="Measure tape">⇐⇒</button>
       <button id="noteBtn" class="hud-btn" title="Add annotation">✎</button>
+      <button id="undoBtn" class="hud-btn" title="Undo last anchor">↩</button>
       <button id="camBtn"  class="hud-btn" title="Capture photo">⊙</button>
       <!-- Page switcher — shown when PDF has multiple pages -->
       <div style="position:relative">
@@ -1163,6 +1177,16 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
 
     <!-- ══ ANNOTATION INPUT PANEL ══ slides up when placing annotation ══ -->
     <div id="annotPanel">
+      <!-- Category row -->
+      <div class="annot-panel-row" style="gap:5px;margin-bottom:4px">
+        <span class="annot-panel-label" style="font-size:9px;opacity:.6">TYPE</span>
+        <button class="annot-cat active" data-cat="general" title="General">✏</button>
+        <button class="annot-cat" data-cat="electrical" title="Electrical">⚡</button>
+        <button class="annot-cat" data-cat="structural" title="Structural">■</button>
+        <button class="annot-cat" data-cat="plumbing" title="Plumbing">●</button>
+        <button class="annot-cat" data-cat="hazard" title="Hazard">⚠</button>
+        <button id="annotFilterBtn" class="annot-cat" title="Filter annotations" style="margin-left:auto;opacity:.6">⋮</button>
+      </div>
       <div class="annot-panel-row">
         <span class="annot-panel-label">Note</span>
         <input id="annotInput" class="annot-input" type="text" placeholder="Type annotation…" maxlength="80">
@@ -1276,6 +1300,7 @@ var xfY=0.0;   /* manual Y-offset (m) applied during orient step */
 var traceMode=false, MAX_CORNERS=10;
 var corners=[];   // {worldPos:{x,y,z}, anchor:XRAnchor|null}
 var uvPicks=[];   // {u,v}  — plan UV coords for each column
+var anchorUndoStack=[]; var MAX_UNDO=20;
 var boundMesh=null, solveCount=0;
 var currentSnap=null;
 
@@ -1390,10 +1415,22 @@ function getMeshOccludeMat(){
 
 function createXRMeshGeo(mesh){
   var verts = mesh.vertices, idx = mesh.indices;
-  if(!verts || !idx || verts.length < 9) return null;
+  if(!verts || !idx || verts.length < 3) return null;
+  var posArr;
+  /* Chrome WebXR returns vertices as [{x,y,z},...] objects, not a flat array */
+  if(verts[0] && typeof verts[0] === 'object' && 'x' in verts[0]){
+    posArr = new Float32Array(verts.length * 3);
+    for(var i=0;i<verts.length;i++){
+      posArr[i*3]=verts[i].x; posArr[i*3+1]=verts[i].y; posArr[i*3+2]=verts[i].z;
+    }
+  } else {
+    posArr = new Float32Array(verts);  /* already flat typed array */
+  }
+  if(posArr.length < 9) return null;
   var geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+  geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
   geo.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1));
+  geo.computeVertexNormals();
   return geo;
 }
 
@@ -1479,7 +1516,8 @@ function updateSceneMeshes(frame, refSpace){
       };
       allMeshes.set(mesh, ctx);
       applyMeshContextVisibility(ctx);
-      showToast('★ XRMesh #'+ctx.id+' • '+label, 1200);
+      var vertFmt = (mesh.vertices && mesh.vertices[0] && typeof mesh.vertices[0]==='object') ? 'obj' : 'buf';
+      showToast('★ XRMesh #'+ctx.id+' • '+label+' ('+verts.length+'v/'+vertFmt+')', 1800);
     }
   });
 
@@ -1941,6 +1979,7 @@ function updateSensorCard(){
 function stepGpsSurveyEnter(){
   el('scDot').className='sc-dot yellow';
   el('scStatusMain').textContent='0 survey points dropped';
+  el('hudHint').textContent='Hold on floor to drop a survey pin';
   el('scStatusSub').textContent='walk to a site point, tap Drop Pin';
   el('scBtn').textContent='Start Surveying →';
   el('scBtn').disabled=false;
@@ -1993,6 +2032,7 @@ function dropSurveyPin(rx,ry,rz){
   lbl.style.color=col>0x888888?'#04050f':'#ffffff';
   el('wpLabels').appendChild(lbl);
   waypoints.push({id:idx+1,gps:{lat:gpsLat,lng:gpsLng,acc:gpsAcc},world:{x:fp.x,y:fp.y,z:fp.z},dot:dot,labelEl:lbl});
+  haptic(HAPTIC_GPS_PIN);
   el('hudHint').textContent='P'+(idx+1)+' pinned \u2022 \u00b1'+Math.round(gpsAcc)+'m'+(idx<2?' \u2014 '+(2-idx)+' more needed':'');
   renderMiniMap();
   updateGpsSurveyCard();
@@ -2211,6 +2251,8 @@ function wizardReset(){
 
 
 function el(id){ return document.getElementById(id); }
+function haptic(p){ try{ if(navigator.vibrate) navigator.vibrate(p); }catch(e){} }
+var HAPTIC_ANCHOR=[30,20,60], HAPTIC_GPS_PIN=[20,15,20], HAPTIC_UNDO=[15], HAPTIC_ERROR=[80,40,80];
 function show(id,d){ el(id).style.display=d||'block'; }
 function hide(id){ el(id).style.display='none'; }
 function showBtns(which){ /* button rows removed */ }
@@ -2536,6 +2578,7 @@ function doReset(){
   metersPerUV=null; rulerP1=null; rulerP2=null;
   planBound=false; planYaw=0; planScale=1; planOrigin.set(0,0,0);
   fusedHeading=null; headingLocked=false; lastAlpha=null; lastGyroTime=null; xrNorthOffset=null;
+  _driftChecked=false;
   gpsBearingFixes=[]; gpsBearingRef=null; reSnapFrameCounter=0;
   constraintQuality={xrAnchor:0,compass:0,gpsBearing:0,planeSnap:0};
   smoothHitPos=null; smoothFloorY=null;
@@ -2647,27 +2690,32 @@ function updatePlaneWireframes(frame, refSpace){
 /* Returns a LineSegments object for the floor grid (caller adds to scene).
    Does NOT add to scene itself — avoids the old random-key leak.          */
 function buildFloorGrid(pm, polygon, col){
+  /* polygon in plane-local space; transform each point to world, fix Y */
   var xs=polygon.map(function(v){return v.x;});
   var zs=polygon.map(function(v){return v.z;});
   var minX=Math.min.apply(null,xs),maxX=Math.max.apply(null,xs);
   var minZ=Math.min.apply(null,zs),maxZ=Math.max.apply(null,zs);
-  var stepX=Math.max(0.25,(maxX-minX)/6);
-  var stepZ=Math.max(0.25,(maxZ-minZ)/6);
+  /* Plane world Y = translation part of pm, lifted 15mm */
+  var worldY = pm.elements[13] + 0.015;
+  var stepX=Math.max(0.2,(maxX-minX)/10);
+  var stepZ=Math.max(0.2,(maxZ-minZ)/10);
   var pts=[];
   for(var x=minX;x<=maxX+0.01;x+=stepX){
-    var p1=new THREE.Vector3(x,0.007,minZ).applyMatrix4(pm);
-    var p2=new THREE.Vector3(x,0.007,maxZ).applyMatrix4(pm);
+    var p1=new THREE.Vector3(x,0,minZ).applyMatrix4(pm); p1.y=worldY;
+    var p2=new THREE.Vector3(x,0,maxZ).applyMatrix4(pm); p2.y=worldY;
     pts.push(p1,p2);
   }
   for(var z=minZ;z<=maxZ+0.01;z+=stepZ){
-    var p3=new THREE.Vector3(minX,0.007,z).applyMatrix4(pm);
-    var p4=new THREE.Vector3(maxX,0.007,z).applyMatrix4(pm);
+    var p3=new THREE.Vector3(minX,0,z).applyMatrix4(pm); p3.y=worldY;
+    var p4=new THREE.Vector3(maxX,0,z).applyMatrix4(pm); p4.y=worldY;
     pts.push(p3,p4);
   }
   if(pts.length<2) return null;
   var geo=new THREE.BufferGeometry().setFromPoints(pts);
-  var mat=new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0.18});
-  return new THREE.LineSegments(geo,mat);
+  var mat=new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0.28});
+  var seg=new THREE.LineSegments(geo,mat);
+  seg.renderOrder=1;
+  return seg;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2839,18 +2887,53 @@ function setPickTab(tab){
   pickMode=tab;
   el('tabAnchor').className='mode-tab'+(tab==='anchor'?' active':'');
   el('tabRuler').className='mode-tab'+(tab==='ruler'?' active':'');
+  if(el('tabRoom')) el('tabRoom').className='mode-tab'+(tab==='room'?' active':'');
   el('pickAnchorStatus').style.display=tab==='anchor'?'flex':'none';
   el('rulerControls').className=tab==='ruler'?'show':'';
-  el('pickViewport').className=tab==='ruler'?'ruler-active':'';
+  if(el('roomControls')) el('roomControls').style.display=tab==='room'?'flex':'none';
+  el('pickViewport').className=(tab==='ruler'||tab==='room')?'ruler-active':'';
   rulerMode=(tab==='ruler');
   el('pickCanvas').style.pointerEvents=tab==='ruler'?'none':'all';
-  /* Show/hide ruler SVG overlay */
   var svg=el('pickViewport').querySelector('#rulerSvg');
   if(svg) svg.style.display=tab==='ruler'?'block':'none';
 }
 
 el('tabAnchor').addEventListener('click',function(){ setPickTab('anchor'); });
 el('tabRuler').addEventListener('click',function(){ setPickTab('ruler'); });
+el('tabRoom')&&el('tabRoom').addEventListener('click',function(){ setPickTab('room'); });
+
+var roomPt1=null,roomPt2=null;
+(function(){
+  var cvs=el('pickCanvas');
+  cvs.addEventListener('pointerdown',function(e){
+    if(!el('roomControls')||el('roomControls').style.display==='none')return;
+    var r=cvs.getBoundingClientRect();
+    var px=(e.clientX-r.left)/r.width*cvs.width, py=(e.clientY-r.top)/r.height*cvs.height;
+    if(!roomPt1){ roomPt1={x:px,y:py}; roomPt2=null; el('roomStatus').textContent='Pt 1 set \u2014 tap pt 2'; el('roomConfirmBtn').disabled=true; }
+    else { roomPt2={x:px,y:py}; var du=(roomPt2.x-roomPt1.x)/cvs.width,dv=(roomPt2.y-roomPt1.y)/cvs.height; el('roomStatus').textContent='Distance: '+Math.round(Math.sqrt(du*du+dv*dv)*1000)/10+'% \u2014 enter real metres'; if(el('roomDistInput').value) el('roomConfirmBtn').disabled=false; }
+    var c2=cvs.getContext('2d');
+    if(roomPt1){c2.beginPath();c2.arc(roomPt1.x,roomPt1.y,7,0,Math.PI*2);c2.fillStyle='#f0d060';c2.fill();}
+    if(roomPt2){c2.beginPath();c2.arc(roomPt2.x,roomPt2.y,7,0,Math.PI*2);c2.fillStyle='#2be87a';c2.fill();c2.beginPath();c2.moveTo(roomPt1.x,roomPt1.y);c2.lineTo(roomPt2.x,roomPt2.y);c2.strokeStyle='rgba(255,255,255,.5)';c2.lineWidth=2;c2.stroke();}
+  },{passive:true});
+  el('roomDistInput')&&el('roomDistInput').addEventListener('input',function(){
+    if(el('roomConfirmBtn')) el('roomConfirmBtn').disabled=!(this.value&&roomPt1&&roomPt2);
+  });
+  el('roomConfirmBtn')&&el('roomConfirmBtn').addEventListener('click',function(){
+    if(!roomPt1||!roomPt2){showToast('Tap two points first',2000);return;}
+    var m=parseFloat(el('roomDistInput').value);
+    if(!m||m<=0){showToast('Enter a positive distance',2000);return;}
+    var du=(roomPt2.x-roomPt1.x)/cvs.width,dv=(roomPt2.y-roomPt1.y)/cvs.height;
+    var uvD=Math.sqrt(du*du+dv*dv);
+    if(uvD<0.01){showToast('Points too close together',2000);return;}
+    metersPerUV=m/uvD;
+    el('roomStatus').textContent='\u2714 '+m+'m \u2192 '+(metersPerUV).toFixed(3)+' m/UV';
+    el('roomConfirmBtn').disabled=true; roomPt1=null; roomPt2=null;
+    showToast('\u2714 Scale locked from room dimension: '+m+'m',3000);
+    if(planBound) reSolvePlan();
+    setTimeout(function(){setPickTab('anchor');},1500);
+  });
+})();
+
 
 /* Apply viewport transform */
 function applyVP(){
@@ -4094,12 +4177,16 @@ function reSolvePlan(){
     smoothPlanScl=smoothPlanScl*(1-PLAN_SCL_ALPHA)+sol.scale*PLAN_SCL_ALPHA;
   }
 
-  /* Rotation: use Kabsch yaw on first solve; afterwards the heading
-     constraint in updateAnchors handles it via its own blend.
-     We only override planYaw with Kabsch when the compass is absent. */
-  if(!planBound || !headingLocked){
-    planYaw=sol.yaw;
-    if(smoothPlanTx===sol.tx){ /* first solve */ }
+  /* Rotation: hard-set on first solve; after that protect planYaw.
+     If compass absent (headingLocked=false), use a very gentle EMA so
+     Kabsch provides slow correction without spinning on anchor drift. */
+  if(!planBound){
+    planYaw=sol.yaw;        /* first solve: Kabsch owns orientation */
+  } else if(!headingLocked){
+    /* No compass — blend Kabsch yaw very gently (0.5%/solve) to avoid spin */
+    var kd=sol.yaw-planYaw;
+    while(kd>Math.PI)kd-=2*Math.PI; while(kd<-Math.PI)kd+=2*Math.PI;
+    if(Math.abs(kd)<0.52/*30°*/) planYaw+=kd*0.005;
   }
 
   /* ── Ruler scale constraint ──
@@ -4116,6 +4203,8 @@ function reSolvePlan(){
   planScale=smoothPlanScl;
   planBound=true;
   applyRigidTransform(smoothPlanTx, smoothPlanTz, planYaw, smoothPlanScl);
+  window._lastSol=sol;
+  try{ if(heatmapEnabled) updateHeatmap(sol,corners,uvPicks); }catch(e){}
   solveCount++;
 
   var ms=(performance.now()-t0).toFixed(1);
@@ -4560,7 +4649,25 @@ function startWebXR(){
     var holdRing=new THREE.Line(holdRingGeo,holdRingMat);
     holdRing.visible=false; scene.add(holdRing);
 
-    function commitAnchor(rx,ry,rz,wasSnapped){
+    
+function undoLastAnchor(){
+  if(!anchorUndoStack.length){ showToast('Nothing to undo',1500); haptic(HAPTIC_ERROR); return; }
+  var snap=anchorUndoStack.pop(); haptic(HAPTIC_UNDO);
+  var ci=corners.indexOf(snap.corner);
+  if(ci!==-1){
+    corners.splice(ci,1);
+    if(uvPicks.length>ci) uvPicks.splice(ci,1);
+    if(snap.corner.anchor){ try{snap.corner.anchor.delete();}catch(e){} }
+  }
+  if(snap.sphereMesh&&scene){ scene.remove(snap.sphereMesh); try{snap.sphereMesh.geometry.dispose();}catch(e){} }
+  if(snap.labelEl&&snap.labelEl.parentNode) snap.labelEl.remove();
+  document.querySelectorAll('.corner-label').forEach(function(d,i){ d.textContent=i+1; });
+  if(el('cornerBadge')) el('cornerBadge').textContent=corners.length?'\u2714 '+corners.length+' anchors':'';
+  if(planBound&&corners.length>=2) reSolvePlan();
+  else if(corners.length<2){ planBound=false; if(planRigidGroup&&scene){scene.remove(planRigidGroup);planRigidGroup=null;boundMesh=null;} }
+  showToast('\u21a9 Anchor removed ('+corners.length+' remain)',1800);
+}
+function commitAnchor(rx,ry,rz,wasSnapped){
       if(corners.length>=MAX_CORNERS){el('hudHint').textContent='Max '+MAX_CORNERS+' column anchors reached';return;}
       /* Snap Y to tracked floor level if available */
       var anchorY=ry;
@@ -4577,6 +4684,9 @@ function startWebXR(){
         gps: gpsLat!=null ? {lat:gpsLat, lng:gpsLng, acc:gpsAcc} : null
       };
       corners.push(corner);
+      haptic(HAPTIC_ANCHOR);
+      anchorUndoStack.push({corner:corner, sphereMesh:sphere, labelEl:numLabel});
+      if(anchorUndoStack.length>MAX_UNDO) anchorUndoStack.shift();
       addCornerVisual(fp,corners.length-1);
       updateCornerBadge();
       el('hudHint').textContent=wasSnapped?'Column '+corners.length+' \u2014 snapped \u2713':'Column '+corners.length+' anchored';
@@ -4630,9 +4740,23 @@ function startWebXR(){
       if(planBound) reSolvePlan();
     }
 
-    /* SELECT start — begin hold timer for anchor mode */
+    /* SELECT start — hold timer for SURVEY pins AND anchor mode */
     session.addEventListener('selectstart',function(){
       if(!reticle.visible)return;
+
+      /* GPS SURVEY step: hold to drop a pin */
+      if(currentStep===1 && el('stepCard').className.indexOf('peek-mode')!==-1){
+        var sx=reticle.matrix.elements[12], sy=reticle.matrix.elements[13], sz=reticle.matrix.elements[14];
+        holdStartPos={x:sx,y:sy,z:sz,wasSnapped:false,_t:Date.now(),_isSurvey:true};
+        holdProgress=0;
+        holdTimer=setTimeout(function(){
+          holdTimer=null; holdProgress=0; holdRing.visible=false;
+          if(holdStartPos&&holdStartPos._isSurvey){ dropSurveyPin(holdStartPos.x,holdStartPos.y,holdStartPos.z); }
+          holdStartPos=null;
+        }, HOLD_MS);
+        return;
+      }
+
       if(!traceMode) return;
 
       holdStartPos = currentSnap
@@ -4671,12 +4795,10 @@ function startWebXR(){
       var ry=reticle.visible?reticle.matrix.elements[13]:0;
       var rz=reticle.visible?reticle.matrix.elements[14]:0;
 
-      /* SURVEY MODE — tap drops a GPS pin, but only once surveying has started
-         (card collapsed to peek strip). Ignore taps on the full info card.    */
+      /* SURVEY MODE — pins are now drop-on-hold (600ms), not instant tap.
+         The holdTimer handles the pin drop; instant tap is ignored here.     */
       if(currentStep===1){
-        if(el('stepCard').className.indexOf('peek-mode')===-1) return; /* full card still showing */
-        dropSurveyPin(rx,ry,rz);
-        return;
+        return; /* hold-to-drop handled in selectstart/selectend */
       }
 
       /* All other modes require the reticle to be visible */
@@ -4724,10 +4846,15 @@ function startWebXR(){
       if(smoothFloorY!==null&&Math.abs(py-smoothFloorY)<FLOOR_Y_TOLERANCE) py=smoothFloorY;
       var q=new THREE.Quaternion();
       new THREE.Matrix4().fromArray(reticle.matrix.elements).decompose(new THREE.Vector3(),q,new THREE.Vector3());
-      planeGroup.position.set(px,py,pz); planeGroup.quaternion.copy(q); planeGroup.visible=true;
+      planeGroup.position.set(px,py,pz);
+      /* Flat placement: use ONLY the Y-axis rotation (north orientation).
+         The hit-test quaternion includes camera-relative yaw that would cause
+         the plan to track camera rotation. We discard that and use compass.  */
+      planeGroup.rotation.set(0, xfRotY, 0);
+      planeGroup.visible=true;
       planeGroup._baseY = py; xfY = 0;
       surfaceQuat.copy(q); wxrPlaced=true;
-      floorPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0).applyQuaternion(q).normalize(),new THREE.Vector3(px,py,pz));
+      floorPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0),new THREE.Vector3(px,py,pz));
       if(fusedHeading!=null) xrNorthOffset=fusedHeading;
       applyFree(); hide('scanRing');
       xfLocked=true;
@@ -4736,7 +4863,8 @@ function startWebXR(){
 
     /* Update hold ring arc each frame */
     function updateHoldRing(frame){
-      if(!holdTimer||!holdStartPos||!traceMode){ holdRing.visible=false; return; }
+      var holdActive = holdTimer && holdStartPos && (traceMode || (currentStep===1 && el('stepCard').className.indexOf('peek-mode')!==-1));
+      if(!holdActive){ holdRing.visible=false; return; }
       holdProgress=Math.min(1,(Date.now()-(Date.now()-HOLD_MS)-0)/HOLD_MS);
       /* Simpler: derive from time elapsed since selectstart */
       /* We'll track startTime on the holdStartPos object */
@@ -4800,6 +4928,20 @@ function xrFrame(frame){
   if(!frame)return;
   renderer.render(scene,camera);
 
+  /* Live mesh diagnostic - updates statusBar every 90 frames */
+  if(!window._diagFrame) window._diagFrame=0;
+  window._diagFrame++;
+  if(window._diagFrame % 90 === 1 && meshMode > 0){
+    var dp = frame.detectedPlanes ? frame.detectedPlanes.size : 0;
+    var dm = (frame.detectedMeshes !== undefined) ? frame.detectedMeshes.size : -1;
+    var diag = 'planes:'+dp
+      + (dm>=0 ? '  xrmesh:'+dm : '  xrmesh:N/A(flag)')
+      + (depthEnabled ? '  depth:ON' : '')
+      + (planeFills.size>0 ? '  fills:'+planeFills.size : '');
+    if(el('statusBar')){ el('statusBar').style.display='block'; el('statusBar').textContent=diag; }
+  }
+  if(meshMode===0 && el('statusBar')) el('statusBar').style.display='none';
+
   /* Update measure label position (project to screen each frame) */
   if(measureLine&&camera){
     var ma=measureLine.geometry.attributes.position;
@@ -4818,9 +4960,12 @@ function xrFrame(frame){
 
   /* Update plane wireframes + scene meshes (mesh-detection API) */
   if(xrRefSpace){
-    try{updatePlaneWireframes(frame,xrRefSpace);}catch(e){}
-    try{updateSceneMeshes(frame,xrRefSpace);}catch(e){}
-    try{updateDepthCloud(frame);}catch(e){}
+    try{updatePlaneWireframes(frame,xrRefSpace);}catch(e){ console.error('planes:',e); }
+    try{updateSceneMeshes(frame,xrRefSpace);}catch(e){
+      console.error('mesh:',e);
+      if(el('statusBar') && meshMode>0) el('statusBar').textContent='mesh ERR: '+e.message;
+    }
+    try{updateDepthCloud(frame);}catch(e){ console.error('depth:',e); }
   }
 
   if(!xrHitTestSrc||!xrRefSpace)return;
@@ -5074,6 +5219,7 @@ function solvesSave(){
     pdfName: currentPdfName,
     planOrigin: {x: planOrigin.x, z: planOrigin.z},
     planYaw: planYaw,
+    xrNorthOffset: xrNorthOffset,
     planScale: planScale,
     metersPerUV: metersPerUV,
     floorLevels: floorLevels,
@@ -5155,6 +5301,8 @@ function solvesRestore(data){
   planYaw = data.planYaw;
   planScale = data.planScale;
   metersPerUV = data.metersPerUV || null;
+  /* Restore compass offset — critical for re-locate after session restore */
+  xrNorthOffset = (data.xrNorthOffset != null) ? data.xrNorthOffset : null;
 
   if(data.floorLevels && data.floorLevels.length){
     floorLevels = data.floorLevels;
@@ -5254,8 +5402,13 @@ function earcutTriangulate(pts){
 }
 
 function updatePlaneFill(plane, pm, isWall){
+  /* Skip wall planes - earcut on XZ is collinear for vertical planes */
+  if(isWall) return;
+  /* Transform to world space FIRST, then add world-Y lift to clear z-fight */
   var wpts = plane.polygon.map(function(v){
-    return new THREE.Vector3(v.x, v.y + 0.006, v.z).applyMatrix4(pm);
+    var p = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(pm);
+    p.y += 0.012;
+    return p;
   });
 
   var existing  = planeFills.get(plane);
@@ -5273,6 +5426,7 @@ function updatePlaneFill(plane, pm, isWall){
       side: THREE.DoubleSide, depthWrite: false
     }));
     fill.frustumCulled = false;
+    fill.renderOrder = 2;
     fill.visible = (meshMode === 2);
     scene.add(fill);
     planeFills.set(plane, fill);
@@ -5313,8 +5467,14 @@ function applyMeshMode(){
   /* XRMesh — update all existing contexts */
   allMeshes.forEach(function(ctx){ applyMeshContextVisibility(ctx); });
 
-  /* Depth cloud */
+  /* Depth cloud (fill mode) + depth occluder (occlude mode) */
   if(depthCloud) depthCloud.visible = fillVis;
+  if(depthOccluder){
+    depthOccluder.visible = occludeVis;
+    /* Make sure plan is depth-tested so occlusion works */
+    if(planeMesh) planeMesh.material.depthTest = true;
+    if(boundMesh) boundMesh.material.depthTest = true;
+  }
 
   /* Renderer sort — occlude meshes must render before transparent content */
   if(renderer){
@@ -5329,11 +5489,23 @@ el('surfBtn').addEventListener('click', function(){
   meshMode = (meshMode + 1) % MESH_MODE_LABELS.length;
   applyMeshMode();
   var extra = '';
-  if(meshMode===1 && allMeshes.size > 0) extra = ' \u2022 '+allMeshes.size+' XRMesh';
-  if(meshMode===2 && depthEnabled) extra = ' \u2022 depth\u2605';
-  if(meshMode===3 && allMeshes.size > 0) extra = ' \u2022 occluding';
-  showToast(MESH_MODE_LABELS[meshMode] + extra, 1800);
+  if(meshMode===1){ extra=(allMeshes.size>0?' \u2022 '+allMeshes.size+' XRMesh':'')+(planeFills.size>0?' \u2022 '+planeFills.size+' planes':''); }
+  if(meshMode===2){ extra=depthEnabled?' \u2022 depth\u2605':(planeFills.size>0?' \u2022 '+planeFills.size+' fills':'' ); }
+  if(meshMode===3){ extra=depthEnabled?' \u2022 depth occlusion':(allMeshes.size>0?' \u2022 XRMesh occluding':' \u2022 scanning for depth\u2026'); }
+  showToast(MESH_MODE_LABELS[meshMode]+(extra||''), 2200);
 });
+/* Long-press surfBtn: show chrome flag instructions for XRMesh */
+(function(){
+  var _st=null;
+  el('surfBtn').addEventListener('pointerdown',function(){
+    _st=setTimeout(function(){
+      showToast('XRMesh: open chrome://flags \u2192 search webxr-incubations \u2192 Enable \u2192 Relaunch',6000);
+    },1000);
+  });
+  ['pointerup','pointercancel'].forEach(function(ev){
+    el('surfBtn').addEventListener(ev,function(){ clearTimeout(_st); });
+  });
+})();
 
 /* ── Extend updatePlaneWireframes to build solid fills ──────────────────── */
 var _origUpdatePlaneWireframes = updatePlaneWireframes;
@@ -5392,17 +5564,29 @@ var depthEnabled   = false;
 var DEPTH_GRID     = 32;    /* 32×32 = 1024 sample points */
 var DEPTH_INTERVAL = 4;     /* update every 4 frames */
 
+var depthOccluder = null;   /* depth-write-only twin of the depth cloud */
+
 function initDepthCloud(){
   if(depthCloud) return;
   var N = DEPTH_GRID * DEPTH_GRID;
   depthPosBuf = new Float32Array(N * 3);
   depthColBuf = new Float32Array(N * 3);
-  for(var i=0;i<N;i++){ depthColBuf[i*3]=0.1; depthColBuf[i*3+1]=0.6; depthColBuf[i*3+2]=0.8; }
+  /* Pre-fill positions off-screen (far below) so invalid samples don't occlude */
+  for(var i=0;i<N;i++){
+    depthPosBuf[i*3]=0; depthPosBuf[i*3+1]=-9000; depthPosBuf[i*3+2]=0;
+    depthColBuf[i*3]=0.1; depthColBuf[i*3+1]=0.6; depthColBuf[i*3+2]=0.8;
+  }
   var geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(depthPosBuf, 3));
   geo.setAttribute('color',    new THREE.BufferAttribute(depthColBuf, 3));
-  geo.drawRange.count = 0;
-  depthCloud = new THREE.Points(geo, new THREE.PointsMaterial({
+  geo.drawRange.count = N;   /* occluder always runs all N points */
+
+  /* Visible colour cloud (mode 2) */
+  var cloudGeo = new THREE.BufferGeometry();
+  cloudGeo.setAttribute('position', new THREE.BufferAttribute(depthPosBuf, 3));
+  cloudGeo.setAttribute('color',    new THREE.BufferAttribute(depthColBuf, 3));
+  cloudGeo.drawRange.count = 0;
+  depthCloud = new THREE.Points(cloudGeo, new THREE.PointsMaterial({
     vertexColors: true, size: 0.026,
     transparent: true, opacity: 0.80,
     depthWrite: false, sizeAttenuation: true
@@ -5410,6 +5594,18 @@ function initDepthCloud(){
   depthCloud.frustumCulled = false;
   depthCloud.visible = false;
   if(scene) scene.add(depthCloud);
+
+  /* Depth-only occluder (mode 3) — same positions, no colour output.
+     renderOrder=-10 ensures it runs BEFORE the plan (renderOrder=0/1)
+     so real-world surfaces write to the Z-buffer first.                */
+  depthOccluder = new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 18, sizeAttenuation: false,   /* screen-space pixels, covers grid gaps */
+    colorWrite: false, depthWrite: true, depthTest: false
+  }));
+  depthOccluder.frustumCulled = false;
+  depthOccluder.renderOrder = -10;
+  depthOccluder.visible = false;
+  if(scene) scene.add(depthOccluder);
 }
 
 function buildDepthRays(proj){
@@ -5431,7 +5627,8 @@ function buildDepthRays(proj){
 function updateDepthCloud(frame){
   if(!depthCloud || !scene) return;
   depthCloud.visible = (meshMode === 2);
-  if(meshMode !== 2) return;
+  if(depthOccluder) depthOccluder.visible = (meshMode === 3);
+  if(meshMode !== 2 && meshMode !== 3) return;
   depthFrameCount++;
   if(depthFrameCount % DEPTH_INTERVAL !== 0) return;
   if(!xrRefSpace) return;
@@ -5471,6 +5668,11 @@ function updateDepthCloud(frame){
   depthCloud.geometry.attributes.position.needsUpdate=true;
   depthCloud.geometry.attributes.color.needsUpdate=true;
   depthCloud.geometry.drawRange.count=count;
+  /* Also mark occluder positions dirty — it shares depthPosBuf */
+  if(depthOccluder){
+    depthOccluder.geometry.attributes.position.needsUpdate=true;
+    /* drawRange.count stays at N (all points) for max occlusion coverage */
+  }
 }
 
 
@@ -5888,7 +6090,35 @@ var ELEM_TYPES = [
   'IFCDOOR','IFCWINDOW','IFCPLATE'
 ];
 
-function ifcParseAndBuild(text){
+
+/* IFC GEOMETRY CACHE */
+var _icDb=null;
+function _icOpen(cb){
+  if(_icDb){cb(_icDb);return;}
+  var req=indexedDB.open('arfloor_ifc_cache',1);
+  req.onupgradeneeded=function(e){e.target.result.createObjectStore('geo',{keyPath:'key'});};
+  req.onsuccess=function(e){_icDb=e.target.result;cb(_icDb);};
+  req.onerror=function(){cb(null);};
+}
+function ifcCacheKey(text){
+  var h=5381;for(var i=0;i<Math.min(text.length,200000);i++){h=((h<<5)+h)+text.charCodeAt(i);h&=h;}
+  return 'ifc_'+Math.abs(h).toString(16)+'_'+text.length;
+}
+function ifcCacheSave(key,counts){
+  _icOpen(function(db){if(!db)return;try{var tx=db.transaction('geo','readwrite');tx.objectStore('geo').put({key:key,ts:Date.now(),counts:counts});}catch(e){}});
+}
+function ifcCacheLoad(key,cb){
+  _icOpen(function(db){
+    if(!db){cb(null);return;}
+    try{
+      var tx=db.transaction('geo','readonly'),req=tx.objectStore('geo').get(key);
+      req.onsuccess=function(e){var r=e.target.result;if(!r||Date.now()-r.ts>30*86400*1000){cb(null);}else{cb(r);}};
+      req.onerror=function(){cb(null);};
+    }catch(e){cb(null);}
+  });
+}
+
+function ifcParseAndBuild(text,_fromCache,_cacheKey){
   el('ifcStatus').textContent = 'Parsing\u2026';
   _placementCache = {};
 
@@ -5965,6 +6195,7 @@ function ifcParseAndBuild(text){
       el('ifcDropZone').classList.add('loaded');
       ifcLoaded=true;
       buildIfcLayerUI(counts);
+      if(_cacheKey&&!_fromCache) try{ifcCacheSave(_cacheKey,counts);}catch(e){}
     }
 
   }catch(err){
@@ -6015,7 +6246,13 @@ el('ifcFileInput').addEventListener('change',function(){
 function loadIfcFile(file){
   el('ifcStatus').textContent='Loading '+file.name+'\u2026';
   var reader=new FileReader();
-  reader.onload=function(ev){ ifcParseAndBuild(ev.target.result); };
+  reader.onload=function(ev){
+    var text=ev.target.result, ckey=ifcCacheKey(text);
+    ifcCacheLoad(ckey,function(cached){
+      if(cached) showToast('\u26a1 IFC loaded from cache',1800);
+      ifcParseAndBuild(text,!!cached,ckey);
+    });
+  };
   reader.onerror=function(){ el('ifcStatus').textContent='Read error'; };
   reader.readAsText(file);
 }
@@ -6041,7 +6278,9 @@ el('ifcYOffset').addEventListener('change',function(){
 var annotations     = [];     /* [{id, worldPos, text, color}] */
 var annotMode       = false;   /* true = next tap places annotation */
 var annotPending    = null;    /* worldPos waiting for text input */
-var annotColor      = '#f0d060';
+var annotColor='#f0d060';
+var annotCategory='general';
+var annotFilter=null;
 
 var ANNOT_DB   = 'arfloor_annots';
 var ANNOT_STORE= 'annots';
@@ -6088,7 +6327,8 @@ function addAnnotLabel(annot){
   var div = document.createElement('div');
   div.className = 'annot-label';
   div.id = 'annot_'+annot.id;
-  div.textContent = annot.text;
+  var _catIcon=typeof ANNOT_CAT_ICONS!=='undefined'&&annot.cat&&ANNOT_CAT_ICONS[annot.cat]?ANNOT_CAT_ICONS[annot.cat]+' ':'';
+  div.textContent = _catIcon+annot.text;
   div.style.color = '#111';
   div.style.background = annot.color;
   div.style.setProperty('--ac', annot.color);
@@ -6121,6 +6361,7 @@ function updateAnnotLabels(){
   annotations.forEach(function(a){
     var div = document.getElementById('annot_'+a.id);
     if(!div) return;
+    if(annotFilter && a.cat !== annotFilter){ div.style.display='none'; return; }
     var wp = new THREE.Vector3(a.worldPos.x, a.worldPos.y + 0.08, a.worldPos.z);
     var proj = wp.clone().project(camera);
     /* Only show if in front of camera */
@@ -6161,10 +6402,30 @@ el('annotPanel').querySelectorAll('.annot-swatch').forEach(function(s){
   });
 });
 
+
+/* Annotation category wiring */
+var ANNOT_CAT_ICONS={general:'\u270f',electrical:'\u26a1',structural:'\u25a0',plumbing:'\u25cf',hazard:'\u26a0'};
+el('annotPanel').querySelectorAll('.annot-cat[data-cat]').forEach(function(b){
+  b.addEventListener('click',function(){
+    el('annotPanel').querySelectorAll('.annot-cat[data-cat]').forEach(function(x){x.classList.remove('active');});
+    this.classList.add('active');
+    annotCategory=this.dataset.cat;
+  });
+});
+el('annotFilterBtn')&&el('annotFilterBtn').addEventListener('click',function(){
+  var cats=[null,'general','electrical','structural','plumbing','hazard'];
+  var ci=cats.indexOf(annotFilter);
+  annotFilter=cats[(ci+1)%cats.length];
+  this.style.opacity=annotFilter?'1':'.6';
+  this.textContent=annotFilter?(ANNOT_CAT_ICONS[annotFilter]||'?'):'\u22ee';
+  showToast('Filter: '+(annotFilter||'all annotations'),1300);
+  updateAnnotLabels();
+});
+
 el('annotSaveBtn').addEventListener('click', function(){
   var text = el('annotInput').value.trim();
   if(!text || !annotPending) return;
-  var annot = {id: annotUuid(), worldPos: annotPending, text: text, color: annotColor, ts: Date.now()};
+  var annot = {id: annotUuid(), worldPos: annotPending, text: text, color: annotColor, cat: annotCategory, ts: Date.now()};
   annotations.push(annot);
   addAnnotLabel(annot);
   annotSave();
@@ -6333,10 +6594,11 @@ function buildShareURL(){
   return location.href.split('#')[0] + '#arfs=' + encodeURIComponent(b64);
 }
 
-function showQR(){
+function showQR(readonly){
   if(!planBound){ showToast('Nothing to share yet \u2014 bind plan first', 2500); return; }
   var url = buildShareURL();
   if(!url){ return; }
+  if(readonly){ try{ var u2=new URL(url.split('#')[0]); u2.searchParams.set('readonly','1'); url=u2.toString()+(url.includes('#')?('#'+url.split('#')[1]):''); }catch(ex){} }
   el('qrBox').innerHTML = '';
   /* Lazy-load qrcode.js */
   function renderQR(){
@@ -6364,7 +6626,12 @@ function showQR(){
   var shareBtn = document.createElement('button');
   shareBtn.id='shareBtn'; shareBtn.className='hud-btn show';
   shareBtn.textContent='⇡ Share';
-  shareBtn.addEventListener('click', showQR);
+  shareBtn.addEventListener('click',function(){showQR(false);});
+  var roBtn=document.createElement('button');
+  roBtn.id='roShareBtn';roBtn.className='hud-btn show';roBtn.textContent='\uD83D\uDD12 View';
+  roBtn.title='Share read-only view link';
+  roBtn.addEventListener('click',function(){showQR(true);});
+  el('boundTools').appendChild(roBtn);
   el('boundTools').appendChild(shareBtn);
 })();
 
@@ -6429,15 +6696,23 @@ function tryReLocalise(){
   var improved = false;
 
   /* Step 1: if compass heading known, refine planYaw */
-  if(fusedHeading !== null && xrNorthOffset !== null){
+  if(fusedHeading !== null){
+    /* Reconstruct xrNorthOffset if missing: invert the placement formula.
+       At placement: xrNorthOffset = fusedHeading, planYaw = -(hdg-offset)*π/180 = 0.
+       After edits: planYaw = -(fusedHeading - xrNorthOffset)*π/180
+       So: xrNorthOffset = fusedHeading + planYaw*(180/π)                    */
+    if(xrNorthOffset === null){
+      xrNorthOffset = fusedHeading + planYaw * (180 / Math.PI);
+      showToast('↻ Compass offset reconstructed', 1800);
+    }
     var compassYaw = -(fusedHeading - xrNorthOffset) * Math.PI / 180;
-    /* Blend toward compass — don't snap, just nudge */
+    /* Normalise to ±π */
     var delta = compassYaw - planYaw;
-    /* Wrap delta to ±π */
     while(delta >  Math.PI) delta -= 2*Math.PI;
     while(delta < -Math.PI) delta += 2*Math.PI;
-    if(Math.abs(delta) < 0.35 /* ~20° */){
-      planYaw += delta * 0.4;
+    /* Apply if within 45° — larger jumps suggest bad compass, skip */
+    if(Math.abs(delta) < 0.79 /* ~45° */){
+      planYaw += delta * 0.5;
       improved = true;
     }
   }
@@ -6464,7 +6739,234 @@ function tryReLocalise(){
   }
 }
 
+
+/* RESIDUAL HEATMAP */
+var _heatCanvas=null,_heatCtx=null,_heatTex=null,_heatMesh=null,heatmapEnabled=false;
+function _initHeat(){ if(_heatCanvas)return; _heatCanvas=document.createElement('canvas'); _heatCanvas.width=_heatCanvas.height=256; _heatCtx=_heatCanvas.getContext('2d'); }
+function updateHeatmap(sol,cornersArr,uvPicksArr){
+  if(!heatmapEnabled||!planBound||!boundMesh||!sol||!cornersArr||cornersArr.length<2)return;
+  _initHeat();
+  var N=cornersArr.length,W=256,cosY=Math.cos(sol.yaw),sinY=Math.sin(sol.yaw);
+  var pR=cornersArr.map(function(c,i){
+    var uv=uvPicksArr[i]; if(!uv)return 0;
+    var rpx=sol.scale*(cosY*(uv.u-.5)-sinY*(uv.v-.5))+sol.tx;
+    var rpz=sol.scale*(sinY*(uv.u-.5)+cosY*(uv.v-.5))+sol.tz;
+    var dx=c.worldPos.x-rpx,dz=c.worldPos.z-rpz;
+    return Math.sqrt(dx*dx+dz*dz);
+  });
+  _heatCtx.clearRect(0,0,W,W);
+  cornersArr.forEach(function(c,i){
+    var uv=uvPicksArr[i]; if(!uv)return;
+    var res=pR[i]; if(res<.005)return;
+    var cx=uv.u*W, cy=(1-uv.v)*W, rad=Math.max(W*.1,W*.28*(1-Math.min(1,res/.15)));
+    var r,g,b,a;
+    if(res<.03){r=240;g=208;b=96;a=Math.min(.65,res/.03*.65);}
+    else{r=232;g=79;b=43;a=Math.min(.8,(res-.03)/.05*.8);}
+    var gr=_heatCtx.createRadialGradient(cx,cy,0,cx,cy,rad);
+    gr.addColorStop(0,'rgba('+r+','+g+','+b+','+a+')');
+    gr.addColorStop(1,'rgba('+r+','+g+','+b+',0)');
+    _heatCtx.fillStyle=gr;
+    _heatCtx.beginPath();_heatCtx.arc(cx,cy,rad,0,Math.PI*2);_heatCtx.fill();
+  });
+  if(!_heatTex){
+    _heatTex=new THREE.CanvasTexture(_heatCanvas);
+    var hG=new THREE.PlaneGeometry(1,1);
+    hG.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+    var uvA=hG.attributes.uv;
+    for(var i=0;i<uvA.count;i++) uvA.setY(i,1-uvA.getY(i));
+    uvA.needsUpdate=true;
+    _heatMesh=new THREE.Mesh(hG,new THREE.MeshBasicMaterial({map:_heatTex,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false}));
+    _heatMesh.renderOrder=3;
+    if(planRigidGroup) planRigidGroup.add(_heatMesh);
+  } else { _heatTex.needsUpdate=true; }
+  if(_heatMesh){
+    var asp=1; if(boundMesh&&boundMesh.geometry&&boundMesh.geometry.parameters){var p=boundMesh.geometry.parameters;asp=(p.width&&p.height)?p.width/p.height:1;}
+    _heatMesh.scale.set(planScale*asp,1,planScale);
+    if(!_heatMesh.parent&&planRigidGroup) planRigidGroup.add(_heatMesh);
+    _heatMesh.visible=true;
+  }
+}
+(function(){
+  var btn=document.createElement('button');
+  btn.id='heatBtn';btn.className='hud-btn';btn.title='Toggle residual heatmap';btn.textContent='\u2299';
+  btn.addEventListener('click',function(){
+    heatmapEnabled=!heatmapEnabled;
+    btn.classList.toggle('active',heatmapEnabled);
+    if(!heatmapEnabled&&_heatMesh) _heatMesh.visible=false;
+    else if(heatmapEnabled) updateHeatmap(window._lastSol,corners,uvPicks);
+    showToast('Heatmap '+(heatmapEnabled?'ON':'OFF'),1500);
+  });
+  el('arTools').appendChild(btn);
+})();
+
+
+/* MAGNETOMETER CALIBRATION */
+var _mcOverlay=null,_mcDismissed=false;
+function _buildMcOverlay(){
+  if(_mcOverlay)return;
+  _mcOverlay=document.createElement('div');
+  _mcOverlay.style.cssText='position:fixed;inset:0;background:rgba(10,10,20,.9);z-index:9990;display:none;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mono,monospace);color:#f0ece8;padding:24px;text-align:center;gap:14px;';
+  _mcOverlay.innerHTML='<div style="font-size:52px;animation:mcSpin 3s linear infinite">\u221e</div>'
+    +'<div style="font-size:14px;font-weight:700;letter-spacing:.1em">COMPASS CALIBRATION</div>'
+    +'<div style="font-size:11px;opacity:.7;max-width:260px;line-height:1.6">Move phone in a slow figure-8 to calibrate the magnetometer. This improves plan orientation accuracy.</div>'
+    +'<div style="width:180px;height:5px;background:rgba(255,255,255,.12);border-radius:3px;overflow:hidden"><div id="mcFill" style="height:100%;background:#2be87a;width:0%;transition:width .3s"></div></div>'
+    +'<button id="mcSkip" style="padding:7px 18px;background:transparent;border:1px solid rgba(255,255,255,.25);color:#f0ece8;font-family:var(--mono);font-size:11px;border-radius:4px;cursor:pointer">Skip for now</button>';
+  if(!document.getElementById('_mcStyle')){var s=document.createElement('style');s.id='_mcStyle';s.textContent='@keyframes mcSpin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}';document.head.appendChild(s);}
+  document.body.appendChild(_mcOverlay);
+  document.getElementById('mcSkip').onclick=function(){_mcDismissed=true;_mcOverlay.style.display='none';};
+}
+function updateMagCal(variance){
+  if(_mcDismissed||(typeof currentStep!=='undefined'&&currentStep>1))return;
+  _buildMcOverlay();
+  var bad=variance>25, q=Math.max(0,Math.min(100,100*(1-variance/25)));
+  var fill=document.getElementById('mcFill');
+  if(fill) fill.style.width=q+'%';
+  if(bad&&_mcOverlay.style.display==='none') _mcOverlay.style.display='flex';
+  else if(!bad&&_mcOverlay.style.display!=='none') _mcOverlay.style.display='none';
+}
+var _origUFH=updateFusedHeading;
+updateFusedHeading=function(cA,aR,ts){
+  _origUFH(cA,aR,ts);
+  if(typeof compassHistory!=='undefined'&&compassHistory.length>=4){
+    var hm=0; compassHistory.forEach(function(h){hm+=h;}); hm/=compassHistory.length;
+    var hv=0; compassHistory.forEach(function(h){var d=h-hm;while(d>180)d-=360;while(d<-180)d+=360;hv+=d*d;}); hv/=compassHistory.length;
+    updateMagCal(hv);
+  }
+};
+
+
+/* SESSION DRIFT DETECTION */
+var _driftChecked=false;
+setInterval(function(){
+  if(!planBound||_driftChecked||typeof gpsLat==='undefined'||gpsLat===null||typeof gpsAcc==='undefined'||gpsAcc>20)return;
+  _driftChecked=true;
+  var drifted=0;
+  corners.forEach(function(c){
+    if(!c.gps)return;
+    var d=haversineM(c.gps.lat,c.gps.lng,gpsLat,gpsLng);
+    if(d>2.0) drifted++;
+  });
+  if(drifted>0){
+    showToast('\u26a0 Session may be stale \u2014 '+drifted+' anchor'+(drifted>1?'s':'')+' placed >2m from current GPS. Re-survey recommended.',7000);
+    if(navigator.vibrate) navigator.vibrate([100,50,100,50,200]);
+  }
+},3500);
+
+
+/* DXF + SVG EXPORT of georeferenced plan */
+function buildDXF(){
+  if(!planBound||!corners.length)return null;
+  var lines=[
+    '0\nSECTION','2\nHEADER',
+    '9\n$ACADVER','1\nAC1009',
+    '9\n$EXTMIN','10\n-1000.0','20\n-1000.0',
+    '9\n$EXTMAX','10\n1000.0','20\n1000.0',
+    '0\nENDSEC',
+    '0\nSECTION','2\nENTITIES'
+  ];
+  /* Anchor points as POINT entities */
+  corners.forEach(function(c,i){
+    var gps=c.gps;
+    lines.push('0\nPOINT','8\nANCHORS',
+      '10\n'+c.worldPos.x.toFixed(4),'20\n'+c.worldPos.z.toFixed(4),'30\n0.0',
+      '1\nA'+(i+1)+(gps?' GPS:'+gps.lat.toFixed(6)+','+gps.lng.toFixed(6):'')
+    );
+  });
+  /* GPS survey waypoints */
+  if(typeof waypoints!=='undefined') waypoints.forEach(function(w,i){
+    lines.push('0\nPOINT','8\nGPS_SURVEY',
+      '10\n'+w.world.x.toFixed(4),'20\n'+w.world.z.toFixed(4),'30\n0.0',
+      '1\nP'+(i+1)+' GPS:'+w.gps.lat.toFixed(6)+','+w.gps.lng.toFixed(6)
+    );
+  });
+  /* Plan bounding box */
+  var hw=planScale*.5, hh=planScale*.5;
+  var cosY=Math.cos(planYaw),sinY=Math.sin(planYaw);
+  function rot(x,z){return{x:cosY*x-sinY*z+planOrigin.x, z:sinY*x+cosY*z+planOrigin.z};}
+  var c0=rot(-hw,-hh),c1=rot(hw,-hh),c2=rot(hw,hh),c3=rot(-hw,hh);
+  [[c0,c1],[c1,c2],[c2,c3],[c3,c0]].forEach(function(seg){
+    lines.push('0\nLINE','8\nPLAN_BOUNDARY',
+      '10\n'+seg[0].x.toFixed(4),'20\n'+seg[0].z.toFixed(4),'30\n0.0',
+      '11\n'+seg[1].x.toFixed(4),'21\n'+seg[1].z.toFixed(4),'31\n0.0'
+    );
+  });
+  lines.push('0\nENDSEC','0\nEOF');
+  return lines.join('\n');
+}
+
+function buildSVG(){
+  if(!planBound||!corners.length)return null;
+  var W=800,H=600,pad=40;
+  /* Collect all points to compute bounds */
+  var pts=corners.map(function(c){return{x:c.worldPos.x,y:c.worldPos.z,label:null};});
+  if(typeof waypoints!=='undefined') waypoints.forEach(function(w){pts.push({x:w.world.x,y:w.world.z});});
+  var xs=pts.map(function(p){return p.x;}),zs=pts.map(function(p){return p.y;});
+  var minX=Math.min.apply(null,xs)-0.5,maxX=Math.max.apply(null,xs)+0.5;
+  var minZ=Math.min.apply(null,zs)-0.5,maxZ=Math.max.apply(null,zs)+0.5;
+  var scX=(W-pad*2)/(maxX-minX), scZ=(H-pad*2)/(maxZ-minZ), sc=Math.min(scX,scZ);
+  function tx(x){return pad+(x-minX)*sc;}
+  function ty(z){return pad+(z-minZ)*sc;}
+  var svgParts=['<?xml version="1.0" encoding="UTF-8"?>',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">',
+    '<rect width="'+W+'" height="'+H+'" fill="#0a0a14"/>',
+    '<text x="10" y="18" fill="#f0d060" font-size="11" font-family="monospace">ARfloor export — yaw:'+
+      (planYaw*180/Math.PI).toFixed(1)+'deg scale:'+planScale.toFixed(3)+'m/UV</text>'
+  ];
+  /* Plan bounding box */
+  var hw=planScale*.5,hh=planScale*.5,cosY=Math.cos(planYaw),sinY=Math.sin(planYaw);
+  function rot(x,z){return{x:cosY*x-sinY*z+planOrigin.x,z:sinY*x+cosY*z+planOrigin.z};}
+  var c0=rot(-hw,-hh),c1=rot(hw,-hh),c2=rot(hw,hh),c3=rot(-hw,hh);
+  svgParts.push('<polygon points="'+[c0,c1,c2,c3].map(function(p){return tx(p.x).toFixed(1)+','+ty(p.z).toFixed(1);}).join(' ')+'" fill="none" stroke="#4da6ff" stroke-width="1.5" stroke-dasharray="6,3"/>');
+  /* Anchor points */
+  corners.forEach(function(c,i){
+    var cx=tx(c.worldPos.x),cy=ty(c.worldPos.z);
+    svgParts.push('<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="5" fill="#f0d060"/>');
+    svgParts.push('<text x="'+(cx+7).toFixed(1)+'" y="'+(cy+4).toFixed(1)+'" fill="#f0d060" font-size="10" font-family="monospace">A'+(i+1)+(c.gps?' (GPS)':'')+'</text>');
+  });
+  /* GPS waypoints */
+  if(typeof waypoints!=='undefined') waypoints.forEach(function(w,i){
+    var cx=tx(w.world.x),cy=ty(w.world.z);
+    svgParts.push('<rect x="'+(cx-4).toFixed(1)+'" y="'+(cy-4).toFixed(1)+'" width="8" height="8" fill="#2be87a"/>');
+    svgParts.push('<text x="'+(cx+6).toFixed(1)+'" y="'+(cy+4).toFixed(1)+'" fill="#2be87a" font-size="10" font-family="monospace">P'+(i+1)+'</text>');
+  });
+  svgParts.push('</svg>');
+  return svgParts.join('\n');
+}
+
+function exportDXF(){
+  var dxf=buildDXF();
+  if(!dxf){showToast('Bind plan first',2000);return;}
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([dxf],{type:'application/dxf'}));
+  a.download='arfloor_'+(currentPdfName||'export').replace(/[^a-z0-9_]/gi,'_').slice(0,30)+'.dxf';
+  document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);
+  showToast('\u2193 DXF exported',2000);
+}
+function exportSVG(){
+  var svg=buildSVG();
+  if(!svg){showToast('Bind plan first',2000);return;}
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+  a.download='arfloor_'+(currentPdfName||'export').replace(/[^a-z0-9_]/gi,'_').slice(0,30)+'.svg';
+  document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);
+  showToast('\u2193 SVG exported',2000);
+}
+
+/* Add DXF + SVG buttons to boundTools */
+(function(){
+  var dBtn=document.createElement('button');
+  dBtn.className='hud-btn show';dBtn.textContent='\u2193 DXF';dBtn.title='Export georeferenced DXF';
+  dBtn.addEventListener('click',exportDXF);
+  el('boundTools').appendChild(dBtn);
+  var sBtn=document.createElement('button');
+  sBtn.className='hud-btn show';sBtn.textContent='\u2193 SVG';sBtn.title='Export georeferenced SVG';
+  sBtn.addEventListener('click',exportSVG);
+  el('boundTools').appendChild(sBtn);
+})();
+
 reloBtn.addEventListener('click', tryReLocalise);
+el('undoBtn') && el('undoBtn').addEventListener('click', undoLastAnchor);
+document.addEventListener('keydown',function(e){ if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undoLastAnchor();} });
 
 /* Show reloBtn once plan is bound (appended to arTools) */
 var _origOnPlanBound = onPlanBound;
@@ -6729,6 +7231,38 @@ document.addEventListener('click', function(){ el('pgDropdown').classList.remove
 
 
 })();
+
+/* BATTERY WARNING */
+(function(){
+  if(!navigator.getBattery)return;
+  var w20=false,w10=false;
+  function chk(b){
+    if(b.charging){if(b.level>.25){w20=false;w10=false;}return;}
+    var p=Math.round(b.level*100);
+    if(b.level<=.10&&!w10){w10=true;showToast('\u26a0 Battery critically low ('+p+'%) \u2014 AR may terminate',6000);if(navigator.vibrate)navigator.vibrate([100,50,100,50,200]);}
+    else if(b.level<=.20&&!w20){w20=true;showToast('\u26a0 Battery low ('+p+'%) \u2014 save your session',4000);if(navigator.vibrate)navigator.vibrate([100,50,100]);}
+  }
+  navigator.getBattery().then(function(b){chk(b);b.addEventListener('levelchange',function(){chk(b);});b.addEventListener('chargingchange',function(){chk(b);});}).catch(function(){});
+})();
+
+
+/* READ-ONLY SHARE MODE */
+(function(){
+  var p=new URLSearchParams(location.search);
+  if(!p.has('readonly'))return;
+  window._readonlyMode=true;
+  function applyRO(){
+    ['scBtn','scSecondary','scAnchorBtns','ySliderRow','noteBtn','undoBtn',
+     'heatBtn','tapeBtn','exportBtn','boundTools','ifcBtn'].forEach(function(id){
+      var e=el(id); if(e) e.style.display='none';
+    });
+    if(el('hudHint')) el('hudHint').textContent='\uD83D\uDD12 View-only mode';
+    showToast('\uD83D\uDD12 View-only mode \u2014 plan is read-only',3500);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',applyRO);
+  else setTimeout(applyRO,150);
+})();
+
 </script>
 </body>
 </html>
