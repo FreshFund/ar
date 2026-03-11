@@ -2563,6 +2563,7 @@ function addCornerVisual(pos,idx){
     var line=new THREE.Line(geo,new THREE.LineBasicMaterial({color:col}));
     scene.add(line); wireLines.push(line);
   }
+  return dot;
 }
 function clearWireVisuals(){
   if(!scene)return;
@@ -4685,9 +4686,9 @@ function commitAnchor(rx,ry,rz,wasSnapped){
       };
       corners.push(corner);
       haptic(HAPTIC_ANCHOR);
-      anchorUndoStack.push({corner:corner, sphereMesh:sphere, labelEl:numLabel});
+      var _anchorDot = addCornerVisual(fp,corners.length-1);
+      anchorUndoStack.push({corner:corner, sphereMesh:_anchorDot, labelEl:null});
       if(anchorUndoStack.length>MAX_UNDO) anchorUndoStack.shift();
-      addCornerVisual(fp,corners.length-1);
       updateCornerBadge();
       el('hudHint').textContent=wasSnapped?'Column '+corners.length+' \u2014 snapped \u2713':'Column '+corners.length+' anchored';
 
