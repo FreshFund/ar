@@ -1443,7 +1443,11 @@ function applyMeshContextVisibility(ctx){
 }
 
 function updateSceneMeshes(frame, refSpace){
-  if(!frame.detectedMeshes) return;
+  if(!frame.detectedMeshes){
+    if(!_meshDiagDone){ _meshDiagDone=true; showToast('\u26a0 XRMesh unavailable \u2014 long-press \u2b21 for setup instructions',4000); }
+    return;
+  }
+  if(!_meshDiagDone){ _meshDiagDone=true; showToast('\u2605 XRMesh active',1800); }
   var meshCount = 0, floorSeen = false, wallSeen = false;
 
   /* ── Remove stale meshes (using Set.has — from the sample) ─────────── */
@@ -1517,7 +1521,8 @@ function updateSceneMeshes(frame, refSpace){
       allMeshes.set(mesh, ctx);
       applyMeshContextVisibility(ctx);
       var vertFmt = (mesh.vertices && mesh.vertices[0] && typeof mesh.vertices[0]==='object') ? 'obj' : 'buf';
-      showToast('★ XRMesh #'+ctx.id+' • '+label+' ('+verts.length+'v/'+vertFmt+')', 1800);
+      var vertCount = mesh.vertices ? mesh.vertices.length : 0;
+      showToast('★ XRMesh #'+ctx.id+' \u2022 '+label+' ('+vertCount+'v / '+vertFmt+')', 1800);
     }
   });
 
@@ -2612,14 +2617,23 @@ function doReset(){
 
 /* Separate map for floor grid segments so they are cleaned up with their plane */
 var planeGrids=new Map();  /* XRPlane → THREE.LineSegments */
+var _planeDiagDone=false, _meshDiagDone=false, _planeFirstSeen=false;
 
 function updatePlaneWireframes(frame, refSpace){
+  /* One-time diagnostics so the user knows what's happening */
+  if(!_planeDiagDone){
+    _planeDiagDone=true;
+    if(!frame.detectedPlanes){
+      showToast('\u26a0 Plane detection unavailable \u2014 move to a well-lit flat surface or check device ARCore support',5000);
+    }
+  }
   if(!frame.detectedPlanes) return;
   planesEnabled=true;
   var seen=new Set();
 
   frame.detectedPlanes.forEach(function(plane){
     if(!plane.planeSpace||!plane.polygon||plane.polygon.length<3) return;
+    if(!_planeFirstSeen){ _planeFirstSeen=true; showToast('\u2705 Surface detected \u2014 scanning room\u2026', 2500); }
     try{
       var pp=frame.getPose(plane.planeSpace,refSpace);
       if(!pp) return;
@@ -4179,15 +4193,18 @@ function reSolvePlan(){
   }
 
   /* Rotation: hard-set on first solve; after that protect planYaw.
-     If compass absent (headingLocked=false), use a very gentle EMA so
-     Kabsch provides slow correction without spinning on anchor drift. */
+     Post-bind the plan orientation is owned by the physical anchors.
+     We only apply a Kabsch correction when the delta is large enough
+     to indicate a real anchor change (>5°), not sub-degree tracking
+     noise — which was causing the plan to slowly rotate post-bind. */
   if(!planBound){
     planYaw=sol.yaw;        /* first solve: Kabsch owns orientation */
   } else if(!headingLocked){
-    /* No compass — blend Kabsch yaw very gently (0.5%/solve) to avoid spin */
+    /* No compass — only correct if Kabsch suggests a real change (new anchor
+       added, anchor moved >5°). Ignores normal per-frame tracking noise. */
     var kd=sol.yaw-planYaw;
     while(kd>Math.PI)kd-=2*Math.PI; while(kd<-Math.PI)kd+=2*Math.PI;
-    if(Math.abs(kd)<0.52/*30°*/) planYaw+=kd*0.005;
+    if(Math.abs(kd)>0.087/*5°*/ && Math.abs(kd)<0.52/*30°*/) planYaw+=kd*0.12;
   }
 
   /* ── Ruler scale constraint ──
@@ -4605,27 +4622,30 @@ function startWebXR(){
      If the browser/device rejects it, fall back to optional-only session.
      This ensures frame.detectedMeshes is populated on capable devices.   */
   var SESSION_OPTS_BASE = {
-    optionalFeatures:['plane-detection','anchors','dom-overlay','scene-understanding','depth-sensing'],
+    optionalFeatures:['anchors','dom-overlay','scene-understanding','depth-sensing'],
     domOverlay:{root:el('xrOverlay')},
     depthSensing:{
       usagePreference:['cpu-optimized','gpu-optimized'],
       dataFormatPreference:['luminance-alpha','float32']
     }
   };
-  function doRequestSession(withMeshRequired){
+  /* Try plane-detection + mesh-detection as required; fall back progressively */
+  function doRequestSession(withMeshRequired, withPlaneRequired){
     var opts = Object.assign({}, SESSION_OPTS_BASE);
-    if(withMeshRequired){
-      opts.requiredFeatures = ['hit-test','mesh-detection'];
-    } else {
-      opts.requiredFeatures = ['hit-test'];
-      opts.optionalFeatures = SESSION_OPTS_BASE.optionalFeatures.concat(['mesh-detection']);
-    }
+    var required = ['hit-test'];
+    if(withMeshRequired)  required.push('mesh-detection');
+    if(withPlaneRequired) required.push('plane-detection');
+    opts.requiredFeatures = required;
+    /* Anything not required stays optional */
+    var extra = [];
+    if(!withMeshRequired)  extra.push('mesh-detection');
+    if(!withPlaneRequired) extra.push('plane-detection');
+    opts.optionalFeatures = SESSION_OPTS_BASE.optionalFeatures.concat(extra);
     return navigator.xr.requestSession('immersive-ar', opts);
   }
-  doRequestSession(true).catch(function(){
-    showToast('mesh-detection not required – trying optional', 2000);
-    return doRequestSession(false);
-  }).then(function(session){
+  doRequestSession(true, true)
+    .catch(function(){ showToast('mesh-detection not required \u2014 trying plane-only', 2000); return doRequestSession(false, true); })
+    .catch(function(){ showToast('plane-detection not required \u2014 hit-test only', 2000); return doRequestSession(false, false); }).then(function(session){
     xrSession=session;
     renderer.xr.setReferenceSpaceType('local');
     renderer.xr.setSession(session);
@@ -4927,6 +4947,16 @@ function commitAnchor(rx,ry,rz,wasSnapped){
 ═══════════════════════════════ */
 function xrFrame(frame){
   if(!frame)return;
+
+  /* Sync reference space with Three.js's internal space every frame.
+     renderer.xr.getReferenceSpace() returns the exact same space that
+     Three.js uses to position the XR camera — guaranteeing that plane/mesh
+     poses we compute are in the same coordinate system as rendered geometry. */
+  if(renderer && renderer.xr && renderer.xr.getReferenceSpace){
+    var _threeRS = renderer.xr.getReferenceSpace();
+    if(_threeRS) xrRefSpace = _threeRS;
+  }
+
   renderer.render(scene,camera);
 
   /* Live mesh diagnostic - updates statusBar every 90 frames */
@@ -5349,7 +5379,7 @@ el('restoreNoBtn').addEventListener('click', function(){
      frame.getDepthInformation → ARCore depth buffer → point cloud (mode 2)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-var meshMode = 1;   /* 0=off 1=wire 2=solid 3=occlude */
+var meshMode = 2;   /* 0=off 1=wire 2=solid 3=occlude  — default solid so fills show on first scan */
 
 var MESH_MODE_LABELS  = ['\u2b21 off', '\u2b21 wire', '\u2b21 solid', '\u2b21 occlude'];
 var MESH_MODE_CLASSES = ['', 'active-b', 'active-g', 'active-y'];
@@ -5483,8 +5513,9 @@ function applyMeshMode(){
   }
 }
 
-/* Initialise button label */
+/* Initialise button label for default mode 2 */
 el('surfBtn').textContent = MESH_MODE_LABELS[meshMode];
+el('surfBtn').className = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' '+MESH_MODE_CLASSES[meshMode] : '');
 
 el('surfBtn').addEventListener('click', function(){
   meshMode = (meshMode + 1) % MESH_MODE_LABELS.length;
