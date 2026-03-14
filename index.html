@@ -1501,14 +1501,17 @@ function updateSceneMeshes(frame, refSpace){
 
       var solidMesh = new THREE.Mesh(geo, getMeshSolidMat(label));
       solidMesh.matrixAutoUpdate = false;
+      solidMesh.frustumCulled = false;
       scene.add(solidMesh);
 
       var wireMesh = new THREE.Mesh(geo, getMeshWireMat());
       wireMesh.matrixAutoUpdate = false;
+      wireMesh.frustumCulled = false;
       scene.add(wireMesh);
 
       var occludeMesh = new THREE.Mesh(geo, getMeshOccludeMat());
       occludeMesh.matrixAutoUpdate = false;
+      occludeMesh.frustumCulled = false;
       scene.add(occludeMesh);
 
       var ctx = {
@@ -2670,13 +2673,14 @@ function updatePlaneWireframes(frame, refSpace){
         var geo=new THREE.BufferGeometry().setFromPoints(lifted);
         var mat=new THREE.LineBasicMaterial({color:col,transparent:true,opacity:isWall?0.75:0.55});
         var loop=new THREE.Line(geo,mat);
+        loop.visible = (meshMode === 1);
         scene.add(loop);
         planeWires.set(plane,loop);
 
         /* For floor planes draw a fill grid — stored separately for proper cleanup */
         if(!isWall){
           var grid=buildFloorGrid(pm, plane.polygon, col);
-          if(grid){ scene.add(grid); planeGrids.set(plane,grid); }
+          if(grid){ grid.visible = (meshMode === 1); scene.add(grid); planeGrids.set(plane,grid); }
         }
 
         /* For wall planes run column-face classification */
@@ -5387,24 +5391,28 @@ var MESH_MODE_CLASSES = ['', 'active-b', 'active-g', 'active-y'];
 /* ── Plane solid fills — from detectedPlanes, always works ──────────────
    Uses earcut.js for correct concave polygon triangulation.
    (ARCore floor outlines are often L-shaped after scanning furniture.)  */
-var planeFills = new Map();      /* XRPlane → THREE.Mesh */
-var planeFillGeoBuf = new Map(); /* XRPlane → {posArr, vertCount} for in-place update */
+/* ═══════════════════════════════════════════════════════════════════════════
+   PLANE FILLS  (detectedPlanes — always available when plane-detection granted)
+   ─────────────────────────────────────────────────────────────────────────
+   One THREE.Mesh per XRPlane.  Floor = XZ triangulated via earcut.
+   Walls = vertical quad from polygon bounding box (earcut on XZ is degenerate
+   for vertical planes).
+   All visibility is set at creation AND synced in applyMeshMode.
+   ═══════════════════════════════════════════════════════════════════════════ */
+var planeFills    = new Map();   /* XRPlane → {mesh, posArr, tris, vertCount, isWall} */
 
-var PLANE_FILL_OPACITY_FLOOR = 0.42;
-var PLANE_FILL_OPACITY_WALL  = 0.50;
-var PLANE_FILL_COL = { floor: 0x1f8a55, wall: 0x1f4a9a };
+var PLANE_FILL_OPACITY_FLOOR = 0.45;
+var PLANE_FILL_OPACITY_WALL  = 0.38;
+var PLANE_FILL_COL = { floor: 0x00cc66, wall: 0x3377ff };
 
-/* Earcut triangulation — robust for convex AND concave polygons */
-function earcutTriangulate(pts){
-  /* pts: Array of THREE.Vector3 in world space */
-  /* Remove closing duplicate */
-  var loop = (pts.length > 1 && pts[0].distanceTo(pts[pts.length-1]) < 0.001)
-    ? pts.slice(0,-1) : pts;
-  var n = loop.length;
-  if(n < 3) return null;
+/* ── Earcut helper: projects world-space pts to XZ, triangulates, returns geo ── */
+function _earcutFloor(wpts){
+  /* Remove closing duplicate if polygon is explicitly closed */
+  var loop = (wpts.length > 1 && wpts[0].distanceTo(wpts[wpts.length-1]) < 0.001)
+    ? wpts.slice(0, -1) : wpts.slice();
+  if(loop.length < 3) return null;
 
-  /* Project to XZ plane for 2D triangulation (floor planes are horizontal) */
-  /* For wall planes we project to the plane's local XY */
+  /* Flat XZ array for earcut */
   var flat = [];
   loop.forEach(function(p){ flat.push(p.x, p.z); });
 
@@ -5412,134 +5420,133 @@ function earcutTriangulate(pts){
   if(typeof earcut !== 'undefined'){
     tris = earcut(flat, null, 2);
   } else {
-    /* Fallback: centroid fan */
     tris = [];
-    for(var i=1; i<n-1; i++){ tris.push(0, i, i+1); }
+    for(var i=1; i<loop.length-1; i++) tris.push(0, i, i+1);
   }
   if(!tris || tris.length < 3) return null;
 
-  /* Build geometry */
-  var posArr = new Float32Array(tris.length * 3);
-  for(var t=0; t<tris.length; t++){
-    var vi = tris[t];
-    posArr[t*3]   = loop[vi].x;
-    posArr[t*3+1] = loop[vi].y;
-    posArr[t*3+2] = loop[vi].z;
+  /* Build indexed geometry from original 3D world points */
+  var posArr = new Float32Array(loop.length * 3);
+  for(var vi=0; vi<loop.length; vi++){
+    posArr[vi*3]=loop[vi].x; posArr[vi*3+1]=loop[vi].y; posArr[vi*3+2]=loop[vi].z;
   }
   var geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-  geo.computeVertexNormals();
-  return {geo: geo, posArr: posArr, tris: tris, loop: loop};
+  geo.setIndex(new THREE.BufferAttribute(new Uint32Array(tris), 1));
+  geo.computeBoundingBox(); geo.computeBoundingSphere();
+  return { geo: geo, posArr: posArr, tris: tris, n: loop.length };
 }
 
-function updatePlaneFill(plane, pm, isWall){
-  /* Skip wall planes - earcut on XZ is collinear for vertical planes */
-  if(isWall) return;
-  /* Transform to world space FIRST, then add world-Y lift to clear z-fight */
-  var wpts = plane.polygon.map(function(v){
-    var p = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(pm);
-    p.y += 0.012;
-    return p;
+/* ── Wall fill: vertical quad from polygon world-space bounding box ── */
+function _wallQuad(wpts){
+  if(wpts.length < 2) return null;
+  /* World bounding box of the wall polygon */
+  var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  wpts.forEach(function(p){
+    if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
+    if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y;
+    if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z;
   });
-
-  var existing  = planeFills.get(plane);
-  var prevData  = planeFillGeoBuf.get(plane);
-  var needRebuild = !existing || !prevData || prevData.vertCount !== wpts.length;
-
-  if(needRebuild){
-    if(existing){ scene.remove(existing); existing.geometry.dispose(); existing.material.dispose(); }
-    var result = earcutTriangulate(wpts);
-    if(!result) return;
-    var col = isWall ? PLANE_FILL_COL.wall : PLANE_FILL_COL.floor;
-    var opa = isWall ? PLANE_FILL_OPACITY_WALL : PLANE_FILL_OPACITY_FLOOR;
-    var fill = new THREE.Mesh(result.geo, new THREE.MeshBasicMaterial({
-      color: col, transparent: true, opacity: opa,
-      side: THREE.DoubleSide, depthWrite: false
-    }));
-    fill.frustumCulled = false;
-    fill.renderOrder = 2;
-    fill.visible = (meshMode === 2);
-    scene.add(fill);
-    planeFills.set(plane, fill);
-    planeFillGeoBuf.set(plane, {posArr: result.posArr, tris: result.tris, loop: result.loop, vertCount: wpts.length});
+  /* Quad corners: bottom-left, bottom-right, top-right, top-left */
+  /* We use XZ extents for the horizontal span and Y for height.
+     Pick the axis with bigger span as the horizontal axis. */
+  var spanX=maxX-minX, spanZ=maxZ-minZ;
+  var pos;
+  if(spanX >= spanZ){
+    pos = new Float32Array([
+      minX,minY,minZ+spanZ/2, maxX,minY,minZ+spanZ/2,
+      maxX,maxY,minZ+spanZ/2, minX,maxY,minZ+spanZ/2
+    ]);
   } else {
-    /* Update positions in-place — no new geometry allocation */
-    var d = prevData;
-    var loop2 = (wpts.length > 1 && wpts[0].distanceTo(wpts[wpts.length-1]) < 0.001) ? wpts.slice(0,-1) : wpts;
-    for(var t2=0; t2<d.tris.length; t2++){
-      var vi2 = d.tris[t2];
-      d.posArr[t2*3]   = loop2[vi2].x;
-      d.posArr[t2*3+1] = loop2[vi2].y;
-      d.posArr[t2*3+2] = loop2[vi2].z;
+    pos = new Float32Array([
+      minX+spanX/2,minY,minZ, minX+spanX/2,minY,maxZ,
+      minX+spanX/2,maxY,maxZ, minX+spanX/2,maxY,minZ
+    ]);
+  }
+  var geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setIndex(new THREE.BufferAttribute(new Uint32Array([0,1,2, 0,2,3]), 1));
+  geo.computeBoundingBox(); geo.computeBoundingSphere();
+  return geo;
+}
+
+function _planeFillVisible(){
+  return (meshMode === 2);
+}
+
+function _updatePlaneFill(plane, pm){
+  var isWall = (plane.orientation === 'vertical');
+
+  /* Transform polygon to world space */
+  var wpts = plane.polygon.map(function(v){
+    return new THREE.Vector3(v.x,v.y,v.z).applyMatrix4(pm);
+  });
+  /* Lift floor fills slightly off the surface to avoid z-fighting */
+  if(!isWall) wpts.forEach(function(p){ p.y += 0.010; });
+
+  var entry = planeFills.get(plane);
+
+  if(!entry){
+    /* ── Create new fill ── */
+    var geo, posArr=null, tris=null, n=0;
+    if(isWall){
+      geo = _wallQuad(wpts);
+    } else {
+      var res = _earcutFloor(wpts);
+      if(res){ geo=res.geo; posArr=res.posArr; tris=res.tris; n=res.n; }
     }
-    var f2 = planeFills.get(plane);
-    if(f2){
-      f2.geometry.attributes.position.needsUpdate = true;
-      f2.geometry.computeVertexNormals();
+    if(!geo) return;
+
+    var mat = new THREE.MeshBasicMaterial({
+      color: isWall ? PLANE_FILL_COL.wall : PLANE_FILL_COL.floor,
+      transparent: true,
+      opacity: isWall ? PLANE_FILL_OPACITY_WALL : PLANE_FILL_OPACITY_FLOOR,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 1;
+    mesh.visible = _planeFillVisible();
+    scene.add(mesh);
+    planeFills.set(plane, { mesh: mesh, posArr: posArr, tris: tris, vertCount: n, isWall: isWall });
+
+  } else {
+    /* ── Update existing fill ── */
+    var e = entry;
+    if(isWall){
+      /* Walls: rebuild quad from current polygon (cheap — just 4 verts) */
+      var newGeo = _wallQuad(wpts);
+      if(newGeo){
+        e.mesh.geometry.dispose();
+        e.mesh.geometry = newGeo;
+      }
+    } else {
+      /* Floor: if vertex count changed, rebuild; otherwise update in-place */
+      var loop2 = (wpts.length>1 && wpts[0].distanceTo(wpts[wpts.length-1])<0.001)
+        ? wpts.slice(0,-1) : wpts.slice();
+      if(loop2.length !== e.vertCount){
+        /* Rebuild */
+        var res2 = _earcutFloor(wpts);
+        if(res2){
+          e.mesh.geometry.dispose();
+          e.mesh.geometry = res2.geo;
+          e.posArr = res2.posArr; e.tris = res2.tris; e.vertCount = res2.n;
+        }
+      } else {
+        /* In-place update: overwrite posArr then flag needsUpdate */
+        for(var vi2=0; vi2<loop2.length; vi2++){
+          e.posArr[vi2*3]=loop2[vi2].x; e.posArr[vi2*3+1]=loop2[vi2].y; e.posArr[vi2*3+2]=loop2[vi2].z;
+        }
+        e.mesh.geometry.attributes.position.needsUpdate = true;
+        e.mesh.geometry.computeBoundingSphere();
+      }
     }
+    e.mesh.visible = _planeFillVisible();
   }
 }
 
-/* ── applyMeshMode ─────────────────────────────────────────────────────── */
-function applyMeshMode(){
-  var btn = el('surfBtn');
-  btn.textContent = MESH_MODE_LABELS[meshMode];
-  btn.className = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' '+MESH_MODE_CLASSES[meshMode] : '');
-
-  var wireVis    = (meshMode === 1);
-  var fillVis    = (meshMode === 2);
-  var occludeVis = (meshMode === 3);
-
-  /* Plane wires + grids */
-  planeWires.forEach(function(w){ w.visible = wireVis; });
-  planeGrids.forEach(function(g){ g.visible = wireVis; });
-  planeFills.forEach(function(f){ f.visible = fillVis; });
-
-  /* XRMesh — update all existing contexts */
-  allMeshes.forEach(function(ctx){ applyMeshContextVisibility(ctx); });
-
-  /* Depth cloud (fill mode) + depth occluder (occlude mode) */
-  if(depthCloud) depthCloud.visible = fillVis;
-  if(depthOccluder){
-    depthOccluder.visible = occludeVis;
-    /* Make sure plan is depth-tested so occlusion works */
-    if(planeMesh) planeMesh.material.depthTest = true;
-    if(boundMesh) boundMesh.material.depthTest = true;
-  }
-
-  /* Renderer sort — occlude meshes must render before transparent content */
-  if(renderer){
-    renderer.sortObjects = true;
-  }
-}
-
-/* Initialise button label for default mode 2 */
-el('surfBtn').textContent = MESH_MODE_LABELS[meshMode];
-el('surfBtn').className = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' '+MESH_MODE_CLASSES[meshMode] : '');
-
-el('surfBtn').addEventListener('click', function(){
-  meshMode = (meshMode + 1) % MESH_MODE_LABELS.length;
-  applyMeshMode();
-  var extra = '';
-  if(meshMode===1){ extra=(allMeshes.size>0?' \u2022 '+allMeshes.size+' XRMesh':'')+(planeFills.size>0?' \u2022 '+planeFills.size+' planes':''); }
-  if(meshMode===2){ extra=depthEnabled?' \u2022 depth\u2605':(planeFills.size>0?' \u2022 '+planeFills.size+' fills':'' ); }
-  if(meshMode===3){ extra=depthEnabled?' \u2022 depth occlusion':(allMeshes.size>0?' \u2022 XRMesh occluding':' \u2022 scanning for depth\u2026'); }
-  showToast(MESH_MODE_LABELS[meshMode]+(extra||''), 2200);
-});
-/* Long-press surfBtn: show chrome flag instructions for XRMesh */
-(function(){
-  var _st=null;
-  el('surfBtn').addEventListener('pointerdown',function(){
-    _st=setTimeout(function(){
-      showToast('XRMesh: open chrome://flags \u2192 search webxr-incubations \u2192 Enable \u2192 Relaunch',6000);
-    },1000);
-  });
-  ['pointerup','pointercancel'].forEach(function(ev){
-    el('surfBtn').addEventListener(ev,function(){ clearTimeout(_st); });
-  });
-})();
-
-/* ── Extend updatePlaneWireframes to build solid fills ──────────────────── */
+/* ── Extend updatePlaneWireframes to also maintain fills ────────────────── */
 var _origUpdatePlaneWireframes = updatePlaneWireframes;
 updatePlaneWireframes = function(frame, refSpace){
   _origUpdatePlaneWireframes(frame, refSpace);
@@ -5552,33 +5559,161 @@ updatePlaneWireframes = function(frame, refSpace){
       var pp = frame.getPose(plane.planeSpace, refSpace);
       if(!pp) return;
       var pm = new THREE.Matrix4().fromArray(pp.transform.matrix);
-      updatePlaneFill(plane, pm, plane.orientation === 'vertical');
-    }catch(e){}
+      _updatePlaneFill(plane, pm);
+    }catch(e){ console.warn('planeFill:', e); }
   });
-  planeFills.forEach(function(fill, plane){
+  /* Remove fills for planes that disappeared */
+  planeFills.forEach(function(entry, plane){
     if(!seen.has(plane)){
-      scene.remove(fill); fill.geometry.dispose(); fill.material.dispose();
-      planeFills.delete(plane); planeFillGeoBuf.delete(plane);
+      scene.remove(entry.mesh);
+      entry.mesh.geometry.dispose();
+      entry.mesh.material.dispose();
+      planeFills.delete(plane);
     }
   });
 };
 
+/* ── Also apply correct visibility to newly-created plane wires and grids ── */
+/* Patch: updatePlaneWireframes creates loops/grids with visible=true.
+   We hook the inner creation by wrapping the original and fixing after. */
+var _origCreatePlaneWireVis = updatePlaneWireframes;
+/* (No additional wrapping needed — we already handle via applyMeshMode below) */
+
+/* Extend clearPlaneWires to also clear fills */
 var _origClearPlaneWires = clearPlaneWires;
 clearPlaneWires = function(){
-  planeFills.forEach(function(f){ if(scene){ scene.remove(f); } f.geometry.dispose(); f.material.dispose(); });
-  planeFills.clear(); planeFillGeoBuf.clear();
+  planeFills.forEach(function(e){
+    if(scene) scene.remove(e.mesh);
+    e.mesh.geometry.dispose(); e.mesh.material.dispose();
+  });
+  planeFills.clear();
   _origClearPlaneWires();
 };
 
-/* ── Wire the overlay _origUpdateSceneMeshes / _origClearSceneMeshes ────── */
+/* ═══════════════════════════════════════════════════════════════════════════
+   applyMeshMode — single source of truth for all surface visibility
+   ─────────────────────────────────────────────────────────────────────────
+   Called on button click AND whenever a new surface object is created that
+   needs to start with the right visibility.
+   ═══════════════════════════════════════════════════════════════════════════ */
+function applyMeshMode(){
+  var btn = el('surfBtn');
+  btn.textContent = MESH_MODE_LABELS[meshMode];
+  btn.className   = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' '+MESH_MODE_CLASSES[meshMode] : '');
+
+  var wireVis    = (meshMode === 1);
+  var fillVis    = (meshMode === 2);
+  var occludeVis = (meshMode === 3);
+
+  /* Plane boundary wires + floor grids */
+  planeWires.forEach(function(w){ w.visible = wireVis; });
+  planeGrids.forEach(function(g){ g.visible = wireVis; });
+
+  /* Plane solid fills (floor + wall) */
+  planeFills.forEach(function(e){ e.mesh.visible = fillVis; });
+
+  /* XRMesh triple (solid / wire / occlude) */
+  allMeshes.forEach(function(ctx){ applyMeshContextVisibility(ctx); });
+
+  /* Depth cloud (fill mode) + depth occluder (occlude mode) */
+  if(depthCloud)    depthCloud.visible    = fillVis;
+  if(depthOccluder){
+    depthOccluder.visible = occludeVis;
+    if(planeMesh) planeMesh.material.depthTest = true;
+    if(boundMesh) boundMesh.material.depthTest = true;
+  }
+
+  if(renderer) renderer.sortObjects = true;
+}
+
+/* ── Initialise surfBtn label for default mode ────────────────────────── */
+el('surfBtn').textContent = MESH_MODE_LABELS[meshMode];
+el('surfBtn').className   = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' '+MESH_MODE_CLASSES[meshMode] : '');
+
+el('surfBtn').addEventListener('click', function(){
+  meshMode = (meshMode + 1) % MESH_MODE_LABELS.length;
+  applyMeshMode();
+  var n_fills = planeFills.size, n_mesh = allMeshes.size;
+  var extra = '';
+  if(meshMode===0){ extra=' \u2022 hidden'; }
+  if(meshMode===1){ extra=(n_mesh>0?' \u2022 '+n_mesh+' XRMesh':'')+(n_fills>0?' \u2022 '+n_fills+' planes':''); }
+  if(meshMode===2){ extra=depthEnabled?' \u2022 depth\u2605':((n_fills>0?' \u2022 '+n_fills+' plane fills':'')); }
+  if(meshMode===3){ extra=depthEnabled?' \u2022 depth occlusion':(n_mesh>0?' \u2022 XRMesh occluding':' \u2022 needs XRMesh flag'); }
+  showToast(MESH_MODE_LABELS[meshMode]+(extra||''), 2200);
+});
+
+/* Long-press surfBtn: show chrome flag instructions for XRMesh */
+(function(){
+  var _st=null;
+  el('surfBtn').addEventListener('pointerdown',function(){
+    _st=setTimeout(function(){
+      showToast('XRMesh: chrome://flags \u2192 #webxr-incubations \u2192 Enable \u2192 Relaunch',7000);
+    },1000);
+  });
+  ['pointerup','pointercancel'].forEach(function(ev){
+    el('surfBtn').addEventListener(ev,function(){ clearTimeout(_st); });
+  });
+})();
+
+/* ─────────────────────────────────────────────────────────────────────────
+   XRMesh visibility + frustum fix
+   Fix: newly created XRMesh objects (in updateSceneMeshes) have
+   matrixAutoUpdate=false, so Three.js can't compute frustum bounds.
+   We must set frustumCulled=false AND computeBoundingBox on the geometry.
+   Also fix: snapToNearestMeshVertex was reading the empty legacy meshWires
+   map — updated to iterate allMeshes contexts directly.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Patch createXRMeshGeo to always compute bounds (needed for non-frustumCulled check) */
+var _origCreateXRMeshGeo = createXRMeshGeo;
+createXRMeshGeo = function(mesh){
+  var geo = _origCreateXRMeshGeo(mesh);
+  if(geo){ geo.computeBoundingBox(); geo.computeBoundingSphere(); }
+  return geo;
+};
+
+/* Patch updateSceneMeshes to set frustumCulled=false on new mesh objects */
 var _origUpdateSceneMeshes = updateSceneMeshes;
 updateSceneMeshes = function(frame, refSpace){
+  var prevSize = allMeshes.size;
   _origUpdateSceneMeshes(frame, refSpace);
+  /* For any newly added contexts: ensure frustumCulled=false */
+  if(allMeshes.size !== prevSize){
+    allMeshes.forEach(function(ctx){
+      ctx.solidMesh.frustumCulled   = false;
+      ctx.wireMesh.frustumCulled    = false;
+      ctx.occludeMesh.frustumCulled = false;
+    });
+  }
 };
 
 var _origClearSceneMeshes = clearSceneMeshes;
 clearSceneMeshes = function(){
   _origClearSceneMeshes();
+};
+
+/* Fix snapToNearestMeshVertex: read allMeshes instead of empty legacy meshWires */
+snapToNearestMeshVertex = function(pos){
+  if(!allMeshes || allMeshes.size===0) return null;
+  var best=null, bestD2=SNAP_DIST_WALL*SNAP_DIST_WALL;
+  allMeshes.forEach(function(ctx){
+    var solidM = ctx.solidMesh;
+    if(!solidM || !solidM.geometry) return;
+    var posAttr = solidM.geometry.attributes.position;
+    if(!posAttr) return;
+    var mat = solidM.matrix;
+    var count = posAttr.count;
+    /* Sample every 4th vertex for perf */
+    for(var vi=0; vi<count; vi+=4){
+      var lx=posAttr.getX(vi), ly=posAttr.getY(vi), lz=posAttr.getZ(vi);
+      var wx=mat.elements[0]*lx+mat.elements[4]*ly+mat.elements[8]*lz+mat.elements[12];
+      var wy=mat.elements[1]*lx+mat.elements[5]*ly+mat.elements[9]*lz+mat.elements[13];
+      var wz=mat.elements[2]*lx+mat.elements[6]*ly+mat.elements[10]*lz+mat.elements[14];
+      var dx=wx-pos.x, dz=wz-pos.z, d2=dx*dx+dz*dz;
+      if(d2<bestD2){ bestD2=d2; best=new THREE.Vector3(wx,wy,wz); }
+    }
+  });
+  return best;
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
