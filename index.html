@@ -1371,46 +1371,21 @@ var MESH_COLOURS = {
 };
 
 /* ─── XRMesh context map — exactly mirrors immersive-web sample ──────────
-   Each entry: { id, timestamp, solidMesh, wireMesh, occludeMesh }
-   solidMesh + wireMesh + occludeMesh share the SAME BufferGeometry object.
-   On geometry change: dispose once, assign new geo to all three.         */
+   Each entry: { id, timestamp, wireMesh }
+   wireMesh uses matrixAutoUpdate=false; pose applied directly each frame.  */
 var allMeshes = new Map();   /* XRMesh → meshContext */
 var meshIdCounter = 1;
 
-/* ── Material factories — recreated when meshMode changes ─────────────── */
-var _meshSolidMats = {};   /* label → THREE.MeshBasicMaterial */
-var _meshWireMat   = null;
-var _meshOccludeMat = null;
-
-function getMeshSolidMat(label){
-  if(!_meshSolidMats[label]){
-    _meshSolidMats[label] = new THREE.MeshBasicMaterial({
-      color: MESH_COLOURS[label] || MESH_COLOURS._default,
-      transparent: true, opacity: 0.28,
-      side: THREE.DoubleSide, depthWrite: false
-    });
-  }
-  return _meshSolidMats[label];
-}
+/* ── Wire material ─────────────────────────────────────────────────────── */
+var _meshWireMat = null;
 function getMeshWireMat(){
   if(!_meshWireMat){
     _meshWireMat = new THREE.MeshBasicMaterial({
       wireframe: true, color: 0x00ffee,
-      transparent: true, opacity: 0.55, depthWrite: false
+      transparent: true, opacity: 0.60, depthWrite: false
     });
   }
   return _meshWireMat;
-}
-/* Occlusion material — from immersive-web sample.
-   Invisible to colour buffer but writes depth → occlude virtual content. */
-function getMeshOccludeMat(){
-  if(!_meshOccludeMat){
-    _meshOccludeMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff, side: THREE.FrontSide,
-      colorWrite: false   /* write ONLY depth, not colour */
-    });
-  }
-  return _meshOccludeMat;
 }
 
 function createXRMeshGeo(mesh){
@@ -1435,28 +1410,24 @@ function createXRMeshGeo(mesh){
 }
 
 function applyMeshContextVisibility(ctx){
-  /* meshMode 0=off, 1=wire, 2=solid+depth, 3=occlude */
+  /* meshMode 0=off, 1=wire */
   if(!ctx) return;
-  ctx.solidMesh.visible   = (meshMode === 2);
-  ctx.wireMesh.visible    = (meshMode === 1);
-  ctx.occludeMesh.visible = (meshMode === 3);
+  ctx.wireMesh.visible = (meshMode === 1);
 }
 
 function updateSceneMeshes(frame, refSpace){
   if(!frame.detectedMeshes){
-    if(!_meshDiagDone){ _meshDiagDone=true; showToast('\u26a0 XRMesh unavailable \u2014 long-press \u2b21 for setup instructions',4000); }
+    if(!_meshDiagDone){ _meshDiagDone=true; showToast('\u26a0 XRMesh unavailable \u2014 long-press \u2b21 for setup',4000); }
     return;
   }
   if(!_meshDiagDone){ _meshDiagDone=true; showToast('\u2605 XRMesh active',1800); }
   var meshCount = 0, floorSeen = false, wallSeen = false;
 
-  /* ── Remove stale meshes (using Set.has — from the sample) ─────────── */
+  /* ── Remove stale meshes ─────────────────────────────────────────────── */
   allMeshes.forEach(function(ctx, mesh){
     if(!frame.detectedMeshes.has(mesh)){
-      scene.remove(ctx.solidMesh);
       scene.remove(ctx.wireMesh);
-      scene.remove(ctx.occludeMesh);
-      ctx.solidMesh.geometry.dispose();  /* shared geo — one dispose covers all */
+      ctx.wireMesh.geometry.dispose();
       allMeshes.delete(mesh);
     }
   });
@@ -1471,26 +1442,17 @@ function updateSceneMeshes(frame, refSpace){
     var pose = frame.getPose(mesh.meshSpace, refSpace);
 
     if(allMeshes.has(mesh)){
-      /* Known mesh — check if geometry was updated */
       var ctx = allMeshes.get(mesh);
+      /* Geometry update */
       if(ctx.timestamp < mesh.lastChangedTime){
         ctx.timestamp = mesh.lastChangedTime;
         var newGeo = createXRMeshGeo(mesh);
-        if(newGeo){
-          ctx.solidMesh.geometry.dispose();
-          ctx.solidMesh.geometry   = newGeo;
-          ctx.wireMesh.geometry    = newGeo;   /* shared ref — no extra alloc */
-          ctx.occludeMesh.geometry = newGeo;
-        }
+        if(newGeo){ ctx.wireMesh.geometry.dispose(); ctx.wireMesh.geometry = newGeo; }
       }
-      /* Update pose every frame */
+      /* Pose update */
       if(pose){
-        ctx.solidMesh.matrix.fromArray(pose.transform.matrix);
         ctx.wireMesh.matrix.fromArray(pose.transform.matrix);
-        ctx.occludeMesh.matrix.fromArray(pose.transform.matrix);
-        ctx.solidMesh.matrixWorldNeedsUpdate   = true;
-        ctx.wireMesh.matrixWorldNeedsUpdate    = true;
-        ctx.occludeMesh.matrixWorldNeedsUpdate = true;
+        ctx.wireMesh.matrixWorldNeedsUpdate = true;
       }
       applyMeshContextVisibility(ctx);
 
@@ -1499,33 +1461,24 @@ function updateSceneMeshes(frame, refSpace){
       var geo = createXRMeshGeo(mesh);
       if(!geo) return;
 
-      var solidMesh = new THREE.Mesh(geo, getMeshSolidMat(label));
-      solidMesh.matrixAutoUpdate = false;
-      solidMesh.frustumCulled = false;
-      scene.add(solidMesh);
-
-      var wireMesh = new THREE.Mesh(geo, getMeshWireMat());
+      /* Colour wire by semantic label */
+      var wireCol = MESH_COLOURS[label] || MESH_COLOURS._default;
+      var wireMat = new THREE.MeshBasicMaterial({
+        wireframe: true, color: wireCol,
+        transparent: true, opacity: 0.60, depthWrite: false
+      });
+      var wireMesh = new THREE.Mesh(geo, wireMat);
       wireMesh.matrixAutoUpdate = false;
       wireMesh.frustumCulled = false;
       scene.add(wireMesh);
 
-      var occludeMesh = new THREE.Mesh(geo, getMeshOccludeMat());
-      occludeMesh.matrixAutoUpdate = false;
-      occludeMesh.frustumCulled = false;
-      scene.add(occludeMesh);
-
-      var ctx = {
-        id: meshIdCounter++,
-        timestamp: mesh.lastChangedTime,
-        solidMesh: solidMesh,
-        wireMesh: wireMesh,
-        occludeMesh: occludeMesh
-      };
+      var ctx = { id: meshIdCounter++, timestamp: mesh.lastChangedTime, wireMesh: wireMesh };
       allMeshes.set(mesh, ctx);
       applyMeshContextVisibility(ctx);
-      var vertFmt = (mesh.vertices && mesh.vertices[0] && typeof mesh.vertices[0]==='object') ? 'obj' : 'buf';
+
       var vertCount = mesh.vertices ? mesh.vertices.length : 0;
-      showToast('★ XRMesh #'+ctx.id+' \u2022 '+label+' ('+vertCount+'v / '+vertFmt+')', 1800);
+      var vertFmt = (mesh.vertices && mesh.vertices[0] && typeof mesh.vertices[0]==='object') ? 'obj' : 'buf';
+      showToast('\u2b21 XRMesh #'+ctx.id+' \u2022 '+label+' ('+vertCount+'v)', 1800);
     }
   });
 
@@ -1536,25 +1489,22 @@ function updateSceneMeshes(frame, refSpace){
     var hasWall  = wallSeen  || meshCount > 2;
     if(meshCount > 0 || hasFloor){
       var parts = [];
-      if(hasFloor) parts.push('floor ✓');
-      if(hasWall)  parts.push('walls ✓');
+      if(hasFloor) parts.push('floor \u2713');
+      if(hasWall)  parts.push('walls \u2713');
       parts.push(meshCount + ' XRMesh');
-      el('scStatusSub').textContent = parts.join(' · ');
+      el('scStatusSub').textContent = parts.join(' \u00b7 ');
     }
   }
 }
 
 function clearSceneMeshes(){
   allMeshes.forEach(function(ctx){
-    if(scene){
-      scene.remove(ctx.solidMesh);
-      scene.remove(ctx.wireMesh);
-      scene.remove(ctx.occludeMesh);
-    }
-    ctx.solidMesh.geometry.dispose();  /* shared geo */
+    if(scene) scene.remove(ctx.wireMesh);
+    ctx.wireMesh.geometry.dispose();
+    ctx.wireMesh.material.dispose();
   });
   allMeshes.clear();
-  /* Legacy meshWires cleanup (now empty but keeps references valid) */
+  /* Legacy meshWires cleanup */
   meshWires.forEach(function(seg){ if(scene) scene.remove(seg); seg.geometry.dispose(); });
   meshWires.clear(); meshChanged.clear();
 }
@@ -4572,7 +4522,6 @@ function startWebXR(){
   scene=new THREE.Scene();
   camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.01,200);
   scene.add(new THREE.AmbientLight(0xffffff,1));
-  initDepthCloud();  /* depth-sensing point cloud — added to scene immediately */
 
   var maxTex=renderer.capabilities.maxTextureSize;
   if(pdfCanvas.width>maxTex||pdfCanvas.height>maxTex){
@@ -4626,12 +4575,8 @@ function startWebXR(){
      If the browser/device rejects it, fall back to optional-only session.
      This ensures frame.detectedMeshes is populated on capable devices.   */
   var SESSION_OPTS_BASE = {
-    optionalFeatures:['anchors','dom-overlay','scene-understanding','depth-sensing'],
-    domOverlay:{root:el('xrOverlay')},
-    depthSensing:{
-      usagePreference:['cpu-optimized','gpu-optimized'],
-      dataFormatPreference:['luminance-alpha','float32']
-    }
+    optionalFeatures:['anchors','dom-overlay','scene-understanding'],
+    domOverlay:{root:el('xrOverlay')}
   };
   /* Try plane-detection + mesh-detection as required; fall back progressively */
   function doRequestSession(withMeshRequired, withPlaneRequired){
@@ -4970,9 +4915,7 @@ function xrFrame(frame){
     var dp = frame.detectedPlanes ? frame.detectedPlanes.size : 0;
     var dm = (frame.detectedMeshes !== undefined) ? frame.detectedMeshes.size : -1;
     var diag = 'planes:'+dp
-      + (dm>=0 ? '  xrmesh:'+dm : '  xrmesh:N/A(flag)')
-      + (depthEnabled ? '  depth:ON' : '')
-      + (planeFills.size>0 ? '  fills:'+planeFills.size : '');
+      + (dm>=0 ? '  xrmesh:'+dm : '  xrmesh:N/A(flag)');
     if(el('statusBar')){ el('statusBar').style.display='block'; el('statusBar').textContent=diag; }
   }
   if(meshMode===0 && el('statusBar')) el('statusBar').style.display='none';
@@ -5000,7 +4943,6 @@ function xrFrame(frame){
       console.error('mesh:',e);
       if(el('statusBar') && meshMode>0) el('statusBar').textContent='mesh ERR: '+e.message;
     }
-    try{updateDepthCloud(frame);}catch(e){ console.error('depth:',e); }
   }
 
   if(!xrHitTestSrc||!xrRefSpace)return;
@@ -5392,257 +5334,50 @@ var MESH_MODE_CLASSES = ['', 'active-b', 'active-g', 'active-y'];
    Uses earcut.js for correct concave polygon triangulation.
    (ARCore floor outlines are often L-shaped after scanning furniture.)  */
 /* ═══════════════════════════════════════════════════════════════════════════
-   PLANE FILLS  (detectedPlanes — always available when plane-detection granted)
+   SURFACE OVERLAY  —  Wire mode only
    ─────────────────────────────────────────────────────────────────────────
-   One THREE.Mesh per XRPlane.  Floor = XZ triangulated via earcut.
-   Walls = vertical quad from polygon bounding box (earcut on XZ is degenerate
-   for vertical planes).
-   All visibility is set at creation AND synced in applyMeshMode.
+   2 modes cycled by surfBtn:
+     0 = ⬡ off   — all surface geometry hidden
+     1 = ⬡ wire  — XRMesh wireframes + plane boundary loops + floor grids
+
+   APIs:
+     frame.detectedPlanes  → XRPlane boundary loops (always with plane-detection)
+     frame.detectedMeshes  → XRMesh per-face wireframe (needs #webxr-incubations)
    ═══════════════════════════════════════════════════════════════════════════ */
-var planeFills    = new Map();   /* XRPlane → {mesh, posArr, tris, vertCount, isWall} */
 
-var PLANE_FILL_OPACITY_FLOOR = 0.45;
-var PLANE_FILL_OPACITY_WALL  = 0.38;
-var PLANE_FILL_COL = { floor: 0x00cc66, wall: 0x3377ff };
+var meshMode = 1;   /* 0=off  1=wire */
 
-/* ── Earcut helper: projects world-space pts to XZ, triangulates, returns geo ── */
-function _earcutFloor(wpts){
-  /* Remove closing duplicate if polygon is explicitly closed */
-  var loop = (wpts.length > 1 && wpts[0].distanceTo(wpts[wpts.length-1]) < 0.001)
-    ? wpts.slice(0, -1) : wpts.slice();
-  if(loop.length < 3) return null;
+var MESH_MODE_LABELS  = ['\u2b21 off', '\u2b21 wire'];
+var MESH_MODE_CLASSES = ['', 'active-b'];
 
-  /* Flat XZ array for earcut */
-  var flat = [];
-  loop.forEach(function(p){ flat.push(p.x, p.z); });
-
-  var tris;
-  if(typeof earcut !== 'undefined'){
-    tris = earcut(flat, null, 2);
-  } else {
-    tris = [];
-    for(var i=1; i<loop.length-1; i++) tris.push(0, i, i+1);
-  }
-  if(!tris || tris.length < 3) return null;
-
-  /* Build indexed geometry from original 3D world points */
-  var posArr = new Float32Array(loop.length * 3);
-  for(var vi=0; vi<loop.length; vi++){
-    posArr[vi*3]=loop[vi].x; posArr[vi*3+1]=loop[vi].y; posArr[vi*3+2]=loop[vi].z;
-  }
-  var geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-  geo.setIndex(new THREE.BufferAttribute(new Uint32Array(tris), 1));
-  geo.computeBoundingBox(); geo.computeBoundingSphere();
-  return { geo: geo, posArr: posArr, tris: tris, n: loop.length };
-}
-
-/* ── Wall fill: vertical quad from polygon world-space bounding box ── */
-function _wallQuad(wpts){
-  if(wpts.length < 2) return null;
-  /* World bounding box of the wall polygon */
-  var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,minZ=Infinity,maxZ=-Infinity;
-  wpts.forEach(function(p){
-    if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
-    if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y;
-    if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z;
-  });
-  /* Quad corners: bottom-left, bottom-right, top-right, top-left */
-  /* We use XZ extents for the horizontal span and Y for height.
-     Pick the axis with bigger span as the horizontal axis. */
-  var spanX=maxX-minX, spanZ=maxZ-minZ;
-  var pos;
-  if(spanX >= spanZ){
-    pos = new Float32Array([
-      minX,minY,minZ+spanZ/2, maxX,minY,minZ+spanZ/2,
-      maxX,maxY,minZ+spanZ/2, minX,maxY,minZ+spanZ/2
-    ]);
-  } else {
-    pos = new Float32Array([
-      minX+spanX/2,minY,minZ, minX+spanX/2,minY,maxZ,
-      minX+spanX/2,maxY,maxZ, minX+spanX/2,maxY,minZ
-    ]);
-  }
-  var geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setIndex(new THREE.BufferAttribute(new Uint32Array([0,1,2, 0,2,3]), 1));
-  geo.computeBoundingBox(); geo.computeBoundingSphere();
-  return geo;
-}
-
-function _planeFillVisible(){
-  return (meshMode === 2);
-}
-
-function _updatePlaneFill(plane, pm){
-  var isWall = (plane.orientation === 'vertical');
-
-  /* Transform polygon to world space */
-  var wpts = plane.polygon.map(function(v){
-    return new THREE.Vector3(v.x,v.y,v.z).applyMatrix4(pm);
-  });
-  /* Lift floor fills slightly off the surface to avoid z-fighting */
-  if(!isWall) wpts.forEach(function(p){ p.y += 0.010; });
-
-  var entry = planeFills.get(plane);
-
-  if(!entry){
-    /* ── Create new fill ── */
-    var geo, posArr=null, tris=null, n=0;
-    if(isWall){
-      geo = _wallQuad(wpts);
-    } else {
-      var res = _earcutFloor(wpts);
-      if(res){ geo=res.geo; posArr=res.posArr; tris=res.tris; n=res.n; }
-    }
-    if(!geo) return;
-
-    var mat = new THREE.MeshBasicMaterial({
-      color: isWall ? PLANE_FILL_COL.wall : PLANE_FILL_COL.floor,
-      transparent: true,
-      opacity: isWall ? PLANE_FILL_OPACITY_WALL : PLANE_FILL_OPACITY_FLOOR,
-      side: THREE.DoubleSide,
-      depthWrite: false
-    });
-    var mesh = new THREE.Mesh(geo, mat);
-    mesh.frustumCulled = false;
-    mesh.renderOrder = 1;
-    mesh.visible = _planeFillVisible();
-    scene.add(mesh);
-    planeFills.set(plane, { mesh: mesh, posArr: posArr, tris: tris, vertCount: n, isWall: isWall });
-
-  } else {
-    /* ── Update existing fill ── */
-    var e = entry;
-    if(isWall){
-      /* Walls: rebuild quad from current polygon (cheap — just 4 verts) */
-      var newGeo = _wallQuad(wpts);
-      if(newGeo){
-        e.mesh.geometry.dispose();
-        e.mesh.geometry = newGeo;
-      }
-    } else {
-      /* Floor: if vertex count changed, rebuild; otherwise update in-place */
-      var loop2 = (wpts.length>1 && wpts[0].distanceTo(wpts[wpts.length-1])<0.001)
-        ? wpts.slice(0,-1) : wpts.slice();
-      if(loop2.length !== e.vertCount){
-        /* Rebuild */
-        var res2 = _earcutFloor(wpts);
-        if(res2){
-          e.mesh.geometry.dispose();
-          e.mesh.geometry = res2.geo;
-          e.posArr = res2.posArr; e.tris = res2.tris; e.vertCount = res2.n;
-        }
-      } else {
-        /* In-place update: overwrite posArr then flag needsUpdate */
-        for(var vi2=0; vi2<loop2.length; vi2++){
-          e.posArr[vi2*3]=loop2[vi2].x; e.posArr[vi2*3+1]=loop2[vi2].y; e.posArr[vi2*3+2]=loop2[vi2].z;
-        }
-        e.mesh.geometry.attributes.position.needsUpdate = true;
-        e.mesh.geometry.computeBoundingSphere();
-      }
-    }
-    e.mesh.visible = _planeFillVisible();
-  }
-}
-
-/* ── Extend updatePlaneWireframes to also maintain fills ────────────────── */
-var _origUpdatePlaneWireframes = updatePlaneWireframes;
-updatePlaneWireframes = function(frame, refSpace){
-  _origUpdatePlaneWireframes(frame, refSpace);
-  if(!frame.detectedPlanes || !scene) return;
-  var seen = new Set();
-  frame.detectedPlanes.forEach(function(plane){
-    if(!plane.planeSpace || !plane.polygon || plane.polygon.length < 3) return;
-    seen.add(plane);
-    try{
-      var pp = frame.getPose(plane.planeSpace, refSpace);
-      if(!pp) return;
-      var pm = new THREE.Matrix4().fromArray(pp.transform.matrix);
-      _updatePlaneFill(plane, pm);
-    }catch(e){ console.warn('planeFill:', e); }
-  });
-  /* Remove fills for planes that disappeared */
-  planeFills.forEach(function(entry, plane){
-    if(!seen.has(plane)){
-      scene.remove(entry.mesh);
-      entry.mesh.geometry.dispose();
-      entry.mesh.material.dispose();
-      planeFills.delete(plane);
-    }
-  });
-};
-
-/* ── Also apply correct visibility to newly-created plane wires and grids ── */
-/* Patch: updatePlaneWireframes creates loops/grids with visible=true.
-   We hook the inner creation by wrapping the original and fixing after. */
-var _origCreatePlaneWireVis = updatePlaneWireframes;
-/* (No additional wrapping needed — we already handle via applyMeshMode below) */
-
-/* Extend clearPlaneWires to also clear fills */
-var _origClearPlaneWires = clearPlaneWires;
-clearPlaneWires = function(){
-  planeFills.forEach(function(e){
-    if(scene) scene.remove(e.mesh);
-    e.mesh.geometry.dispose(); e.mesh.material.dispose();
-  });
-  planeFills.clear();
-  _origClearPlaneWires();
-};
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   applyMeshMode — single source of truth for all surface visibility
-   ─────────────────────────────────────────────────────────────────────────
-   Called on button click AND whenever a new surface object is created that
-   needs to start with the right visibility.
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── applyMeshMode — single source of truth for all surface visibility ── */
 function applyMeshMode(){
   var btn = el('surfBtn');
   btn.textContent = MESH_MODE_LABELS[meshMode];
   btn.className   = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' '+MESH_MODE_CLASSES[meshMode] : '');
 
-  var wireVis    = (meshMode === 1);
-  var fillVis    = (meshMode === 2);
-  var occludeVis = (meshMode === 3);
-
-  /* Plane boundary wires + floor grids */
-  planeWires.forEach(function(w){ w.visible = wireVis; });
-  planeGrids.forEach(function(g){ g.visible = wireVis; });
-
-  /* Plane solid fills (floor + wall) */
-  planeFills.forEach(function(e){ e.mesh.visible = fillVis; });
-
-  /* XRMesh triple (solid / wire / occlude) */
-  allMeshes.forEach(function(ctx){ applyMeshContextVisibility(ctx); });
-
-  /* Depth cloud (fill mode) + depth occluder (occlude mode) */
-  if(depthCloud)    depthCloud.visible    = fillVis;
-  if(depthOccluder){
-    depthOccluder.visible = occludeVis;
-    if(planeMesh) planeMesh.material.depthTest = true;
-    if(boundMesh) boundMesh.material.depthTest = true;
-  }
-
+  var show = (meshMode === 1);
+  planeWires.forEach(function(w){ w.visible = show; });
+  planeGrids.forEach(function(g){ g.visible = show; });
+  allMeshes.forEach(function(ctx){ ctx.wireMesh.visible = show; });
   if(renderer) renderer.sortObjects = true;
 }
 
-/* ── Initialise surfBtn label for default mode ────────────────────────── */
+/* Initialise button */
 el('surfBtn').textContent = MESH_MODE_LABELS[meshMode];
 el('surfBtn').className   = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' '+MESH_MODE_CLASSES[meshMode] : '');
 
 el('surfBtn').addEventListener('click', function(){
   meshMode = (meshMode + 1) % MESH_MODE_LABELS.length;
   applyMeshMode();
-  var n_fills = planeFills.size, n_mesh = allMeshes.size;
-  var extra = '';
-  if(meshMode===0){ extra=' \u2022 hidden'; }
-  if(meshMode===1){ extra=(n_mesh>0?' \u2022 '+n_mesh+' XRMesh':'')+(n_fills>0?' \u2022 '+n_fills+' planes':''); }
-  if(meshMode===2){ extra=depthEnabled?' \u2022 depth\u2605':((n_fills>0?' \u2022 '+n_fills+' plane fills':'')); }
-  if(meshMode===3){ extra=depthEnabled?' \u2022 depth occlusion':(n_mesh>0?' \u2022 XRMesh occluding':' \u2022 needs XRMesh flag'); }
-  showToast(MESH_MODE_LABELS[meshMode]+(extra||''), 2200);
+  var n = allMeshes.size, p = planeWires.size;
+  var extra = meshMode===1
+    ? ((n>0 ? ' \u2022 '+n+' XRMesh' : '') + (p>0 ? ' \u2022 '+p+' planes' : ' \u2022 scanning\u2026'))
+    : ' \u2022 hidden';
+  showToast(MESH_MODE_LABELS[meshMode]+extra, 2000);
 });
 
-/* Long-press surfBtn: show chrome flag instructions for XRMesh */
+/* Long-press: setup instructions for XRMesh */
 (function(){
   var _st=null;
   el('surfBtn').addEventListener('pointerdown',function(){
@@ -5655,16 +5390,20 @@ el('surfBtn').addEventListener('click', function(){
   });
 })();
 
-/* ─────────────────────────────────────────────────────────────────────────
-   XRMesh visibility + frustum fix
-   Fix: newly created XRMesh objects (in updateSceneMeshes) have
-   matrixAutoUpdate=false, so Three.js can't compute frustum bounds.
-   We must set frustumCulled=false AND computeBoundingBox on the geometry.
-   Also fix: snapToNearestMeshVertex was reading the empty legacy meshWires
-   map — updated to iterate allMeshes contexts directly.
-   ───────────────────────────────────────────────────────────────────────── */
+/* ── Patch updateSceneMeshes: set frustumCulled=false on new objects ──── */
+var _origUpdateSceneMeshes = updateSceneMeshes;
+updateSceneMeshes = function(frame, refSpace){
+  var prevSize = allMeshes.size;
+  _origUpdateSceneMeshes(frame, refSpace);
+  if(allMeshes.size !== prevSize){
+    allMeshes.forEach(function(ctx){ ctx.wireMesh.frustumCulled = false; });
+  }
+};
 
-/* Patch createXRMeshGeo to always compute bounds (needed for non-frustumCulled check) */
+var _origClearSceneMeshes = clearSceneMeshes;
+clearSceneMeshes = function(){ _origClearSceneMeshes(); };
+
+/* ── Patch createXRMeshGeo: always compute bounds ───────────────────── */
 var _origCreateXRMeshGeo = createXRMeshGeo;
 createXRMeshGeo = function(mesh){
   var geo = _origCreateXRMeshGeo(mesh);
@@ -5672,38 +5411,16 @@ createXRMeshGeo = function(mesh){
   return geo;
 };
 
-/* Patch updateSceneMeshes to set frustumCulled=false on new mesh objects */
-var _origUpdateSceneMeshes = updateSceneMeshes;
-updateSceneMeshes = function(frame, refSpace){
-  var prevSize = allMeshes.size;
-  _origUpdateSceneMeshes(frame, refSpace);
-  /* For any newly added contexts: ensure frustumCulled=false */
-  if(allMeshes.size !== prevSize){
-    allMeshes.forEach(function(ctx){
-      ctx.solidMesh.frustumCulled   = false;
-      ctx.wireMesh.frustumCulled    = false;
-      ctx.occludeMesh.frustumCulled = false;
-    });
-  }
-};
-
-var _origClearSceneMeshes = clearSceneMeshes;
-clearSceneMeshes = function(){
-  _origClearSceneMeshes();
-};
-
-/* Fix snapToNearestMeshVertex: read allMeshes instead of empty legacy meshWires */
+/* ── Fix snapToNearestMeshVertex: read allMeshes not empty legacy map ─── */
 snapToNearestMeshVertex = function(pos){
   if(!allMeshes || allMeshes.size===0) return null;
   var best=null, bestD2=SNAP_DIST_WALL*SNAP_DIST_WALL;
   allMeshes.forEach(function(ctx){
-    var solidM = ctx.solidMesh;
-    if(!solidM || !solidM.geometry) return;
-    var posAttr = solidM.geometry.attributes.position;
+    var m = ctx.wireMesh;
+    if(!m || !m.geometry) return;
+    var posAttr = m.geometry.attributes.position;
     if(!posAttr) return;
-    var mat = solidM.matrix;
-    var count = posAttr.count;
-    /* Sample every 4th vertex for perf */
+    var mat = m.matrix, count = posAttr.count;
     for(var vi=0; vi<count; vi+=4){
       var lx=posAttr.getX(vi), ly=posAttr.getY(vi), lz=posAttr.getZ(vi);
       var wx=mat.elements[0]*lx+mat.elements[4]*ly+mat.elements[8]*lz+mat.elements[12];
@@ -5715,133 +5432,6 @@ snapToNearestMeshVertex = function(pos){
   });
   return best;
 };
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   DEPTH-SENSING POINT CLOUD
-   frame.getDepthInformation(view) — ARCore ToF / structured-light depth.
-   Works on Pixel 4+, Galaxy S21+, any ARCore-capable phone with depth HW.
-   ═══════════════════════════════════════════════════════════════════════════ */
-var depthCloud     = null;
-var depthPosBuf    = null;
-var depthColBuf    = null;
-var depthRayCache  = null;
-var depthRayCacheKey = '';
-var depthFrameCount = 0;
-var depthEnabled   = false;
-var DEPTH_GRID     = 32;    /* 32×32 = 1024 sample points */
-var DEPTH_INTERVAL = 4;     /* update every 4 frames */
-
-var depthOccluder = null;   /* depth-write-only twin of the depth cloud */
-
-function initDepthCloud(){
-  if(depthCloud) return;
-  var N = DEPTH_GRID * DEPTH_GRID;
-  depthPosBuf = new Float32Array(N * 3);
-  depthColBuf = new Float32Array(N * 3);
-  /* Pre-fill positions off-screen (far below) so invalid samples don't occlude */
-  for(var i=0;i<N;i++){
-    depthPosBuf[i*3]=0; depthPosBuf[i*3+1]=-9000; depthPosBuf[i*3+2]=0;
-    depthColBuf[i*3]=0.1; depthColBuf[i*3+1]=0.6; depthColBuf[i*3+2]=0.8;
-  }
-  var geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(depthPosBuf, 3));
-  geo.setAttribute('color',    new THREE.BufferAttribute(depthColBuf, 3));
-  geo.drawRange.count = N;   /* occluder always runs all N points */
-
-  /* Visible colour cloud (mode 2) */
-  var cloudGeo = new THREE.BufferGeometry();
-  cloudGeo.setAttribute('position', new THREE.BufferAttribute(depthPosBuf, 3));
-  cloudGeo.setAttribute('color',    new THREE.BufferAttribute(depthColBuf, 3));
-  cloudGeo.drawRange.count = 0;
-  depthCloud = new THREE.Points(cloudGeo, new THREE.PointsMaterial({
-    vertexColors: true, size: 0.026,
-    transparent: true, opacity: 0.80,
-    depthWrite: false, sizeAttenuation: true
-  }));
-  depthCloud.frustumCulled = false;
-  depthCloud.visible = false;
-  if(scene) scene.add(depthCloud);
-
-  /* Depth-only occluder (mode 3) — same positions, no colour output.
-     renderOrder=-10 ensures it runs BEFORE the plan (renderOrder=0/1)
-     so real-world surfaces write to the Z-buffer first.                */
-  depthOccluder = new THREE.Points(geo, new THREE.PointsMaterial({
-    size: 18, sizeAttenuation: false,   /* screen-space pixels, covers grid gaps */
-    colorWrite: false, depthWrite: true, depthTest: false
-  }));
-  depthOccluder.frustumCulled = false;
-  depthOccluder.renderOrder = -10;
-  depthOccluder.visible = false;
-  if(scene) scene.add(depthOccluder);
-}
-
-function buildDepthRays(proj){
-  var N = DEPTH_GRID;
-  depthRayCache = new Float32Array(N * N * 3);
-  var fx=proj[0], fy=proj[5];
-  for(var yi=0;yi<N;yi++){
-    for(var xi=0;xi<N;xi++){
-      var ndcX =  ((xi+0.5)/N)*2.0-1.0;
-      var ndcY = -(((yi+0.5)/N)*2.0-1.0);
-      var vx=ndcX/fx, vy=ndcY/fy, vz=-1.0;
-      var len=Math.sqrt(vx*vx+vy*vy+1.0);
-      var idx=(yi*N+xi)*3;
-      depthRayCache[idx]=vx/len; depthRayCache[idx+1]=vy/len; depthRayCache[idx+2]=vz/len;
-    }
-  }
-}
-
-function updateDepthCloud(frame){
-  if(!depthCloud || !scene) return;
-  depthCloud.visible = (meshMode === 2);
-  if(depthOccluder) depthOccluder.visible = (meshMode === 3);
-  if(meshMode !== 2 && meshMode !== 3) return;
-  depthFrameCount++;
-  if(depthFrameCount % DEPTH_INTERVAL !== 0) return;
-  if(!xrRefSpace) return;
-  var vp;
-  try{ vp = frame.getViewerPose(xrRefSpace); }catch(e){ return; }
-  if(!vp||!vp.views||vp.views.length===0) return;
-  var view = vp.views[0];
-  var depthInfo;
-  try{ depthInfo = frame.getDepthInformation(view); }catch(e){ return; }
-  if(!depthInfo) return;
-  if(!depthEnabled){
-    depthEnabled=true;
-    showToast('\u2605 Depth sensor active', 2000);
-  }
-  var proj=view.projectionMatrix;
-  var ck=proj[0].toFixed(4)+','+proj[5].toFixed(4);
-  if(ck!==depthRayCacheKey){ buildDepthRays(proj); depthRayCacheKey=ck; }
-  var m=view.transform.matrix;
-  var positions=depthPosBuf, colors=depthColBuf, N=DEPTH_GRID, count=0;
-  var floorY=(smoothFloorY!==null)?smoothFloorY:-1.2;
-  for(var j=0;j<N*N;j++){
-    var nx=(j%N+0.5)/N, ny=(Math.floor(j/N)+0.5)/N;
-    var depth;
-    try{ depth=depthInfo.getDepthInMeters(nx,ny); }catch(e){ continue; }
-    if(!isFinite(depth)||depth<0.12||depth>6.5) continue;
-    var ri=j*3, rvx=depthRayCache[ri], rvy=depthRayCache[ri+1], rvz=depthRayCache[ri+2];
-    var vx2=rvx*depth, vy2=rvy*depth, vz2=rvz*depth;
-    var wx=m[0]*vx2+m[4]*vy2+m[8]*vz2+m[12];
-    var wy=m[1]*vx2+m[5]*vy2+m[9]*vz2+m[13];
-    var wz=m[2]*vx2+m[6]*vy2+m[10]*vz2+m[14];
-    var ci=count*3;
-    positions[ci]=wx; positions[ci+1]=wy; positions[ci+2]=wz;
-    var t=Math.max(0,Math.min(1,(wy-floorY)/2.8));
-    colors[ci]=t*0.6; colors[ci+1]=0.85-t*0.55; colors[ci+2]=0.35+t*0.65;
-    count++;
-  }
-  depthCloud.geometry.attributes.position.needsUpdate=true;
-  depthCloud.geometry.attributes.color.needsUpdate=true;
-  depthCloud.geometry.drawRange.count=count;
-  /* Also mark occluder positions dirty — it shares depthPosBuf */
-  if(depthOccluder){
-    depthOccluder.geometry.attributes.position.needsUpdate=true;
-    /* drawRange.count stays at N (all points) for max occlusion coverage */
-  }
-}
-
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ②  IFC / BIM LAYER
