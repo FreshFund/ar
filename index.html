@@ -5760,97 +5760,293 @@ el('restoreNoBtn').addEventListener('click', function(){
      frame.getDepthInformation → ARCore depth buffer → point cloud (mode 2)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-var meshMode = 2;   /* 0=off 1=wire 2=solid 3=occlude  — default solid so fills show on first scan */
-
-var MESH_MODE_LABELS  = ['\u2b21 off', '\u2b21 wire', '\u2b21 solid', '\u2b21 occlude'];
-var MESH_MODE_CLASSES = ['', 'active-b', 'active-g', 'active-y'];
-
-/* ── Plane solid fills — from detectedPlanes, always works ──────────────
-   Uses earcut.js for correct concave polygon triangulation.
-   (ARCore floor outlines are often L-shaped after scanning furniture.)  */
 /* ═══════════════════════════════════════════════════════════════════════════
-   SURFACE OVERLAY  —  Wire mode only
+   SURFACE OVERLAY  —  3 modes, platform-adaptive
    ─────────────────────────────────────────────────────────────────────────
-   2 modes cycled by surfBtn:
-     0 = ⬡ off   — all surface geometry hidden
-     1 = ⬡ wire  — XRMesh wireframes + plane boundary loops + floor grids
+   Mode 0 : off    — everything hidden
+   Mode 1 : wire   — plane boundary loops + XRMesh wireframes
+   Mode 2 : solid  — plane solid fills (always) + XRMesh solid (glasses/Quest)
 
-   APIs:
-     frame.detectedPlanes  → XRPlane boundary loops (always with plane-detection)
-     frame.detectedMeshes  → XRMesh per-face wireframe (needs #webxr-incubations)
+   On phones     : detectedPlanes  → solid fills for floor / wall / column
+   On XR glasses : detectedMeshes  → dense semantic solid mesh (auto-detected)
+   Both paths are live simultaneously; XRMesh upgrades the quality when present.
+
+   Fill colours (all transparent, depthWrite:false so PDF shows through):
+     Floor   0x00cc55  green   42%
+     Wall    0x3377ff  blue    32%
+     Column  0xff8800  orange  38%   (small vertical plane, area < 2m^2)
+     XRMesh  per-label         30%
+   ─────────────────────────────────────────────────────────────────────────
+   Earcut is used for floor/wall polygon triangulation.
+   Wall planes: project polygon to the plane's local XY (not world XZ) so
+   earcut works on vertical surfaces too.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-var meshMode = 1;   /* 0=off  1=wire */
+var meshMode = 1;   /* start in wire; user can cycle to solid */
 
-var MESH_MODE_LABELS  = ['\u2b21 off', '\u2b21 wire'];
-var MESH_MODE_CLASSES = ['', 'active-b'];
+var MESH_MODE_LABELS  = ['\u2b21 off', '\u2b21 wire', '\u2b21 solid'];
+var MESH_MODE_CLASSES = ['', 'active-b', 'active-g'];
 
-/* ── applyMeshMode — single source of truth for all surface visibility ── */
+/* ── Plane fill map ─────────────────────────────────────────────────────── */
+var planeFills = new Map();   /* XRPlane → THREE.Mesh */
+
+var FILL_COL   = { floor:0x00cc55, wall:0x3377ff, column:0xff8800 };
+var FILL_OPA   = { floor:0.42,     wall:0.32,     column:0.38     };
+
+/* ── Earcut triangulation, generalised for any plane orientation ─────────
+   For floor planes: project to world XZ (Y ignored by earcut).
+   For wall planes:  project to the plane's own local XZ (using the pose
+   matrix columns as basis vectors) so the polygon is not degenerate.     */
+function _triangulatePlanePolygon(polygon, pm, isWall){
+  /* Transform polygon vertices to world space */
+  var wpts = polygon.map(function(v){
+    return new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(pm);
+  });
+
+  /* Remove closing duplicate if present */
+  if(wpts.length > 1 && wpts[0].distanceTo(wpts[wpts.length-1]) < 0.001)
+    wpts = wpts.slice(0, -1);
+  if(wpts.length < 3) return null;
+
+  var flat, posArr;
+
+  if(!isWall){
+    /* Floor: project to XZ plane — earcut works perfectly */
+    flat = [];
+    wpts.forEach(function(p){ flat.push(p.x, p.z); });
+    var tris = (typeof earcut !== 'undefined') ? earcut(flat, null, 2) : _fanTris(wpts.length);
+    if(!tris || tris.length < 3) return null;
+    /* Lift slightly above floor to avoid z-fighting */
+    posArr = new Float32Array(wpts.length * 3);
+    wpts.forEach(function(p, i){ posArr[i*3]=p.x; posArr[i*3+1]=p.y+0.012; posArr[i*3+2]=p.z; });
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+    geo.setIndex(new THREE.BufferAttribute(new Uint32Array(tris), 1));
+    geo.computeBoundingBox(); geo.computeBoundingSphere();
+    return geo;
+  } else {
+    /* Wall / column: project to plane-local XZ using pose matrix axes.
+       pm col-0 = local X (horizontal along wall), pm col-1 = local Y (up).
+       We use the world-space points directly but project them onto
+       two orthogonal axes in the plane to get a 2-D flat array for earcut. */
+    /* Compute two orthonormal in-plane basis vectors from first edge */
+    var pA = wpts[0], pB = wpts[1];
+    var axisU = new THREE.Vector3().subVectors(pB, pA).normalize();
+    /* Plane normal from pose matrix column 1 (Y axis of plane space) */
+    var nrm = new THREE.Vector3(pm.elements[4], pm.elements[5], pm.elements[6]).normalize();
+    var axisV = new THREE.Vector3().crossVectors(nrm, axisU).normalize();
+
+    flat = [];
+    wpts.forEach(function(p){
+      var rel = new THREE.Vector3().subVectors(p, pA);
+      flat.push(rel.dot(axisU), rel.dot(axisV));
+    });
+    var tris = (typeof earcut !== 'undefined') ? earcut(flat, null, 2) : _fanTris(wpts.length);
+    if(!tris || tris.length < 3) return null;
+    posArr = new Float32Array(wpts.length * 3);
+    wpts.forEach(function(p, i){ posArr[i*3]=p.x; posArr[i*3+1]=p.y; posArr[i*3+2]=p.z; });
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+    geo.setIndex(new THREE.BufferAttribute(new Uint32Array(tris), 1));
+    geo.computeBoundingBox(); geo.computeBoundingSphere();
+    return geo;
+  }
+}
+
+function _fanTris(n){ /* fallback centroid-fan without earcut */
+  var t=[];
+  for(var i=1;i<n-1;i++) t.push(0,i,i+1);
+  return t;
+}
+
+/* ── Create or update a single plane fill ──────────────────────────────── */
+function _updatePlaneFill(plane, pm){
+  var isWall = (plane.orientation === 'vertical');
+
+  /* Classify column vs plain wall (column = small square-ish vertical plane) */
+  var kind = 'wall';
+  if(isWall){
+    var wxs=[], wzs=[], wys=[];
+    plane.polygon.forEach(function(v){
+      var w=new THREE.Vector3(v.x,v.y,v.z).applyMatrix4(pm);
+      wxs.push(w.x); wys.push(w.y); wzs.push(w.z);
+    });
+    var spanH=Math.sqrt(Math.pow(Math.max.apply(null,wxs)-Math.min.apply(null,wxs),2)+
+                        Math.pow(Math.max.apply(null,wzs)-Math.min.apply(null,wzs),2));
+    var spanV=Math.max.apply(null,wys)-Math.min.apply(null,wys);
+    var area=spanH*spanV;
+    var aspect=spanH/(spanV||0.001);
+    kind = (area < 2.5 && aspect < 3.0) ? 'column' : 'wall';
+  }
+
+  var col = isWall ? FILL_COL[kind] : FILL_COL.floor;
+  var opa = isWall ? FILL_OPA[kind] : FILL_OPA.floor;
+
+  var existing = planeFills.get(plane);
+
+  /* Check if polygon vertex count changed — need rebuild */
+  var needRebuild = !existing || (existing.userData.vertCount !== plane.polygon.length);
+
+  if(needRebuild){
+    if(existing){ scene.remove(existing); existing.geometry.dispose(); existing.material.dispose(); }
+    var geo = _triangulatePlanePolygon(plane.polygon, pm, isWall);
+    if(!geo) return;
+    var mat = new THREE.MeshBasicMaterial({
+      color: col, transparent: true, opacity: opa,
+      side: THREE.DoubleSide, depthWrite: false
+    });
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 1;
+    mesh.visible = (meshMode === 2);
+    mesh.userData.vertCount = plane.polygon.length;
+    mesh.userData.kind = kind;
+    scene.add(mesh);
+    planeFills.set(plane, mesh);
+  } else {
+    /* In-place pose update — reproject world positions from new pm */
+    var fill = existing;
+    var polygon = plane.polygon;
+    var posAttr = fill.geometry.attributes.position;
+    var yLift = isWall ? 0 : 0.012;
+
+    /* Remove closing dup for index alignment */
+    var n = polygon.length;
+    if(n > 1){
+      var last=new THREE.Vector3(polygon[n-1].x,polygon[n-1].y,polygon[n-1].z).applyMatrix4(pm);
+      var first=new THREE.Vector3(polygon[0].x,polygon[0].y,polygon[0].z).applyMatrix4(pm);
+      if(last.distanceTo(first) < 0.001) n--;
+    }
+    for(var vi=0; vi<n && vi<posAttr.count; vi++){
+      var wp=new THREE.Vector3(polygon[vi].x,polygon[vi].y,polygon[vi].z).applyMatrix4(pm);
+      posAttr.setXYZ(vi, wp.x, wp.y+yLift, wp.z);
+    }
+    posAttr.needsUpdate = true;
+    fill.geometry.computeBoundingSphere();
+    fill.visible = (meshMode === 2);
+  }
+}
+
+/* ── Extend updatePlaneWireframes to maintain fills alongside wires ──────── */
+var _origUpdatePlaneWireframes = updatePlaneWireframes;
+updatePlaneWireframes = function(frame, refSpace){
+  _origUpdatePlaneWireframes(frame, refSpace);
+  if(!frame.detectedPlanes || !scene) return;
+  var seen = new Set();
+  frame.detectedPlanes.forEach(function(plane){
+    if(!plane.planeSpace || !plane.polygon || plane.polygon.length < 3) return;
+    seen.add(plane);
+    try{
+      var pp = frame.getPose(plane.planeSpace, refSpace);
+      if(!pp) return;
+      var pm = new THREE.Matrix4().fromArray(pp.transform.matrix);
+      _updatePlaneFill(plane, pm);
+    }catch(e){}
+  });
+  /* Remove fills for planes that disappeared */
+  planeFills.forEach(function(mesh, plane){
+    if(!seen.has(plane)){
+      scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose();
+      planeFills.delete(plane);
+    }
+  });
+};
+
+/* ── Extend clearPlaneWires to also clear fills ─────────────────────────── */
+var _origClearPlaneWires = clearPlaneWires;
+clearPlaneWires = function(){
+  planeFills.forEach(function(m){ if(scene) scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
+  planeFills.clear();
+  _origClearPlaneWires();
+};
+
+/* ── XRMesh solid material — per semantic label ──────────────────────────── */
+var XRMESH_FILL_COL = {
+  floor:   0x00cc55,  /* green  */
+  wall:    0x3377ff,  /* blue   */
+  ceiling: 0x884488,  /* purple */
+  table:   0xff8822,  /* orange */
+  couch:   0xdd4444,  /* red    */
+  door:    0xffdd00,  /* yellow */
+  window:  0x44ddff,  /* cyan   */
+  _default:0x888888   /* grey   */
+};
+
+function _getMeshSolidMat(label){
+  var col = XRMESH_FILL_COL[label] || XRMESH_FILL_COL._default;
+  return new THREE.MeshBasicMaterial({
+    color: col, transparent: true, opacity: 0.30,
+    side: THREE.DoubleSide, depthWrite: false
+  });
+}
+
+/* ── applyMeshMode — single authoritative visibility toggle ─────────────── */
 function applyMeshMode(){
   var btn = el('surfBtn');
   btn.textContent = MESH_MODE_LABELS[meshMode];
   btn.className   = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' '+MESH_MODE_CLASSES[meshMode] : '');
 
-  var show = (meshMode === 1);
-  planeWires.forEach(function(w){ w.visible = show; });
-  planeGrids.forEach(function(g){ g.visible = show; });
-  allMeshes.forEach(function(ctx){ ctx.wireMesh.visible = show; });
+  var showWire  = (meshMode === 1);
+  var showSolid = (meshMode === 2);
+
+  /* Plane boundary wires + floor grids */
+  planeWires.forEach(function(w){ w.visible = showWire; });
+  planeGrids.forEach(function(g){ g.visible = showWire; });
+
+  /* Plane solid fills */
+  planeFills.forEach(function(m){ m.visible = showSolid; });
+
+  /* XRMesh — wire in mode 1, solid-fill in mode 2, hidden in mode 0 */
+  allMeshes.forEach(function(ctx){
+    ctx.wireMesh.visible = showWire;
+    /* solidFill is added in mode-2 path below; may not exist yet */
+    if(ctx.solidFill) ctx.solidFill.visible = showSolid;
+  });
+
   if(renderer) renderer.sortObjects = true;
 }
 
-/* Initialise button */
-el('surfBtn').textContent = MESH_MODE_LABELS[meshMode];
-el('surfBtn').className   = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' '+MESH_MODE_CLASSES[meshMode] : '');
-
-el('surfBtn').addEventListener('click', function(){
-  meshMode = (meshMode + 1) % MESH_MODE_LABELS.length;
-  applyMeshMode();
-  var n = allMeshes.size, p = planeWires.size;
-  var extra = meshMode===1
-    ? ((n>0 ? ' \u2022 '+n+' XRMesh' : '') + (p>0 ? ' \u2022 '+p+' planes' : ' \u2022 scanning\u2026'))
-    : ' \u2022 hidden';
-  showToast(MESH_MODE_LABELS[meshMode]+extra, 2000);
-});
-
-/* Long-press surfBtn: XRMesh setup — tappable deep-link on Android */
-(function(){
-  var _st=null;
-  el('surfBtn').addEventListener('pointerdown',function(){
-    _st=setTimeout(function(){
-      /* On Android Chrome, intent:// URLs open chrome://flags directly.
-         On other platforms the link safely does nothing.                */
-      var isAndroid = /Android/i.test(navigator.userAgent);
-      if(isAndroid){
-        showToastAction(
-          'XRMesh needs a flag:',
-          'Open chrome://flags →',
-          'intent://flags#webxr-incubations#Intent;scheme=chrome;package=com.android.chrome;end',
-          9000
-        );
-      } else {
-        showToast('XRMesh: chrome://flags \u2192 #webxr-incubations \u2192 Enable \u2192 Relaunch', 7000);
-      }
-    },1000);
-  });
-  ['pointerup','pointercancel'].forEach(function(ev){
-    el('surfBtn').addEventListener(ev,function(){ clearTimeout(_st); });
-  });
-})();
-
-/* ── Patch updateSceneMeshes: set frustumCulled=false on new objects ──── */
+/* ── Patch updateSceneMeshes: add solidFill twin on XR glasses ──────────── */
 var _origUpdateSceneMeshes = updateSceneMeshes;
 updateSceneMeshes = function(frame, refSpace){
   var prevSize = allMeshes.size;
   _origUpdateSceneMeshes(frame, refSpace);
+
+  /* For any newly registered XRMesh context: add a solid-fill twin */
   if(allMeshes.size !== prevSize){
-    allMeshes.forEach(function(ctx){ ctx.wireMesh.frustumCulled = false; });
+    allMeshes.forEach(function(ctx){
+      ctx.wireMesh.frustumCulled = false;
+      if(!ctx.solidFill && ctx.wireMesh.geometry){
+        var sf = new THREE.Mesh(ctx.wireMesh.geometry, _getMeshSolidMat(ctx.label||'_default'));
+        sf.matrixAutoUpdate = false;
+        sf.frustumCulled = false;
+        sf.renderOrder = 1;
+        sf.visible = (meshMode === 2);
+        scene.add(sf);
+        ctx.solidFill = sf;
+      }
+    });
   }
+
+  /* Keep solidFill pose in sync with wireMesh every frame */
+  allMeshes.forEach(function(ctx){
+    if(ctx.solidFill){
+      ctx.solidFill.matrix.copy(ctx.wireMesh.matrix);
+      ctx.solidFill.matrixWorldNeedsUpdate = true;
+    }
+  });
 };
 
+/* Extend clearSceneMeshes to clean up solid fills */
 var _origClearSceneMeshes = clearSceneMeshes;
-clearSceneMeshes = function(){ _origClearSceneMeshes(); };
+clearSceneMeshes = function(){
+  allMeshes.forEach(function(ctx){
+    if(ctx.solidFill && scene){ scene.remove(ctx.solidFill); ctx.solidFill.material.dispose(); }
+  });
+  _origClearSceneMeshes();
+};
 
-/* ── Patch createXRMeshGeo: always compute bounds ───────────────────── */
+/* ── Patch createXRMeshGeo: always compute bounds ────────────────────────── */
 var _origCreateXRMeshGeo = createXRMeshGeo;
 createXRMeshGeo = function(mesh){
   var geo = _origCreateXRMeshGeo(mesh);
@@ -5868,9 +6064,6 @@ snapToNearestMeshVertex = function(pos){
     var posAttr = m.geometry.attributes.position;
     if(!posAttr) return;
     var mat = m.matrix, count = posAttr.count;
-    /* Adaptive stride: sample every vertex for small meshes (column faces
-       typically have <100 verts) so we never miss a tight snap target.
-       For larger meshes (floors, walls) every 4th is sufficient.          */
     var stride = (count < 100) ? 1 : 4;
     for(var vi=0; vi<count; vi+=stride){
       var lx=posAttr.getX(vi), ly=posAttr.getY(vi), lz=posAttr.getZ(vi);
@@ -5883,6 +6076,39 @@ snapToNearestMeshVertex = function(pos){
   });
   return best;
 };
+
+/* ── Button init ────────────────────────────────────────────────────────── */
+el('surfBtn').textContent = MESH_MODE_LABELS[meshMode];
+el('surfBtn').className   = 'hud-btn' + (MESH_MODE_CLASSES[meshMode] ? ' '+MESH_MODE_CLASSES[meshMode] : '');
+
+el('surfBtn').addEventListener('click', function(){
+  meshMode = (meshMode + 1) % MESH_MODE_LABELS.length;
+  applyMeshMode();
+  var nM = allMeshes.size, nP = planeWires.size, nF = planeFills.size;
+  var info = '';
+  if(meshMode===1) info = (nM>0?' \u2022 '+nM+' XRMesh':'') + (nP>0?' \u2022 '+nP+' planes':'');
+  if(meshMode===2) info = (nF>0?' \u2022 '+nF+' fills':'') + (nM>0?' \u2022 +'+nM+' XRMesh':'');
+  showToast(MESH_MODE_LABELS[meshMode] + (info||''), 2000);
+});
+
+/* Long-press: XRMesh setup instructions */
+(function(){
+  var _st=null;
+  el('surfBtn').addEventListener('pointerdown',function(){
+    _st=setTimeout(function(){
+      var isAndroid=/Android/i.test(navigator.userAgent);
+      if(isAndroid){
+        showToastAction('XRMesh needs a flag:','Open chrome://flags →',
+          'intent://flags#webxr-incubations#Intent;scheme=chrome;package=com.android.chrome;end',9000);
+      } else {
+        showToast('XRMesh: chrome://flags \u2192 #webxr-incubations \u2192 Enable \u2192 Relaunch',7000);
+      }
+    },1000);
+  });
+  ['pointerup','pointercancel'].forEach(function(ev){
+    el('surfBtn').addEventListener(ev,function(){ clearTimeout(_st); });
+  });
+})();
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SESSION D  —  CAMERA ACCESS + ARUCO MARKER ABSOLUTE POSITION FIX
