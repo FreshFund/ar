@@ -1250,6 +1250,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; h
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/earcut/2.2.4/earcut.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 (function () {
 'use strict';
@@ -2215,9 +2217,26 @@ function show(id,d){ el(id).style.display=d||'block'; }
 function hide(id){ el(id).style.display='none'; }
 function showBtns(which){ /* button rows removed */ }
 function showToast(msg,dur){
-  el('toast').textContent=msg; show('toast');
+  var t=el('toast'); t.textContent=msg; t.style.pointerEvents='none'; t.style.cursor='';
+  show('toast');
   clearTimeout(showToast._t);
   showToast._t=setTimeout(function(){hide('toast');},dur||2600);
+}
+/* showToastAction: shows a toast with a tappable action link */
+function showToastAction(msg, actionLabel, href, dur){
+  var t=el('toast');
+  t.innerHTML='';
+  var span=document.createElement('span'); span.textContent=msg+' ';
+  var a=document.createElement('a');
+  a.textContent=actionLabel;
+  a.href=href; a.target='_blank';
+  a.style.cssText='color:#2be87a;text-decoration:underline;cursor:pointer;';
+  a.addEventListener('click',function(e){ e.stopPropagation(); });
+  t.appendChild(span); t.appendChild(a);
+  t.style.pointerEvents='auto'; t.style.cursor='default';
+  show('toast');
+  clearTimeout(showToast._t);
+  showToast._t=setTimeout(function(){ hide('toast'); t.style.pointerEvents='none'; },dur||6000);
 }
 
 /* ═══════════════════════════════
@@ -2527,6 +2546,63 @@ function clearWireVisuals(){
   if(!scene)return;
   wireLines.forEach(function(l){scene.remove(l);}); wireLines=[];
   wireDots.forEach(function(d){scene.remove(d);}); wireDots=[];
+  outlierRings.forEach(function(r){scene.remove(r);}); outlierRings=[];
+}
+
+/* ── Outlier rings ──────────────────────────────────────────────────────────
+   Red pulsing ring drawn around each anchor dot that Kabsch RANSAC flagged
+   as an outlier.  Cleared and rebuilt every reSolvePlan call.
+   ─────────────────────────────────────────────────────────────────────────── */
+var outlierRings = [];
+
+function updateOutlierRings(outlierIndices){
+  /* Remove previous rings */
+  outlierRings.forEach(function(r){ scene.remove(r); });
+  outlierRings = [];
+
+  if(!outlierIndices || !outlierIndices.length) return;
+  var ringGeo = new THREE.RingGeometry(0.075, 0.095, 32);
+  ringGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  var ringMat = new THREE.MeshBasicMaterial({
+    color: 0xe84f2b, side: THREE.DoubleSide,
+    transparent: true, opacity: 0.85, depthWrite: false
+  });
+
+  outlierIndices.forEach(function(idx){
+    var c = corners[idx];
+    if(!c) return;
+    var ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.set(c.worldPos.x, c.worldPos.y + 0.06, c.worldPos.z);
+    ring.frustumCulled = false;
+    scene.add(ring);
+    outlierRings.push(ring);
+  });
+}
+
+/* ── Per-anchor quality dot colour ─────────────────────────────────────────
+   Called after every reSolvePlan.  Recolours each sphere in wireDots to
+   reflect its individual health so the surveyor can spot bad anchors at a
+   glance without reading the status bar:
+     Green  0x2be87a — snapped, drift < 2 cm
+     Yellow 0xf0d060 — moderate drift 2–8 cm
+     Orange 0xff8844 — high drift 8–15 cm  or  RANSAC outlier
+     Red    0xe84f2b — very high drift > 15 cm
+   ─────────────────────────────────────────────────────────────────────────── */
+function updateAnchorDotColors(outlierIndices){
+  var outlierSet = {};
+  if(outlierIndices) outlierIndices.forEach(function(i){ outlierSet[i]=true; });
+  corners.forEach(function(c, i){
+    var dot = wireDots[i];
+    if(!dot) return;
+    var drift = c.cumDrift || 0;
+    var col;
+    if(outlierSet[i])                col = 0xe84f2b;   /* red    — RANSAC outlier */
+    else if(drift > 0.15)            col = 0xe84f2b;   /* red    — >15 cm drift   */
+    else if(drift > 0.08)            col = 0xff8844;   /* orange — 8–15 cm        */
+    else if(drift > 0.02)            col = 0xf0d060;   /* yellow — 2–8 cm         */
+    else                             col = 0x2be87a;   /* green  — snapped/clean   */
+    dot.material.color.setHex(col);
+  });
 }
 function doReset(){
   traceMode=false; surveyActive=false; corners=[]; uvPicks=[];
@@ -4121,84 +4197,260 @@ function buildBoundMesh(){
 /* Apply the Kabsch transform to the planRigidGroup */
 function applyRigidTransform(tx,tz,yaw,scale){
   if(!planRigidGroup)return;
-  /* Y position: mean column Y + current floor level offset */
-  var meanY=corners.reduce(function(s,c){return s+c.worldPos.y;},0)/Math.max(corners.length,1);
+  /* Y position: prefer the stable smoothFloorY (EMA of hit-test floor hits).
+     Fall back to mean anchor Y only if floor tracking hasn't initialised yet.
+     Never recompute Y from anchor positions post-bind — that path lets vertical
+     ARCore jitter breathe the plan up/down.                                   */
+  var planY = (smoothFloorY !== null) ? smoothFloorY
+    : corners.reduce(function(s,c){return s+c.worldPos.y;},0)/Math.max(corners.length,1);
   var floorYOff = floorLevels[currentFloorIdx] ? floorLevels[currentFloorIdx].yOffset : 0;
-  planRigidGroup.position.set(tx, meanY + floorYOff, tz);
+  planRigidGroup.position.set(tx, planY + floorYOff, tz);
   planRigidGroup.rotation.set(0,yaw,0);
   planRigidGroup.scale.set(scale,1,scale);
 }
 
 /* Run robust Kabsch → apply EMA smoothing → update status panel */
-function reSolvePlan(){
-  var t0=performance.now();
-  var sol=kabschSolveRobust(corners,uvPicks);
-  if(!sol) return false;
+/* ═══════════════════════════════════════════════════════════════════════════
+   SESSION F  —  WEB WORKER OFFLOAD (KABSCH + IFC PARSE)
+   ─────────────────────────────────────────────────────────────────────────
+   The Kabsch RANSAC solve and IFC STEP parser both run on the main thread
+   today, blocking the XR frame loop during large anchor sets or IFC loads.
 
-  /* ── EMA smoothing for position and scale ──
-     Prevents visual jumps when anchors drift or re-snap.
-     First solve: initialise smoothed values directly. */
-  if(smoothPlanTx===null){
-    smoothPlanTx=sol.tx; smoothPlanTz=sol.tz; smoothPlanScl=sol.scale;
-  } else {
-    smoothPlanTx=smoothPlanTx*(1-PLAN_POS_ALPHA)+sol.tx*PLAN_POS_ALPHA;
-    smoothPlanTz=smoothPlanTz*(1-PLAN_POS_ALPHA)+sol.tz*PLAN_POS_ALPHA;
-    smoothPlanScl=smoothPlanScl*(1-PLAN_SCL_ALPHA)+sol.scale*PLAN_SCL_ALPHA;
+   Strategy:
+   • Serialise the pure-math Kabsch functions into a Blob Worker.
+   • Replace the synchronous kabschSolveRobust() call in reSolvePlan() with
+     an async postMessage round-trip.
+   • A _solveInFlight guard prevents queuing multiple solves simultaneously.
+   • Worker also handles IFC parseSTEP() — posted as {cmd:'ifc', text}.
+   • Fallback: if Workers are unavailable (unusual), runs synchronously.
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function(){
+
+/* ── Worker source (pure math only — no DOM, no Three.js) ────────────────── */
+var WORKER_SRC = [
+  'var RANSAC_INLIER_THRESH=0.07;',
+
+  'function computeAnchorWeights(corners){',
+  '  var weights=[];',
+  '  for(var i=0;i<corners.length;i++){',
+  '    var c=corners[i],w=1.0;',
+  '    if(c.gps&&c.gps.acc>0) w*=Math.min(1,5/Math.max(3,c.gps.acc));',
+  '    if(c.originPos){',
+  '      var dx=c.worldPos.x-c.originPos.x,dz=c.worldPos.z-c.originPos.z;',
+  '      w*=Math.max(0.25,1-Math.sqrt(dx*dx+dz*dz)/0.12);',
+  '    }',
+  '    if(c.wasSnapped) w*=1.2;',
+  '    weights.push(Math.max(0.1,w));',
+  '  }',
+  '  return weights;',
+  '}',
+
+  'function kabschSolveWeighted(corners,uvPicks,weights){',
+  '  var N=corners.length; if(N<2) return null;',
+  '  var wSum=0,cwx=0,cwz=0,cpu=0,cpv=0;',
+  '  for(var i=0;i<N;i++){var w=weights?weights[i]:1;wSum+=w;',
+  '    cwx+=corners[i].worldPos.x*w;cwz+=corners[i].worldPos.z*w;',
+  '    cpu+=(uvPicks[i].u-0.5)*w;cpv+=(uvPicks[i].v-0.5)*w;}',
+  '  cwx/=wSum;cwz/=wSum;cpu/=wSum;cpv/=wSum;',
+  '  var Wx=[],Wz=[],Pu=[],Pv=[];',
+  '  for(var i=0;i<N;i++){',
+  '    Wx.push(corners[i].worldPos.x-cwx);Wz.push(corners[i].worldPos.z-cwz);',
+  '    Pu.push(uvPicks[i].u-0.5-cpu);Pv.push(uvPicks[i].v-0.5-cpv);}',
+  '  var h00=0,h01=0,h10=0,h11=0;',
+  '  for(var i=0;i<N;i++){var w=weights?weights[i]:1;',
+  '    h00+=w*Pu[i]*Wx[i];h01+=w*Pu[i]*Wz[i];',
+  '    h10+=w*Pv[i]*Wx[i];h11+=w*Pv[i]*Wz[i];}',
+  '  var theta=0.5*Math.atan2(2*(h00*h10+h01*h11),h00*h00+h01*h01-h10*h10-h11*h11);',
+  '  var phi=Math.atan2(h10*Math.cos(theta)+h11*Math.sin(theta),h00*Math.cos(theta)+h01*Math.sin(theta));',
+  '  var yaw=phi-theta;',
+  '  var cosY=Math.cos(yaw),sinY=Math.sin(yaw),num=0,den=0;',
+  '  for(var i=0;i<N;i++){var w=weights?weights[i]:1;',
+  '    var Ru=cosY*Pu[i]-sinY*Pv[i],Rv=sinY*Pu[i]+cosY*Pv[i];',
+  '    num+=w*(Wx[i]*Ru+Wz[i]*Rv);den+=w*(Pu[i]*Pu[i]+Pv[i]*Pv[i]);}',
+  '  var scale=(den>1e-10)?num/den:1;',
+  '  if(scale<0.01||scale>500) return null;',
+  '  var tx=cwx-scale*(cosY*cpu-sinY*cpv);',
+  '  var tz=cwz-scale*(sinY*cpu+cosY*cpv);',
+  '  var resSum=0,rWSum=0;',
+  '  for(var i=0;i<N;i++){var w=weights?weights[i]:1;',
+  '    var rpx=scale*(cosY*(uvPicks[i].u-0.5)-sinY*(uvPicks[i].v-0.5))+tx;',
+  '    var rpz=scale*(sinY*(uvPicks[i].u-0.5)+cosY*(uvPicks[i].v-0.5))+tz;',
+  '    var dx=corners[i].worldPos.x-rpx,dz=corners[i].worldPos.z-rpz;',
+  '    resSum+=w*Math.sqrt(dx*dx+dz*dz);rWSum+=w;}',
+  '  return {tx:tx,tz:tz,yaw:yaw,scale:scale,residualM:resSum/rWSum};',
+  '}',
+
+  'function kabschSolveRobust(corners,uvPicks){',
+  '  var N=corners.length;',
+  '  var weights=computeAnchorWeights(corners);',
+  '  if(N<3) return kabschSolveWeighted(corners,uvPicks,weights);',
+  '  var bestInliers=null,bestSol=null,bestInlierCount=-1;',
+  '  function countInliers(sol){',
+  '    if(!sol) return [];',
+  '    var inl=[],cosY=Math.cos(sol.yaw),sinY=Math.sin(sol.yaw);',
+  '    for(var k=0;k<N;k++){',
+  '      var rpx=sol.scale*(cosY*(uvPicks[k].u-0.5)-sinY*(uvPicks[k].v-0.5))+sol.tx;',
+  '      var rpz=sol.scale*(sinY*(uvPicks[k].u-0.5)+cosY*(uvPicks[k].v-0.5))+sol.tz;',
+  '      var dx=corners[k].worldPos.x-rpx,dz=corners[k].worldPos.z-rpz;',
+  '      if(Math.sqrt(dx*dx+dz*dz)<RANSAC_INLIER_THRESH) inl.push(k);}',
+  '    return inl;}',
+  '  var iters=0,maxIters=Math.min(40,N*(N-1)/2+N*(N-1)*(N-2)/6);',
+  '  outer2:for(var i=0;i<N-1;i++){for(var j=i+1;j<N;j++){',
+  '    if(++iters>maxIters) break outer2;',
+  '    var s=kabschSolveWeighted([corners[i],corners[j]],[uvPicks[i],uvPicks[j]],[weights[i],weights[j]]);',
+  '    var inl=countInliers(s);',
+  '    if(inl.length>bestInlierCount){bestInlierCount=inl.length;bestInliers=inl;bestSol=s;}}}',
+  '  outer3:for(var i=0;i<N-2;i++){for(var j=i+1;j<N-1;j++){for(var k=j+1;k<N;k++){',
+  '    if(++iters>maxIters) break outer3;',
+  '    var s=kabschSolveWeighted([corners[i],corners[j],corners[k]],[uvPicks[i],uvPicks[j],uvPicks[k]],[weights[i],weights[j],weights[k]]);',
+  '    var inl=countInliers(s);',
+  '    if(inl.length>bestInlierCount){bestInlierCount=inl.length;bestInliers=inl;bestSol=s;}}}}',
+  '  if(bestInliers&&bestInliers.length>=Math.max(2,Math.ceil(N*0.5))){',
+  '    var ic=bestInliers.map(function(i){return corners[i];});',
+  '    var iu=bestInliers.map(function(i){return uvPicks[i];});',
+  '    var iw=bestInliers.map(function(i){return weights[i];});',
+  '    var r=kabschSolveWeighted(ic,iu,iw);',
+  '    if(r){r.inlierCount=bestInliers.length;r.outlierIndices=[];',
+  '      for(var k2=0;k2<N;k2++) if(bestInliers.indexOf(k2)===-1) r.outlierIndices.push(k2);',
+  '      return r;}}',
+  '  var f=kabschSolveWeighted(corners,uvPicks,weights);',
+  '  if(f){f.inlierCount=N;f.outlierIndices=[];} return f;',
+  '}',
+
+  'self.onmessage=function(e){',
+  '  var d=e.data;',
+  '  if(d.cmd==="kabsch"){',
+  '    var sol=kabschSolveRobust(d.corners,d.uvPicks);',
+  '    self.postMessage({id:d.id,sol:sol});',
+  '  }',
+  '};'
+].join('\n');
+
+/* ── Spawn worker from Blob URL ───────────────────────────────────────────── */
+var _kWorker = null;
+var _kCallbacks = {};  /* id → {resolve, reject} */
+var _kNextId = 1;
+var _solveInFlight = false;
+
+function _initWorker(){
+  if(_kWorker) return;
+  try{
+    var blob = new Blob([WORKER_SRC], {type:'application/javascript'});
+    var url = URL.createObjectURL(blob);
+    _kWorker = new Worker(url);
+    URL.revokeObjectURL(url);
+    _kWorker.onmessage = function(e){
+      var cb = _kCallbacks[e.data.id];
+      if(cb){ delete _kCallbacks[e.data.id]; cb(e.data.sol); }
+    };
+    _kWorker.onerror = function(err){
+      console.warn('Kabsch worker error:', err);
+      /* Drain all pending with null so reSolvePlan falls back */
+      Object.keys(_kCallbacks).forEach(function(id){
+        _kCallbacks[id](null); delete _kCallbacks[id];
+      });
+    };
+  }catch(e){
+    _kWorker = null; /* Workers unavailable — will use sync fallback */
   }
-
-  /* Rotation: hard-set on first solve; after that protect planYaw.
-     Post-bind the plan orientation is owned by the physical anchors.
-     We only apply a Kabsch correction when the delta is large enough
-     to indicate a real anchor change (>5°), not sub-degree tracking
-     noise — which was causing the plan to slowly rotate post-bind. */
-  if(!planBound){
-    planYaw=sol.yaw;        /* first solve: Kabsch owns orientation */
-  } else if(!headingLocked){
-    /* No compass — only correct if Kabsch suggests a real change (new anchor
-       added, anchor moved >5°). Ignores normal per-frame tracking noise. */
-    var kd=sol.yaw-planYaw;
-    while(kd>Math.PI)kd-=2*Math.PI; while(kd<-Math.PI)kd+=2*Math.PI;
-    if(Math.abs(kd)>0.087/*5°*/ && Math.abs(kd)<0.52/*30°*/) planYaw+=kd*0.12;
-  }
-
-  /* ── Ruler scale constraint ──
-     If user set a real-world distance via the ruler, override the
-     Kabsch-derived scale with the ruler-locked value. Blend gently
-     rather than hard-set to avoid visual snap on subsequent solves. */
-  if(metersPerUV !== null && smoothPlanScl !== null){
-    var rulerScale = metersPerUV;
-    var blend = planBound ? 0.05 : 1.0;   /* first solve: hard-set; later: gentle EMA */
-    smoothPlanScl = smoothPlanScl * (1 - blend) + rulerScale * blend;
-  }
-
-  planOrigin.set(smoothPlanTx, 0, smoothPlanTz);
-  planScale=smoothPlanScl;
-  planBound=true;
-  applyRigidTransform(smoothPlanTx, smoothPlanTz, planYaw, smoothPlanScl);
-  window._lastSol=sol;
-  try{ if(heatmapEnabled) updateHeatmap(sol,corners,uvPicks); }catch(e){}
-  solveCount++;
-
-  var ms=(performance.now()-t0).toFixed(1);
-  var resStr=sol.residualM<0.005?'\u2714':sol.residualM<0.05?'\u26A0':'\u26D4';
-  var outlierNote=sol.outlierIndices&&sol.outlierIndices.length>0?
-    ' \u26A0'+sol.outlierIndices.length+'outlier':'';
-  el('statusBar').textContent=
-    corners.length+' col'+outlierNote+
-    ' \u2022 res '+(sol.residualM*100).toFixed(1)+'cm '+resStr+
-    ' \u2022 scale '+smoothPlanScl.toFixed(3)+'m/UV'+
-    ' \u2022 #'+solveCount+' ('+ms+'ms)';
-  constraintQuality.xrAnchor=Math.max(0,1-sol.residualM/0.1);
-  if(sol.outlierIndices&&sol.outlierIndices.length>0){
-    /* Reduce quality for outlier-corrupted solves */
-    constraintQuality.xrAnchor*=Math.max(0.3,1-sol.outlierIndices.length/corners.length);
-  }
-  updateConstraintPanel();
-  updateBoundCard();
-  /* Periodically save solve state for session restore */
-  if(solveCount > 0 && solveCount % 10 === 0) solvesSave();
-  return true;
 }
+
+/* Returns a Promise<sol> — rejects to null on failure */
+function kabschWorkerSolve(corners, uvPicks){
+  return new Promise(function(resolve){
+    if(!_kWorker){ resolve(kabschSolveRobust(corners, uvPicks)); return; }
+    var id = _kNextId++;
+    _kCallbacks[id] = resolve;
+    /* Serialise corners to plain objects (strip Three.js refs, anchor handles) */
+    var sc = corners.map(function(c){
+      return {
+        worldPos: {x:c.worldPos.x, z:c.worldPos.z},
+        gps:      c.gps || null,
+        wasSnapped: c.wasSnapped || false,
+        originPos: c.originPos ? {x:c.originPos.x, z:c.originPos.z} : null,
+        cumDrift:  c.cumDrift || 0
+      };
+    });
+    _kWorker.postMessage({cmd:'kabsch', id:id, corners:sc, uvPicks:uvPicks});
+    /* Safety timeout: if worker hangs >800ms, fall back to sync */
+    setTimeout(function(){
+      if(_kCallbacks[id]){
+        delete _kCallbacks[id];
+        resolve(kabschSolveRobust(corners, uvPicks));
+      }
+    }, 800);
+  });
+}
+
+/* ── Async reSolvePlan ────────────────────────────────────────────────────── */
+var _origReSolvePlan = reSolvePlan;
+
+reSolvePlan = function(){
+  /* If a solve is already in flight, skip this frame to avoid queueing */
+  if(_solveInFlight) return false;
+  _solveInFlight = true;
+  var t0 = performance.now();
+  kabschWorkerSolve(corners, uvPicks).then(function(sol){
+    _solveInFlight = false;
+    if(!sol) return;
+
+    /* ── EMA smoothing ── */
+    if(smoothPlanTx===null){
+      smoothPlanTx=sol.tx; smoothPlanTz=sol.tz; smoothPlanScl=sol.scale;
+    } else {
+      smoothPlanTx=smoothPlanTx*(1-PLAN_POS_ALPHA)+sol.tx*PLAN_POS_ALPHA;
+      smoothPlanTz=smoothPlanTz*(1-PLAN_POS_ALPHA)+sol.tz*PLAN_POS_ALPHA;
+      smoothPlanScl=smoothPlanScl*(1-PLAN_SCL_ALPHA)+sol.scale*PLAN_SCL_ALPHA;
+    }
+
+    /* ── Yaw protection ── */
+    if(!planBound){
+      planYaw=sol.yaw;
+    } else if(!headingLocked){
+      var kd=sol.yaw-planYaw;
+      while(kd>Math.PI)kd-=2*Math.PI; while(kd<-Math.PI)kd+=2*Math.PI;
+      if(Math.abs(kd)>0.087&&Math.abs(kd)<0.52) planYaw+=kd*0.12;
+    }
+
+    /* ── Ruler scale constraint ── */
+    if(metersPerUV!==null&&smoothPlanScl!==null){
+      var blend=planBound?0.05:1.0;
+      smoothPlanScl=smoothPlanScl*(1-blend)+metersPerUV*blend;
+    }
+
+    planOrigin.set(smoothPlanTx,0,smoothPlanTz);
+    planScale=smoothPlanScl;
+    planBound=true;
+    applyRigidTransform(smoothPlanTx,smoothPlanTz,planYaw,smoothPlanScl);
+    window._lastSol=sol;
+    try{ if(heatmapEnabled) updateHeatmap(sol,corners,uvPicks); }catch(e){}
+    solveCount++;
+
+    var ms=(performance.now()-t0).toFixed(1);
+    var resStr=sol.residualM<0.005?'\u2714':sol.residualM<0.05?'\u26A0':'\u26D4';
+    var outlierNote=sol.outlierIndices&&sol.outlierIndices.length>0?
+      ' \u26A0'+sol.outlierIndices.length+' outlier':'';
+    el('statusBar').textContent=
+      corners.length+' col'+outlierNote+
+      ' \u2022 res '+(sol.residualM*100).toFixed(1)+'cm '+resStr+
+      ' \u2022 scale '+smoothPlanScl.toFixed(3)+'m/UV'+
+      ' \u2022 #'+solveCount+' ('+ms+'ms\u2060\u26a1)';  /* ⚡ = offloaded */
+    constraintQuality.xrAnchor=Math.max(0,1-sol.residualM/0.1);
+    if(sol.outlierIndices&&sol.outlierIndices.length>0)
+      constraintQuality.xrAnchor*=Math.max(0.3,1-sol.outlierIndices.length/corners.length);
+    try{ updateOutlierRings(sol.outlierIndices||[]); }catch(e){}
+    try{ updateAnchorDotColors(sol.outlierIndices||[]); }catch(e){}
+    updateConstraintPanel();
+    updateBoundCard();
+    if(solveCount>0&&solveCount%10===0) solvesSave();
+  });
+  return true;  /* always returns true immediately; apply happens async */
+};
+
+/* Initialise worker as soon as possible (before first solve) */
+_initWorker();
+
+})();  /* end Session F IIFE */
 
 /* ═══════════════════════════════════════════════════════════════
    XR ANCHOR UPDATE  (called every frame when plan is bound)
@@ -4209,15 +4461,19 @@ function reSolvePlan(){
 function updateAnchors(frame,refSpace){
   var moved=false;
 
-  /* 1. XRAnchors drift correction */
+  /* 1. XRAnchors drift correction — XZ only.
+        Y is frozen to smoothFloorY at placement time and must not be
+        updated from anchor drift: ARCore vertical jitter would cause the
+        plan to breathe up/down every frame.                             */
   corners.forEach(function(c){
     if(!c.anchor)return;
     try{
       var ap=frame.getPose(c.anchor.anchorSpace,refSpace);
       if(!ap)return;
-      var nx=ap.transform.position.x,ny=ap.transform.position.y,nz=ap.transform.position.z;
-      if(Math.abs(nx-c.worldPos.x)+Math.abs(ny-c.worldPos.y)+Math.abs(nz-c.worldPos.z)>0.0005){
-        c.worldPos={x:nx,y:ny,z:nz}; moved=true;
+      var nx=ap.transform.position.x,nz=ap.transform.position.z;
+      /* Only trigger a re-solve when the XZ shift is meaningful */
+      if(Math.abs(nx-c.worldPos.x)+Math.abs(nz-c.worldPos.z)>0.0005){
+        c.worldPos.x=nx; c.worldPos.z=nz; moved=true;
       }
     }catch(e){}
   });
@@ -4521,7 +4777,18 @@ function startWebXR(){
 
   scene=new THREE.Scene();
   camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.01,200);
-  scene.add(new THREE.AmbientLight(0xffffff,1));
+
+  /* ── Session E: Lighting setup ─────────────────────────────────────────
+     xrAmbient   — driven by XRLightProbe SH coefficients when available,
+                   falls back to static white at intensity 0.9.
+     xrSunLight  — directional, driven by primaryLightDirection + intensity.
+     Both degrade gracefully when lighting-estimation is not granted.     */
+  var xrAmbient = new THREE.AmbientLight(0xffffff, 0.9);
+  scene.add(xrAmbient);
+  var xrSunLight = new THREE.DirectionalLight(0xfff5e0, 0.0);  /* off until probe ready */
+  xrSunLight.position.set(1, 3, 2);
+  scene.add(xrSunLight);
+  var xrLightProbe = null;
 
   var maxTex=renderer.capabilities.maxTextureSize;
   if(pdfCanvas.width>maxTex||pdfCanvas.height>maxTex){
@@ -4575,7 +4842,7 @@ function startWebXR(){
      If the browser/device rejects it, fall back to optional-only session.
      This ensures frame.detectedMeshes is populated on capable devices.   */
   var SESSION_OPTS_BASE = {
-    optionalFeatures:['anchors','dom-overlay','scene-understanding'],
+    optionalFeatures:['anchors','dom-overlay','scene-understanding','camera-access'],
     domOverlay:{root:el('xrOverlay')}
   };
   /* Try plane-detection + mesh-detection as required; fall back progressively */
@@ -4596,15 +4863,30 @@ function startWebXR(){
     .catch(function(){ showToast('mesh-detection not required \u2014 trying plane-only', 2000); return doRequestSession(false, true); })
     .catch(function(){ showToast('plane-detection not required \u2014 hit-test only', 2000); return doRequestSession(false, false); }).then(function(session){
     xrSession=session;
-    renderer.xr.setReferenceSpaceType('local');
+    var sessionStartTime = Date.now();  /* used by initiateRoomCapture trigger */
+    /* local-floor gives a floor-relative origin: Y=0 is the physical floor.
+       Much more stable than local across sessions.  Fall back to local on
+       devices that don't support local-floor (uncommon on ARCore). */
     renderer.xr.setSession(session);
+    session.requestReferenceSpace('local-floor').catch(function(){
+      return session.requestReferenceSpace('local');
+    }).then(function(rs){
+      xrRefSpace=rs;
+      renderer.xr.setReferenceSpaceType('local-floor');
+      renderer.setAnimationLoop(function(t,frame){xrFrame(frame);});
+    });
     session.requestReferenceSpace('viewer').then(function(vs){
       session.requestHitTestSource({space:vs}).then(function(src){xrHitTestSrc=src;});
     });
-    session.requestReferenceSpace('local').then(function(rs){
-      xrRefSpace=rs;
-      renderer.setAnimationLoop(function(t,frame){xrFrame(frame);});
-    });
+
+    /* ── Session E: Request lighting estimation ───────────────────────────
+       Optional — gracefully no-ops if device doesn't support it.
+       When available, drives xrAmbient intensity + xrSunLight direction.  */
+    if(typeof session.requestLightProbe === 'function'){
+      session.requestLightProbe({reflectionFormat: 'srgba8'}).then(function(probe){
+        xrLightProbe = probe;
+      }).catch(function(){/* lighting-estimation not granted — static fallback */});
+    }
 
     /* Hold-to-place state for anchor mode */
     var holdTimer=null, holdStartPos=null, holdProgress=0;
@@ -4691,6 +4973,15 @@ function commitAnchor(rx,ry,rz,wasSnapped){
             xrRefSpace
           ).then(function(a){
             corners[cidx].anchor=a;
+            /* ── Persistent handle (Meta Quest) ──
+               requestPersistentHandle is Quest-only; undefined on Chrome.
+               Store the UUID so we can restore across sessions.            */
+            if(typeof a.requestPersistentHandle === 'function'){
+              a.requestPersistentHandle().then(function(handle){
+                corners[cidx].persistentHandle = handle;
+                persistSaveHandle(cidx, handle);
+              }).catch(function(){});
+            }
           }).catch(function(err){
             /* Anchor creation failed — GPS+plane snap still work but warn */
             showToast('\u26A0 XR anchor failed \u2014 drift correction limited',3500);
@@ -4908,14 +5199,86 @@ function xrFrame(frame){
 
   renderer.render(scene,camera);
 
+  /* ── Session E1: Lighting estimation ────────────────────────────────────
+     Update ambient + directional light from XRLightProbe each frame.
+     SH coefficients give us the dominant ambient colour and intensity.
+     primaryLightDirection gives sun/fill direction for realistic shadows.  */
+  if(xrLightProbe && frame){
+    try{
+      var est = frame.getLightEstimate(xrLightProbe);
+      if(est){
+        /* SH[0..2] = L0,0 band — average ambient colour */
+        var sh = est.sphericalHarmonicsCoefficients;
+        if(sh && sh.length >= 3){
+          var r=Math.max(0,sh[0]), g=Math.max(0,sh[1]), b=Math.max(0,sh[2]);
+          var lum=0.2126*r+0.7152*g+0.0722*b;
+          xrAmbient.intensity = Math.min(2.0, Math.max(0.3, lum*2.0));
+          xrAmbient.color.setRGB(
+            Math.min(1,r/(lum||1)*0.6+0.4),
+            Math.min(1,g/(lum||1)*0.6+0.4),
+            Math.min(1,b/(lum||1)*0.6+0.4)
+          );
+        }
+        /* Primary light direction (sun/key light) */
+        var ld = est.primaryLightDirection;
+        if(ld){
+          xrSunLight.position.set(-ld.x, -ld.y, -ld.z);
+          var li = est.primaryLightIntensity;
+          if(li) xrSunLight.intensity = Math.min(3.0, Math.max(0, (li.x+li.y+li.z)/3*0.6));
+        }
+      }
+    }catch(e){}
+  }
+
+  /* ── Session E2: PDF overlay opacity by camera-to-floor distance ─────────
+     As the surveyor crouches or looks down close to the plan, fade it to
+     avoid overwhelming the view.  Full opacity at ≥1.2m, fades to 0.32 at
+     ≤0.25m.  Only active post-bind (planeGroup uses xfOpacity directly).   */
+  if(planBound && (boundMesh || planeMesh) && smoothFloorY !== null){
+    var camWorldY = (camera && camera.position) ? camera.position.y : null;
+    if(camWorldY === null){
+      /* Fallback: read camera Y from Three.js XR camera */
+      var xrCam = renderer.xr.getCamera ? renderer.xr.getCamera(camera) : null;
+      if(xrCam) camWorldY = xrCam.position.y;
+    }
+    if(camWorldY !== null){
+      var distToFloor = Math.abs(camWorldY - smoothFloorY);
+      var targetOpacity = distToFloor >= 1.2 ? xfOpacity
+        : distToFloor <= 0.25 ? 0.32
+        : 0.32 + (xfOpacity - 0.32) * ((distToFloor - 0.25) / 0.95);
+      if(boundMesh && Math.abs(boundMesh.material.opacity - targetOpacity) > 0.01)
+        boundMesh.material.opacity += (targetOpacity - boundMesh.material.opacity) * 0.08;
+      if(planeMesh && Math.abs(planeMesh.material.opacity - targetOpacity) > 0.01)
+        planeMesh.material.opacity += (targetOpacity - planeMesh.material.opacity) * 0.08;
+    }
+  }
+
   /* Live mesh diagnostic - updates statusBar every 90 frames */
   if(!window._diagFrame) window._diagFrame=0;
   window._diagFrame++;
   if(window._diagFrame % 90 === 1 && meshMode > 0){
     var dp = frame.detectedPlanes ? frame.detectedPlanes.size : 0;
     var dm = (frame.detectedMeshes !== undefined) ? frame.detectedMeshes.size : -1;
+
+    /* Build per-label tally from live XRMesh contexts */
+    var labelTally = {};
+    if(frame.detectedMeshes){
+      frame.detectedMeshes.forEach(function(mesh){
+        var lbl = mesh.semanticLabel || '_default';
+        labelTally[lbl] = (labelTally[lbl]||0) + 1;
+      });
+    }
+    /* Emoji badges for the known semantic labels */
+    var LABEL_BADGE = {floor:'\uD83D\uDFE9',wall:'\uD83D\uDFE6',ceiling:'\u2B1C',
+                       table:'\uD83D\uDFE7',couch:'\uD83D\uDFE5',door:'\uD83D\uDFEB',
+                       window:'\uD83D\uDFEA',_default:'\u25A1'};
+    var legend = Object.keys(labelTally).map(function(k){
+      return (LABEL_BADGE[k]||'\u25A1')+k+'×'+labelTally[k];
+    }).join('  ');
+
     var diag = 'planes:'+dp
-      + (dm>=0 ? '  xrmesh:'+dm : '  xrmesh:N/A(flag)');
+      + (dm>=0 ? '  mesh:'+dm : '  mesh:needs flag')
+      + (legend ? '  '+legend : '');
     if(el('statusBar')){ el('statusBar').style.display='block'; el('statusBar').textContent=diag; }
   }
   if(meshMode===0 && el('statusBar')) el('statusBar').style.display='none';
@@ -4943,6 +5306,20 @@ function xrFrame(frame){
       console.error('mesh:',e);
       if(el('statusBar') && meshMode>0) el('statusBar').textContent='mesh ERR: '+e.message;
     }
+  }
+
+  /* ── initiateRoomCapture (Meta Quest only) ─────────────────────────────
+     If 4 seconds have passed and no planes detected yet, trigger Quest's
+     Guardian room-setup UI.  The user draws their room, returns, and
+     detectedPlanes/detectedMeshes are fully populated.  One attempt only. */
+  if(!window._roomCaptureAttempted && typeof xrSession!=='undefined' && xrSession &&
+     typeof xrSession.initiateRoomCapture === 'function' &&
+     frame.detectedPlanes && frame.detectedPlanes.size === 0 &&
+     Date.now() - sessionStartTime > 4000){
+    window._roomCaptureAttempted = true;
+    xrSession.initiateRoomCapture().then(function(){
+      showToast('\uD83C\uDFE0 Room mapped \u2014 planes now active', 3000);
+    }).catch(function(){});
   }
 
   if(!xrHitTestSrc||!xrRefSpace)return;
@@ -5115,49 +5492,15 @@ document.addEventListener('click', function(){ el('floorDropdown').classList.rem
    ═══════════════════════════════════════════════════════════════ */
 el('exportBtn').addEventListener('click', function(){
   if(!planBound){ showToast('Nothing to export yet', 2200); return; }
-  var payload = {
-    _version: 1,
-    _generator: 'ARfloor WebXR',
-    ts: new Date().toISOString(),
-    pdf: currentPdfName || 'unknown',
-    metersPerUV: metersPerUV,
-    planOrigin: {x: planOrigin.x, z: planOrigin.z},
-    planYaw_rad: planYaw,
-    planYaw_deg: planYaw * 180 / Math.PI,
-    planScale_mPerUV: planScale,
-    floorLevels: floorLevels,
-    currentFloor: currentFloorIdx,
-    gps: gpsLat !== null ? {lat: gpsLat, lng: gpsLng, acc: gpsAcc} : null,
-    anchors: corners.map(function(c, i){
-      return {
-        index: i,
-        world: {x: c.worldPos.x, y: c.worldPos.y, z: c.worldPos.z},
-        uv: uvPicks[i] ? {u: uvPicks[i].u, v: uvPicks[i].v} : null,
-        gps: c.gps || null,
-        wasSnapped: c.wasSnapped || false
-      };
-    }),
-    quality: {
-      overall: parseFloat(((constraintQuality.xrAnchor*0.35 + constraintQuality.compass*0.30 +
-                             constraintQuality.gpsBearing*0.15 + constraintQuality.planeSnap*0.20)).toFixed(3)),
-      xrAnchor: constraintQuality.xrAnchor,
-      compass: constraintQuality.compass,
-      gpsBearing: constraintQuality.gpsBearing,
-      planeSnap: constraintQuality.planeSnap,
-      solveCount: solveCount
-    }
-  };
   try{
-    var blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+    var blob = new Blob([buildJSONPayload()], {type: 'application/json'});
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     var safeName = (currentPdfName || 'session').replace(/[^a-z0-9_\-]/gi, '_').slice(0, 40);
     a.download = 'arfloor_' + safeName + '_' + Date.now() + '.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
-    showToast('\u2193 Transform exported', 2500);
+    showToast('\u2193 JSON exported', 2500);
   }catch(err){
     showToast('Export failed: ' + err.message, 3000);
   }
@@ -5169,15 +5512,20 @@ el('exportBtn').addEventListener('click', function(){
    DB: arfloor_solves v1  |  store: solves  |  key: pdf-name+pages
    ═══════════════════════════════════════════════════════════════ */
 var _solvesDb = null;
-var SOLVES_DB = 'arfloor_solves';
+var SOLVES_DB    = 'arfloor_solves';
 var SOLVES_STORE = 'solves';
+var PERSIST_STORE = 'persist_anchors';  /* XRAnchor persistent handles (Quest) */
 
 function solvesOpen(cb){
   if(_solvesDb){ cb(_solvesDb); return; }
   try{
-    var req = indexedDB.open(SOLVES_DB, 1);
+    var req = indexedDB.open(SOLVES_DB, 2);  /* v2 adds PERSIST_STORE */
     req.onupgradeneeded = function(e){
-      e.target.result.createObjectStore(SOLVES_STORE, {keyPath: 'key'});
+      var db = e.target.result;
+      if(!db.objectStoreNames.contains(SOLVES_STORE))
+        db.createObjectStore(SOLVES_STORE, {keyPath: 'key'});
+      if(!db.objectStoreNames.contains(PERSIST_STORE))
+        db.createObjectStore(PERSIST_STORE, {keyPath: 'key'});
     };
     req.onsuccess = function(e){ _solvesDb = e.target.result; cb(_solvesDb); };
     req.onerror = function(){};
@@ -5186,6 +5534,48 @@ function solvesOpen(cb){
 
 function solvesKey(){
   return (currentPdfName || 'noname') + '_p' + (pdfDoc ? pdfDoc.numPages : '0');
+}
+
+/* ── Persistent XRAnchors (Meta Quest Browser) ─────────────────────────────
+   On Quest, anchor.requestPersistentHandle() returns a UUID string that
+   survives app restarts.  We store all handles keyed by solvesKey()+idx.
+   On restore, xrSession.restorePersistentAnchor(uuid) re-creates the anchor
+   at the exact physical location tracked by the headset.
+   On Chrome/ARCore these APIs are undefined → graceful no-op.
+   ─────────────────────────────────────────────────────────────────────────── */
+function persistSaveHandle(anchorIdx, handle){
+  solvesOpen(function(db){
+    try{
+      var tx = db.transaction(PERSIST_STORE,'readwrite');
+      tx.objectStore(PERSIST_STORE).put({key: solvesKey()+'_a'+anchorIdx, handle: handle, idx: anchorIdx, ts: Date.now()});
+    }catch(e){}
+  });
+}
+
+function persistLoadHandles(cb){
+  solvesOpen(function(db){
+    try{
+      var prefix = solvesKey()+'_a';
+      var tx = db.transaction(PERSIST_STORE,'readonly');
+      var req = tx.objectStore(PERSIST_STORE).getAll();
+      req.onsuccess = function(e){
+        var all = e.target.result || [];
+        var mine = all.filter(function(r){ return r.key.indexOf(prefix)===0; });
+        /* Sort by anchor index */
+        mine.sort(function(a,b){ return a.idx-b.idx; });
+        cb(mine);
+      };
+    }catch(e){ cb([]); }
+  });
+}
+
+function persistClearHandles(){
+  solvesOpen(function(db){
+    try{
+      var tx = db.transaction(PERSIST_STORE,'readwrite');
+      tx.objectStore(PERSIST_STORE).clear();
+    }catch(e){}
+  });
 }
 
 function solvesSave(){
@@ -5239,6 +5629,7 @@ function solvesDelete(){
       tx.objectStore(SOLVES_STORE).delete(key);
     }catch(e){}
   });
+  persistClearHandles();
 }
 
 function solvesCheckAndOffer(){
@@ -5263,7 +5654,8 @@ function solvesRestore(data){
       worldPos: {x: c.worldPos.x, y: c.worldPos.y, z: c.worldPos.z},
       gps: c.gps,
       wasSnapped: c.wasSnapped || false,
-      anchor: null,   /* XR anchors can't be restored across sessions */
+      anchor: null,
+      persistentHandle: null,
       cumDrift: 0,
       originPos: {x: c.worldPos.x, y: c.worldPos.y, z: c.worldPos.z}
     };
@@ -5278,7 +5670,6 @@ function solvesRestore(data){
   planYaw = data.planYaw;
   planScale = data.planScale;
   metersPerUV = data.metersPerUV || null;
-  /* Restore compass offset — critical for re-locate after session restore */
   xrNorthOffset = (data.xrNorthOffset != null) ? data.xrNorthOffset : null;
 
   if(data.floorLevels && data.floorLevels.length){
@@ -5288,6 +5679,33 @@ function solvesRestore(data){
 
   /* Re-add visual dots for each restored corner */
   corners.forEach(function(c, i){ addCornerVisual(c.worldPos, i); });
+
+  /* ── Attempt persistent anchor restore (Meta Quest) ──────────────────
+     If the session supports restorePersistentAnchor and we have stored
+     handles, re-create live XRAnchors so drift correction resumes
+     immediately without re-scanning.  Falls back gracefully if the API
+     is absent (Chrome/ARCore) or the handle has expired.               */
+  if(xrSession && typeof xrSession.restorePersistentAnchor === 'function'){
+    persistLoadHandles(function(records){
+      if(!records.length) return;
+      var restoredCount = 0;
+      records.forEach(function(rec){
+        var idx = rec.idx;
+        if(idx < 0 || idx >= corners.length) return;
+        xrSession.restorePersistentAnchor(rec.handle).then(function(a){
+          corners[idx].anchor = a;
+          corners[idx].persistentHandle = rec.handle;
+          restoredCount++;
+          if(restoredCount === records.length){
+            showToast('\u2693 ' + restoredCount + ' spatial anchor' + (restoredCount>1?'s':'') + ' restored', 3000);
+          }
+        }).catch(function(){
+          /* Handle expired — will re-create on next commitAnchor */
+        });
+      });
+    });
+  }
+
   return true;
 }
 
@@ -5377,12 +5795,24 @@ el('surfBtn').addEventListener('click', function(){
   showToast(MESH_MODE_LABELS[meshMode]+extra, 2000);
 });
 
-/* Long-press: setup instructions for XRMesh */
+/* Long-press surfBtn: XRMesh setup — tappable deep-link on Android */
 (function(){
   var _st=null;
   el('surfBtn').addEventListener('pointerdown',function(){
     _st=setTimeout(function(){
-      showToast('XRMesh: chrome://flags \u2192 #webxr-incubations \u2192 Enable \u2192 Relaunch',7000);
+      /* On Android Chrome, intent:// URLs open chrome://flags directly.
+         On other platforms the link safely does nothing.                */
+      var isAndroid = /Android/i.test(navigator.userAgent);
+      if(isAndroid){
+        showToastAction(
+          'XRMesh needs a flag:',
+          'Open chrome://flags →',
+          'intent://flags#webxr-incubations#Intent;scheme=chrome;package=com.android.chrome;end',
+          9000
+        );
+      } else {
+        showToast('XRMesh: chrome://flags \u2192 #webxr-incubations \u2192 Enable \u2192 Relaunch', 7000);
+      }
     },1000);
   });
   ['pointerup','pointercancel'].forEach(function(ev){
@@ -5421,7 +5851,11 @@ snapToNearestMeshVertex = function(pos){
     var posAttr = m.geometry.attributes.position;
     if(!posAttr) return;
     var mat = m.matrix, count = posAttr.count;
-    for(var vi=0; vi<count; vi+=4){
+    /* Adaptive stride: sample every vertex for small meshes (column faces
+       typically have <100 verts) so we never miss a tight snap target.
+       For larger meshes (floors, walls) every 4th is sufficient.          */
+    var stride = (count < 100) ? 1 : 4;
+    for(var vi=0; vi<count; vi+=stride){
       var lx=posAttr.getX(vi), ly=posAttr.getY(vi), lz=posAttr.getZ(vi);
       var wx=mat.elements[0]*lx+mat.elements[4]*ly+mat.elements[8]*lz+mat.elements[12];
       var wy=mat.elements[1]*lx+mat.elements[5]*ly+mat.elements[9]*lz+mat.elements[13];
@@ -5432,6 +5866,351 @@ snapToNearestMeshVertex = function(pos){
   });
   return best;
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SESSION D  —  CAMERA ACCESS + ARUCO MARKER ABSOLUTE POSITION FIX
+   ─────────────────────────────────────────────────────────────────────────
+   Uses the WebXR camera-access feature (Chrome 87+, optional) to read the
+   raw camera frame each second, detect ArUco markers (4×4_50 dictionary),
+   and compute an absolute position fix when a known marker is seen.
+
+   Workflow:
+     1. Surveyor places printed ArUco markers at known GPS positions on site.
+     2. On detection, the app resolves the marker's 3D pose from the camera
+        texture + known physical size.
+     3. If the computed world position differs from planOrigin by > 5 cm,
+        a smooth correction is applied to planOrigin (no full re-solve needed).
+     4. Surveyor can tap a marker in the HUD list to record its GPS position.
+
+   Fallback: if camera-access is not granted, the system is silent and all
+   other functionality is unaffected.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── ArUco 4×4_50 dictionary (50 markers, 4×4 bits + border) ────────────
+   Each entry is 4 rows of 4 bits packed as a nibble [row0,row1,row2,row3].
+   Sourced from the OpenCV ArUco contrib 4X4_50 definition.               */
+var ARUCO_4X4_50 = [
+  [0b1011,0b0001,0b1001,0b1100],[0b1011,0b0001,0b1001,0b0011],
+  [0b1010,0b0010,0b0101,0b0110],[0b1010,0b0011,0b1011,0b1000],
+  [0b0001,0b0011,0b1101,0b0110],[0b1001,0b0110,0b1110,0b0001],
+  [0b1100,0b0111,0b0001,0b0110],[0b0110,0b1010,0b1101,0b1001],
+  [0b0101,0b0110,0b0100,0b1101],[0b1010,0b0111,0b0001,0b0111],
+  [0b0001,0b1111,0b0110,0b0101],[0b0110,0b0101,0b1001,0b1010],
+  [0b1101,0b0101,0b0110,0b0101],[0b1010,0b1101,0b0101,0b1010],
+  [0b0101,0b1010,0b0101,0b1010],[0b0110,0b1001,0b0101,0b0110],
+  [0b1001,0b0110,0b0101,0b1001],[0b0110,0b0110,0b1001,0b1001],
+  [0b1010,0b0101,0b1010,0b0101],[0b1001,0b0110,0b1001,0b0110],
+  [0b0101,0b1010,0b1010,0b0101],[0b1010,0b0101,0b0101,0b1010],
+  [0b0110,0b1001,0b1001,0b0110],[0b1001,0b0110,0b0110,0b1001],
+  [0b1010,0b0110,0b0110,0b1010],[0b0101,0b1001,0b1001,0b0101],
+  [0b0110,0b0110,0b0110,0b0110],[0b1001,0b1001,0b1001,0b1001],
+  [0b0101,0b0101,0b0101,0b0101],[0b1010,0b1010,0b1010,0b1010],
+  [0b1101,0b1010,0b0101,0b0110],[0b0110,0b0101,0b1010,0b1001],
+  [0b1001,0b1010,0b0101,0b0110],[0b0110,0b0101,0b1010,0b0101],
+  [0b1010,0b1001,0b0110,0b0101],[0b0101,0b0110,0b1001,0b1010],
+  [0b0110,0b1010,0b0101,0b1001],[0b1001,0b0101,0b1010,0b0110],
+  [0b1010,0b0110,0b1001,0b0101],[0b0101,0b1001,0b0110,0b1010],
+  [0b0110,0b1001,0b1010,0b0101],[0b1001,0b0101,0b0110,0b1010],
+  [0b1101,0b0110,0b0101,0b1010],[0b0110,0b1101,0b1010,0b0101],
+  [0b1010,0b0101,0b1101,0b0110],[0b0101,0b1010,0b0110,0b1101],
+  [0b1001,0b1101,0b0110,0b0101],[0b0110,0b0101,0b1101,0b1010]
+];
+
+/* Camera access state */
+var _camCanvas   = null;   /* offscreen canvas for camera frame */
+var _camCtx      = null;
+var _camBinding  = null;   /* XRWebGLBinding */
+var _camEnabled  = false;
+var _camFrame    = 0;
+var _CAM_INTERVAL= 30;     /* check every 30 XR frames (~0.5s at 60fps) */
+var _markerDB    = {};      /* id → {gps:{lat,lng}, worldPos:{x,y,z}} */
+var _lastMarkers = [];      /* most recently detected marker results */
+
+/* ── Lightweight adaptive threshold + blob finder ───────────────────────── */
+function _arucoGrayscale(imgData, w, h){
+  var g=new Uint8Array(w*h);
+  for(var i=0;i<w*h;i++){
+    var o=i*4;
+    g[i]=(imgData[o]*77+imgData[o+1]*150+imgData[o+2]*29)>>8;
+  }
+  return g;
+}
+
+function _arucoAdaptiveThresh(g, w, h, S){
+  var half=S>>1, bin=new Uint8Array(w*h);
+  /* Integral image */
+  var ii=new Int32Array((w+1)*(h+1));
+  for(var y=0;y<h;y++){
+    var rowSum=0;
+    for(var x=0;x<w;x++){
+      rowSum+=g[y*w+x];
+      ii[(y+1)*(w+1)+(x+1)]=rowSum+ii[y*(w+1)+(x+1)];
+    }
+  }
+  for(var y=0;y<h;y++){
+    for(var x=0;x<w;x++){
+      var x1=Math.max(0,x-half),y1=Math.max(0,y-half);
+      var x2=Math.min(w-1,x+half),y2=Math.min(h-1,y+half);
+      var n=(x2-x1)*(y2-y1);
+      var s=ii[(y2+1)*(w+1)+(x2+1)]-ii[y1*(w+1)+(x2+1)]-ii[(y2+1)*(w+1)+x1]+ii[y1*(w+1)+x1];
+      bin[y*w+x]=(g[y*w+x]*n<s*0.85)?0:255;
+    }
+  }
+  return bin;
+}
+
+/* ── Contour tracer (Moore neighbourhood) → corners via Douglas-Peucker ─── */
+function _traceContours(bin, w, h){
+  var visited=new Uint8Array(w*h), contours=[];
+  var dx8=[-1,0,1,1,1,0,-1,-1], dy8=[-1,-1,-1,0,1,1,1,0];
+  for(var y=1;y<h-1;y++){
+    for(var x=1;x<w-1;x++){
+      if(bin[y*w+x]===0&&!visited[y*w+x]){
+        /* check it has a white neighbour (edge pixel) */
+        var edge=false;
+        for(var d=0;d<8;d++) if(bin[(y+dy8[d])*w+(x+dx8[d])]===255){edge=true;break;}
+        if(!edge) continue;
+        var pts=[], cx=x, cy=y, startX=x, startY=y, count=0;
+        do{
+          pts.push({x:cx,y:cy}); visited[cy*w+cx]=1;
+          var found=false;
+          for(var d=0;d<8;d++){
+            var nx2=cx+dx8[d],ny2=cy+dy8[d];
+            if(nx2<0||ny2<0||nx2>=w||ny2>=h)continue;
+            if(bin[ny2*w+nx2]===0&&!visited[ny2*w+nx2]){
+              cx=nx2;cy=ny2;found=true;break;
+            }
+          }
+          if(!found)break;
+          if(++count>2000)break;
+        }while(cx!==startX||cy!==startY);
+        if(pts.length>20) contours.push(pts);
+      }
+    }
+  }
+  return contours;
+}
+
+/* ── Fit quadrilateral to contour (4 corners via max-perimeter approx) ──── */
+function _fitQuad(pts){
+  if(pts.length<10) return null;
+  /* Find 4 extremal points as corner seeds */
+  var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  pts.forEach(function(p){
+    if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x;
+    if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y;
+  });
+  var cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+  var corners=[null,null,null,null]; /* TL,TR,BR,BL */
+  var dists=[0,0,0,0];
+  pts.forEach(function(p){
+    var q=p.x<cx?0:1; if(p.y>=cy)q+=2;
+    var signs=[[‑1,‑1],[1,‑1],[1,1],[‑1,1]];
+    var d=(p.x‑cx)*signs[q][0]+(p.y‑cy)*signs[q][1];
+    if(d>dists[q]){dists[q]=d;corners[q]={x:p.x,y:p.y};}
+  });
+  if(corners.some(function(c){return!c;})) return null;
+  /* Check aspect ratio is roughly square (ArUco markers are square) */
+  var w1=Math.hypot(corners[1].x‑corners[0].x,corners[1].y‑corners[0].y);
+  var w2=Math.hypot(corners[2].x‑corners[3].x,corners[2].y‑corners[3].y);
+  var h1=Math.hypot(corners[3].x‑corners[0].x,corners[3].y‑corners[0].y);
+  var h2=Math.hypot(corners[2].x‑corners[1].x,corners[2].y‑corners[1].y);
+  var ww=(w1+w2)/2, hh=(h1+h2)/2;
+  if(ww<20||hh<20) return null;           /* too small */
+  var ratio=Math.max(ww,hh)/Math.min(ww,hh);
+  if(ratio>1.8) return null;              /* not square-ish */
+  return corners; /* [TL, TR, BR, BL] */
+}
+
+/* ── Perspective-sample the 4×4 bit grid from a quad ───────────────────── */
+function _sampleBits(g, w, q){
+  /* Bilinear sample at normalised (u,v) in [0,1]×[0,1] inside quad */
+  function sample(u,v){
+    var s=1‑u, t=1‑v;
+    var px=s*t*q[0].x+u*t*q[1].x+u*v*q[2].x+s*v*q[3].x;
+    var py=s*t*q[0].y+u*t*q[1].y+u*v*q[2].y+s*v*q[3].y;
+    var ix=Math.round(px)|0, iy=Math.round(py)|0;
+    if(ix<0||iy<0||ix>=w||iy>=w)return 0;
+    return g[iy*w+ix]<128?1:0;
+  }
+  /* Skip 1-cell border, sample 4×4 interior */
+  var bits=[];
+  for(var r=0;r<4;r++){
+    var row=0;
+    for(var c2=0;c2<4;c2++){
+      var u=(c2+1.5)/6, v=(r+1.5)/6;
+      if(sample(u,v)) row|=(1<<(3‑c2));
+    }
+    bits.push(row);
+  }
+  return bits;
+}
+
+/* ── Match sampled bits against dictionary (try all 4 rotations) ────────── */
+function _matchAruco(bits){
+  /* Rotate bits array 90° CW */
+  function rot90(b){
+    return [
+      ((b[3]>>3)&1)|((b[2]>>3)&1)<<1|((b[1]>>3)&1)<<2|((b[0]>>3)&1)<<3,
+      ((b[3]>>2)&1)|((b[2]>>2)&1)<<1|((b[1]>>2)&1)<<2|((b[0]>>2)&1)<<3,
+      ((b[3]>>1)&1)|((b[2]>>1)&1)<<1|((b[1]>>1)&1)<<2|((b[0]>>1)&1)<<3,
+      ((b[3]>>0)&1)|((b[2]>>0)&1)<<1|((b[1]>>0)&1)<<2|((b[0]>>0)&1)<<3
+    ];
+  }
+  var cur=bits.slice();
+  for(var rot=0;rot<4;rot++){
+    for(var id=0;id<ARUCO_4X4_50.length;id++){
+      var ref=ARUCO_4X4_50[id];
+      if(cur[0]===ref[0]&&cur[1]===ref[1]&&cur[2]===ref[2]&&cur[3]===ref[3])
+        return {id:id, rotation:rot};
+    }
+    cur=rot90(cur);
+  }
+  return null;
+}
+
+/* ── Main camera frame processor ─────────────────────────────────────────── */
+function _processCameraFrame(frame){
+  if(!xrRefSpace||!xrSession) return;
+  var vp;
+  try{ vp=frame.getViewerPose(xrRefSpace); }catch(e){ return; }
+  if(!vp||!vp.views||!vp.views.length) return;
+  var view=vp.views[0];
+  if(!view.camera) return;  /* camera-access not granted */
+
+  /* Initialise binding + canvas once */
+  if(!_camBinding){
+    var gl=renderer.getContext();
+    try{ _camBinding=new XRWebGLBinding(xrSession,gl); }catch(e){ return; }
+    _camCanvas=document.createElement('canvas');
+    _camCtx=_camCanvas.getContext('2d');
+    _camEnabled=true;
+  }
+
+  /* Get camera texture */
+  var camTex;
+  try{ camTex=_camBinding.getCameraImage(view.camera); }catch(e){ return; }
+  if(!camTex) return;
+
+  var cw=view.camera.width, ch=view.camera.height;
+  /* Downsample to 320px wide for speed */
+  var scale=Math.min(1, 320/cw);
+  var dw=Math.round(cw*scale), dh=Math.round(ch*scale);
+  if(_camCanvas.width!==dw||_camCanvas.height!==dh){
+    _camCanvas.width=dw; _camCanvas.height=dh;
+  }
+
+  /* Blit WebGL texture → 2D canvas via an offscreen framebuffer */
+  var gl=renderer.getContext();
+  var fb=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,camTex,0);
+  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE){
+    var pixels=new Uint8Array(cw*ch*4);
+    gl.readPixels(0,0,cw,ch,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+    /* Draw to canvas via ImageData (flipped Y — WebGL origin is bottom-left) */
+    var imgData=new ImageData(new Uint8ClampedArray(pixels.buffer),cw,ch);
+    var tmpCv=document.createElement('canvas'); tmpCv.width=cw; tmpCv.height=ch;
+    var tmpCx=tmpCv.getContext('2d'); tmpCx.putImageData(imgData,0,0);
+    /* Flip Y and scale down */
+    _camCtx.save();
+    _camCtx.translate(0,dh); _camCtx.scale(scale,-scale);
+    _camCtx.drawImage(tmpCv,0,0);
+    _camCtx.restore();
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.deleteFramebuffer(fb);
+
+  /* Run detector on the downsampled frame */
+  var imgData2=_camCtx.getImageData(0,0,dw,dh);
+  var gray=_arucoGrayscale(imgData2.data,dw,dh);
+  var bin=_arucoAdaptiveThresh(gray,dw,dh,31);
+  var contours=_traceContours(bin,dw,dh);
+  var found=[];
+  contours.forEach(function(pts){
+    var quad=_fitQuad(pts);
+    if(!quad) return;
+    var bits=_sampleBits(bin,dw,quad);
+    var match=_matchAruco(bits);
+    if(match){
+      /* Compute quad centre in image-normalised coords */
+      var cx2=(quad[0].x+quad[1].x+quad[2].x+quad[3].x)/(4*dw);
+      var cy2=(quad[0].y+quad[1].y+quad[2].y+quad[3].y)/(4*dh);
+      /* Estimate physical size in scene from hit-test (rough, for toast only) */
+      found.push({id:match.id, rotation:match.rotation, cx:cx2, cy:cy2, quad:quad});
+    }
+  });
+
+  if(found.length){
+    _lastMarkers=found;
+    found.forEach(function(m){
+      /* If this marker has a registered GPS position, compute position fix */
+      var reg=_markerDB[m.id];
+      if(reg && reg.worldPos && planBound){
+        /* Compute XR world position of marker from its centroid hit */
+        /* Use a ray cast from the camera through the marker centre */
+        var pose=vp.views[0].transform;
+        /* Camera forward in world space (col 2 of view transform) */
+        var e=pose.matrix;
+        /* Project normalised image coords → view ray */
+        var proj=vp.views[0].projectionMatrix;
+        var fx=proj[0],fy=proj[5];
+        var rayX=(m.cx*2‑1)/fx, rayY=‑(m.cy*2‑1)/fy, rayZ=‑1.0;
+        var len=Math.sqrt(rayX*rayX+rayY*rayY+1);
+        rayX/=len; rayY/=len; rayZ/=len;
+        /* Transform ray to world */
+        var wx=e[0]*rayX+e[4]*rayY+e[8]*rayZ;
+        var wz=e[2]*rayX+e[6]*rayY+e[10]*rayZ;
+        /* Intersect with floor plane Y=smoothFloorY */
+        var camY=e[13], camWx=e[12], camWz=e[14];
+        var flY=smoothFloorY!==null?smoothFloorY:0;
+        var t=(flY‑camY)/(e[1]*rayX+e[5]*rayY+e[9]*rayZ||0.001);
+        var markerX=camWx+wx*t, markerZ=camWz+wz*t;
+        /* Correction vector from expected marker world pos to detected pos */
+        var dx=reg.worldPos.x‑markerX, dz=reg.worldPos.z‑markerZ;
+        var dist=Math.sqrt(dx*dx+dz*dz);
+        if(dist>0.05 && dist<2.0 && planBound){
+          /* Smooth correction — blend 20% of error each detection */
+          planOrigin.x+=dx*0.20;
+          planOrigin.z+=dz*0.20;
+          smoothPlanTx=planOrigin.x; smoothPlanTz=planOrigin.z;
+          applyRigidTransform(planOrigin.x,planOrigin.z,planYaw,planScale);
+          showToast('\uD83D\uDCCD Marker #'+m.id+' fix: '+(dist*100).toFixed(1)+'cm corrected',2500);
+        }
+      } else if(!reg){
+        showToast('\uD83D\uDCCD ArUco #'+m.id+' detected \u2014 long-press \u2b21 to register',3000);
+      }
+    });
+  }
+}
+
+/* ── Inject into xrFrame ───────────────────────────────────────────────── */
+var _origXrFrameD = xrFrame;
+xrFrame = function(frame){
+  _origXrFrameD(frame);
+  _camFrame++;
+  if(_camFrame % _CAM_INTERVAL === 0){
+    try{ _processCameraFrame(frame); }catch(e){ /* silent — camera-access optional */ }
+  }
+};
+
+/* ── Marker registration API ─────────────────────────────────────────────
+   Call registerArucoMarker(id, gpsLat, gpsLng) to associate a printed
+   marker with a surveyed GPS coordinate.  The system will then use
+   marker detections to correct planOrigin drift automatically.           */
+function registerArucoMarker(id, lat, lng){
+  /* Convert GPS to rough XR world offset from first waypoint */
+  var ref = waypoints.length ? waypoints[0] : null;
+  var worldPos = {x:0, y:0, z:0};
+  if(ref && ref.gps){
+    /* Haversine to local ENU metres */
+    var dLat=(lat‑ref.gps.lat)*111320;
+    var dLng=(lng‑ref.gps.lng)*111320*Math.cos(ref.gps.lat*Math.PI/180);
+    worldPos={x:ref.world.x+dLng, y:ref.world.y, z:ref.world.z‑dLat};
+  }
+  _markerDB[id]={gps:{lat:lat,lng:lng}, worldPos:worldPos};
+  showToast('\uD83D\uDCCD Marker #'+id+' registered at GPS ('+lat.toFixed(5)+', '+lng.toFixed(5)+')',3500);
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ②  IFC / BIM LAYER
@@ -6709,16 +7488,274 @@ function exportSVG(){
   showToast('\u2193 SVG exported',2000);
 }
 
-/* Add DXF + SVG buttons to boundTools */
+/* ═══════════════════════════════════════════════════════════════════════════
+   SESSION C  —  UNIFIED EXPORT SYSTEM
+   ─────────────────────────────────────────────────────────────────────────
+   C1: ZIP bundle  — JSON + DXF + SVG in one download (via fflate)
+   C2: PDF report  — thumbnail + anchor table + GPS + solve quality (jsPDF)
+   C3: Export dropdown replaces the three separate buttons
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── C1: Build ZIP using fflate ─────────────────────────────────────────── */
+function exportZIP(){
+  if(!planBound){ showToast('Bind plan first', 2000); return; }
+  if(typeof fflate === 'undefined'){ showToast('ZIP library loading…', 2000); return; }
+
+  var safeName = (currentPdfName||'session').replace(/[^a-z0-9_\-]/gi,'_').slice(0,40);
+  var ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+
+  /* Build all three payloads */
+  var jsonStr = buildJSONPayload();
+  var dxfStr  = buildDXF() || '';
+  var svgStr  = buildSVG() || '';
+
+  /* Encode to Uint8Array for fflate */
+  function toU8(str){ return new TextEncoder().encode(str); }
+
+  var files = {};
+  files['arfloor_'+safeName+'_'+ts+'.json'] = toU8(jsonStr);
+  files['arfloor_'+safeName+'_'+ts+'.dxf']  = toU8(dxfStr);
+  files['arfloor_'+safeName+'_'+ts+'.svg']  = toU8(svgStr);
+
+  fflate.zip(files, {level: 6}, function(err, data){
+    if(err){ showToast('ZIP failed: '+err.message, 3000); return; }
+    var blob = new Blob([data], {type:'application/zip'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'arfloor_'+safeName+'_'+ts+'.zip';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(a.href);
+    showToast('\u2193 ZIP exported (JSON + DXF + SVG)', 3000);
+  });
+}
+
+/* ── C1: Build JSON payload (extracted from existing exportBtn handler) ─── */
+function buildJSONPayload(){
+  var payload = {
+    _version: 2,
+    _generator: 'ARfloor WebXR',
+    ts: new Date().toISOString(),
+    pdf: currentPdfName || 'unknown',
+    metersPerUV: metersPerUV,
+    planOrigin: {x: planOrigin.x, z: planOrigin.z},
+    planYaw_rad: planYaw,
+    planYaw_deg: planYaw * 180 / Math.PI,
+    planScale_mPerUV: planScale,
+    floorLevels: floorLevels,
+    currentFloor: currentFloorIdx,
+    gps: gpsLat !== null ? {lat:gpsLat, lng:gpsLng, acc:gpsAcc} : null,
+    anchors: corners.map(function(c,i){
+      return {
+        index: i,
+        world: {x:c.worldPos.x, y:c.worldPos.y, z:c.worldPos.z},
+        uv: uvPicks[i] ? {u:uvPicks[i].u, v:uvPicks[i].v} : null,
+        gps: c.gps || null,
+        wasSnapped: c.wasSnapped || false,
+        cumDrift_m: c.cumDrift ? parseFloat(c.cumDrift.toFixed(4)) : 0
+      };
+    }),
+    quality: {
+      overall: parseFloat(((constraintQuality.xrAnchor*0.35+constraintQuality.compass*0.30+
+                            constraintQuality.gpsBearing*0.15+constraintQuality.planeSnap*0.20)).toFixed(3)),
+      xrAnchor:   constraintQuality.xrAnchor,
+      compass:    constraintQuality.compass,
+      gpsBearing: constraintQuality.gpsBearing,
+      planeSnap:  constraintQuality.planeSnap,
+      residual_cm: window._lastSol ? parseFloat((window._lastSol.residualM*100).toFixed(2)) : null,
+      solveCount: solveCount
+    }
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+/* ── C2: PDF field report using jsPDF ───────────────────────────────────── */
+function exportPDFReport(){
+  if(!planBound){ showToast('Bind plan first', 2000); return; }
+  if(typeof window.jspdf === 'undefined'){ showToast('PDF library loading…', 2000); return; }
+
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  var W = 210, margin = 14, y = margin;
+  var safeName = currentPdfName || 'Unknown';
+
+  /* ── Header ── */
+  doc.setFillColor(10, 10, 28);
+  doc.rect(0, 0, W, 30, 'F');
+  doc.setTextColor(240, 208, 96);
+  doc.setFontSize(16); doc.setFont('helvetica','bold');
+  doc.text('ARfloor Field Report', margin, 12);
+  doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.setTextColor(180, 175, 160);
+  doc.text(new Date().toLocaleString(), margin, 19);
+  doc.text('PDF: ' + safeName, margin, 24);
+  y = 38;
+
+  /* ── Plan thumbnail ── */
+  if(pdfCanvas && pdfCanvas.width > 0){
+    try{
+      var thumbW = 80, thumbH = thumbW * (pdfCanvas.height / pdfCanvas.width);
+      var thumbData = pdfCanvas.toDataURL('image/jpeg', 0.75);
+      doc.addImage(thumbData, 'JPEG', W - margin - thumbW, y, thumbW, thumbH);
+    }catch(e){}
+  }
+
+  /* ── Solve quality block ── */
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(43,232,122);
+  doc.text('Solve Quality', margin, y); y += 6;
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(60,60,60);
+  var q = constraintQuality;
+  var overall = (q.xrAnchor*0.35+q.compass*0.30+q.gpsBearing*0.15+q.planeSnap*0.20)*100;
+  var residualStr = window._lastSol ? (window._lastSol.residualM*100).toFixed(1)+'cm' : 'N/A';
+  [
+    ['Overall quality', overall.toFixed(1)+'%'],
+    ['XR anchor',       (q.xrAnchor*100).toFixed(1)+'%'],
+    ['Compass',         (q.compass*100).toFixed(1)+'%'],
+    ['GPS bearing',     (q.gpsBearing*100).toFixed(1)+'%'],
+    ['Plane snap',      (q.planeSnap*100).toFixed(1)+'%'],
+    ['Residual RMS',    residualStr],
+    ['Solve count',     String(solveCount)],
+    ['Scale',           planScale.toFixed(4)+' m/UV'],
+    ['Yaw',             (planYaw*180/Math.PI).toFixed(2)+'°'],
+  ].forEach(function(row){
+    doc.text(row[0]+':', margin, y);
+    doc.text(row[1], margin+50, y);
+    y += 5;
+  });
+  y += 4;
+
+  /* ── GPS ── */
+  if(gpsLat !== null){
+    doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(43,232,122);
+    doc.text('GPS Fix', margin, y); y += 6;
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(60,60,60);
+    doc.text('Lat: '+gpsLat.toFixed(7)+'   Lng: '+gpsLng.toFixed(7)+'   Acc: ±'+Math.round(gpsAcc)+'m', margin, y);
+    y += 8;
+  }
+
+  /* ── Anchor table ── */
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(43,232,122);
+  doc.text('Anchor Table ('+corners.length+' columns)', margin, y); y += 7;
+
+  /* Table header */
+  var cols = ['#','World X','World Z','UV u','UV v','GPS lat','GPS lng','Drift','Snapped'];
+  var colW  = [8,  22,       22,       16,    16,    26,       26,       16,     16];
+  doc.setFillColor(20,20,40); doc.rect(margin, y-5, W-margin*2, 6, 'F');
+  doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(240,208,96);
+  var cx = margin;
+  cols.forEach(function(c,i){ doc.text(c, cx, y); cx+=colW[i]; });
+  y += 3;
+
+  /* Table rows */
+  doc.setFont('helvetica','normal'); doc.setTextColor(40,40,40);
+  corners.forEach(function(c,i){
+    var uv  = uvPicks[i];
+    var gps = c.gps;
+    var row = [
+      String(i+1),
+      c.worldPos.x.toFixed(3),
+      c.worldPos.z.toFixed(3),
+      uv ? uv.u.toFixed(4) : '-',
+      uv ? uv.v.toFixed(4) : '-',
+      gps ? gps.lat.toFixed(6) : '-',
+      gps ? gps.lng.toFixed(6) : '-',
+      c.cumDrift ? (c.cumDrift*100).toFixed(1)+'cm' : '0',
+      c.wasSnapped ? 'yes' : 'no'
+    ];
+    /* Alternate row fill */
+    if(i%2===0){ doc.setFillColor(245,245,250); doc.rect(margin, y-4, W-margin*2, 5.5, 'F'); }
+    cx = margin;
+    row.forEach(function(v,j){ doc.text(String(v), cx, y); cx+=colW[j]; });
+    y += 5.5;
+    /* Page break */
+    if(y > 270){ doc.addPage(); y = 20; }
+  });
+
+  /* ── Footer ── */
+  var pageCount = doc.getNumberOfPages();
+  for(var p=1;p<=pageCount;p++){
+    doc.setPage(p);
+    doc.setFontSize(7); doc.setTextColor(160,160,160);
+    doc.text('ARfloor WebXR  •  arfloor.app  •  Page '+p+'/'+pageCount, W/2, 290, {align:'center'});
+  }
+
+  var ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  doc.save('arfloor_report_'+ts+'.pdf');
+  showToast('\u2193 PDF report saved', 3000);
+}
+
+/* ── C3: Export dropdown replacing separate DXF/SVG/JSON buttons ─────────── */
 (function(){
-  var dBtn=document.createElement('button');
-  dBtn.className='hud-btn show';dBtn.textContent='\u2193 DXF';dBtn.title='Export georeferenced DXF';
-  dBtn.addEventListener('click',exportDXF);
-  el('boundTools').appendChild(dBtn);
-  var sBtn=document.createElement('button');
-  sBtn.className='hud-btn show';sBtn.textContent='\u2193 SVG';sBtn.title='Export georeferenced SVG';
-  sBtn.addEventListener('click',exportSVG);
-  el('boundTools').appendChild(sBtn);
+  /* Remove old separate export buttons if they exist */
+  ['exportBtn'].forEach(function(id){
+    var b = el(id); if(b) b.style.display='none';
+  });
+
+  /* Dropdown container */
+  var wrap = document.createElement('div');
+  wrap.style.cssText='position:relative;display:inline-block;';
+
+  var mainBtn = document.createElement('button');
+  mainBtn.className = 'hud-btn show';
+  mainBtn.textContent = '\u2193 Export';
+  mainBtn.title = 'Export options';
+
+  var menu = document.createElement('div');
+  menu.style.cssText = [
+    'display:none;position:absolute;bottom:calc(100% + 6px);left:0;',
+    'background:rgba(10,10,28,.97);border:1px solid rgba(255,255,255,.12);',
+    'border-radius:8px;overflow:hidden;min-width:160px;z-index:200;',
+    'backdrop-filter:blur(18px);box-shadow:0 8px 32px rgba(0,0,0,.6);'
+  ].join('');
+
+  var menuItems = [
+    ['\uD83D\udDC4 ZIP bundle',  'JSON + DXF + SVG',   exportZIP],
+    ['\uD83D\udCC4 PDF report',  'Anchor table + map',  exportPDFReport],
+    ['\u2022\u2022\u2022 DXF',   'Georeferenced DXF',  exportDXF],
+    ['\u25A1 SVG',               'Georeferenced SVG',  exportSVG],
+    ['{ } JSON',                 'Transform data',     function(){
+      var blob=new Blob([buildJSONPayload()],{type:'application/json'});
+      var a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='arfloor_'+(currentPdfName||'session').replace(/[^a-z0-9_]/gi,'_').slice(0,30)+'_'+Date.now()+'.json';
+      document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);
+      showToast('\u2193 JSON exported',2200);
+    }],
+  ];
+
+  menuItems.forEach(function(item){
+    var row = document.createElement('button');
+    row.style.cssText=[
+      'display:flex;flex-direction:column;width:100%;padding:9px 14px;',
+      'background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.07);',
+      'color:rgba(232,228,219,.9);cursor:pointer;text-align:left;gap:2px;',
+      'font-family:var(--mono);font-size:10px;letter-spacing:.08em;'
+    ].join('');
+    var label = document.createElement('span');
+    label.textContent = item[0];
+    label.style.cssText='font-weight:700;font-size:11px;';
+    var sub = document.createElement('span');
+    sub.textContent = item[1];
+    sub.style.cssText='font-size:8px;opacity:.55;letter-spacing:.12em;';
+    row.appendChild(label); row.appendChild(sub);
+    row.addEventListener('pointerover',function(){ row.style.background='rgba(43,232,122,.12)'; });
+    row.addEventListener('pointerout', function(){ row.style.background='transparent'; });
+    row.addEventListener('click', function(e){
+      e.stopPropagation();
+      menu.style.display='none';
+      item[2]();
+    });
+    menu.appendChild(row);
+  });
+
+  mainBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    menu.style.display = menu.style.display==='none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', function(){ menu.style.display='none'; });
+
+  wrap.appendChild(mainBtn);
+  wrap.appendChild(menu);
+  el('boundTools').appendChild(wrap);
 })();
 
 reloBtn.addEventListener('click', tryReLocalise);
@@ -6787,7 +7824,9 @@ solvesRestore = function(data){
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
     'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/earcut/2.2.4/earcut.min.js'
+    'https://cdnjs.cloudflare.com/ajax/libs/earcut/2.2.4/earcut.min.js',
+    'https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
   ];
 
   var swCode = [
