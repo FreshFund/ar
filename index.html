@@ -4863,18 +4863,35 @@ function startWebXR(){
     .catch(function(){ showToast('mesh-detection not required \u2014 trying plane-only', 2000); return doRequestSession(false, true); })
     .catch(function(){ showToast('plane-detection not required \u2014 hit-test only', 2000); return doRequestSession(false, false); }).then(function(session){
     xrSession=session;
-    var sessionStartTime = Date.now();  /* used by initiateRoomCapture trigger */
-    /* local-floor gives a floor-relative origin: Y=0 is the physical floor.
-       Much more stable than local across sessions.  Fall back to local on
-       devices that don't support local-floor (uncommon on ARCore). */
+    var sessionStartTime = Date.now();
+
+    /* CRITICAL: setReferenceSpaceType MUST come before setSession.
+       Three.js r152 WebXRManager.setSession() is async and immediately
+       calls session.requestReferenceSpace(referenceSpaceType) using
+       whatever type is set at that instant.  Calling setReferenceSpaceType
+       afterwards (as we had in Session A) means Three.js sets up the
+       XRWebGLLayer against the default space and camera passthrough never
+       initialises — producing a solid black screen.                         */
+    renderer.xr.setReferenceSpaceType('local-floor');
+
+    /* Transparent clear colour — required for AR camera passthrough.
+       alpha:true on the renderer alone is not enough; the clear colour
+       must also have alpha=0 or the canvas background is opaque black.     */
+    renderer.setClearColor(0x000000, 0);
+
     renderer.xr.setSession(session);
+
+    /* Request our own reference space for plane/anchor/mesh API poses.
+       Try local-floor first (Y=0 = physical floor, less vertical drift).
+       If the device rejects it, fall back to local and tell Three.js too.  */
     session.requestReferenceSpace('local-floor').catch(function(){
+      renderer.xr.setReferenceSpaceType('local');   /* keep Three.js in sync */
       return session.requestReferenceSpace('local');
     }).then(function(rs){
       xrRefSpace=rs;
-      renderer.xr.setReferenceSpaceType('local-floor');
       renderer.setAnimationLoop(function(t,frame){xrFrame(frame);});
     });
+
     session.requestReferenceSpace('viewer').then(function(vs){
       session.requestHitTestSource({space:vs}).then(function(src){xrHitTestSrc=src;});
     });
