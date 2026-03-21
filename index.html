@@ -4865,35 +4865,33 @@ function startWebXR(){
     xrSession=session;
     var sessionStartTime = Date.now();
 
-    /* CRITICAL: setReferenceSpaceType MUST come before setSession.
-       Three.js r152 WebXRManager.setSession() is async and immediately
-       calls session.requestReferenceSpace(referenceSpaceType) using
-       whatever type is set at that instant.  Calling setReferenceSpaceType
-       afterwards (as we had in Session A) means Three.js sets up the
-       XRWebGLLayer against the default space and camera passthrough never
-       initialises — producing a solid black screen.                         */
-    renderer.xr.setReferenceSpaceType('local-floor');
+    /* Three.js r152 WebXRManager.setSession() is async and immediately calls
+       session.requestReferenceSpace(referenceSpaceType) internally.
+       We MUST use 'local' here — 'local-floor' is rejected on many ARCore
+       devices in AR mode, which silently kills the WebGL layer setup and
+       produces a solid black screen.  Three.js manages its own camera pose
+       internally via this space; we keep it on the safe universal option.   */
+    renderer.xr.setReferenceSpaceType('local');
 
-    /* Transparent clear colour — required for AR camera passthrough.
-       alpha:true on the renderer alone is not enough; the clear colour
-       must also have alpha=0 or the canvas background is opaque black.     */
+    /* Transparent clear — required for AR camera passthrough */
     renderer.setClearColor(0x000000, 0);
 
     renderer.xr.setSession(session);
 
-    /* Request our own reference space for plane/anchor/mesh API poses.
-       Try local-floor first (Y=0 = physical floor, less vertical drift).
-       If the device rejects it, fall back to local and tell Three.js too.  */
+    /* Our own reference space for plane / anchor / mesh API calls.
+       Try local-floor first (Y=0 = physical floor, better vertical stability).
+       Fall back to local silently if the device rejects it.
+       This is SEPARATE from Three.js's internal space — we only use xrRefSpace
+       when calling frame.getPose / frame.getHitTestResults ourselves.         */
     session.requestReferenceSpace('local-floor').catch(function(){
-      renderer.xr.setReferenceSpaceType('local');   /* keep Three.js in sync */
       return session.requestReferenceSpace('local');
     }).then(function(rs){
-      xrRefSpace=rs;
-      renderer.setAnimationLoop(function(t,frame){xrFrame(frame);});
+      xrRefSpace = rs;
+      renderer.setAnimationLoop(function(t,frame){ xrFrame(frame); });
     });
 
     session.requestReferenceSpace('viewer').then(function(vs){
-      session.requestHitTestSource({space:vs}).then(function(src){xrHitTestSrc=src;});
+      session.requestHitTestSource({space:vs}).then(function(src){ xrHitTestSrc=src; });
     });
 
     /* ── Session E: Request lighting estimation ───────────────────────────
